@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info:
+  title: Linea API
+  version: 0.1.0
+  description: >
+    Source of truth for the contract between the Linea backend and iOS client.
+    Any API change must be reflected here before backend or iOS implementation
+    depends on it.
+servers:
+  - url: http://localhost:8080
+    description: Local development placeholder
+  - url: https://staging-api.example.com
+    description: Staging placeholder
+paths: {}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []

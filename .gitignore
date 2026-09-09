@@ -1,0 +1,45 @@
+.DS_Store
+
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.xcscmblueprint
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Swift
+.build/
+Packages/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.p12
+*.key
+*.secret
+secrets/
+
+# Backend caches/build artifacts
+node_modules/
+dist/
+coverage/
+.next/
+.turbo/
+.pytest_cache/
+__pycache__/
+*.pyc
+target/
+tmp/
+temp/
+
