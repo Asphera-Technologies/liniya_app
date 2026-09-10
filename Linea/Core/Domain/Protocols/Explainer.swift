@@ -61,9 +61,20 @@ nonisolated struct ExplanationRequest: Codable, Sendable {
 nonisolated struct Explanation: Codable, Hashable, Sendable {
     /// One calm opening line («Доброе утро. Сегодня нагрузку лучше немного снизить.»).
     let headline: String
-    /// 1–3 sentences of what to do and why.
+    /// 1–3 sentences of what to do and when.
     let body: String
+    /// Why Linea says this — shown as a quiet caption under the text, and kept
+    /// separate so the headline/body stay exactly the sentences the product
+    /// promises while the evidence can grow or disappear with the data.
+    let reasons: [String]
     let explainerID: String
+
+    init(headline: String, body: String, reasons: [String] = [], explainerID: String) {
+        self.headline = headline
+        self.body = body
+        self.reasons = reasons
+        self.explainerID = explainerID
+    }
 
     var text: String { body.isEmpty ? headline : "\(headline) \(body)" }
 }
