@@ -1,0 +1,20 @@
+name: ios-macos
+
+# Manual for now: macOS minutes are not allocated and the app build can only be
+# verified with Xcode 26. Run it from the Actions tab when a Mac runner is
+# available; the Linux core job is the blocking one.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core tests on Apple Foundation
+        run: swift test
+      - name: Build iOS app (simulator, no signing)
+        run: |
+          xcodebuild -project Linea.xcodeproj -scheme Linea \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug build CODE_SIGNING_ALLOWED=NO

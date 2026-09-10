@@ -43,3 +43,6 @@ target/
 tmp/
 temp/
 
+
+# SwiftPM (LineaCore package)
+.swiftpm/

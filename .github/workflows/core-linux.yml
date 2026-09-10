@@ -1,0 +1,19 @@
+name: core-linux
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Layer lint
+        run: Scripts/check-layers.sh
+      - name: Build core
+        run: swift build
+      - name: Test core
+        run: swift test
