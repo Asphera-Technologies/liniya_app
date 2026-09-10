@@ -55,4 +55,6 @@ struct RootView: View {
         .environment(AppState())
         .environment(HealthKitManager())
         .environment(PlanStore.preview)
+        .environment(NutritionStore.preview)
+        .environment(UserProfileStore.preview)
 }

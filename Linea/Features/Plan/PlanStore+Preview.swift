@@ -13,13 +13,10 @@ extension PlanStore {
     /// An in-memory PlanStore for SwiftUI previews (no disk writes).
     @MainActor
     static var preview: PlanStore {
-        let container = try! ModelContainer(
-            for: Schema(LineaSchema.models),
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-        )
+        let context = PreviewContainer.shared.mainContext
         return PlanStore(
-            taskRepository: LocalTaskRepository(context: container.mainContext),
-            goalRepository: LocalGoalRepository(context: container.mainContext)
+            taskRepository: LocalTaskRepository(context: context),
+            goalRepository: LocalGoalRepository(context: context)
         )
     }
 }

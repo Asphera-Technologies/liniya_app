@@ -4,14 +4,11 @@
 //
 //  Created by Fedor Sherstnev on 28.08.2026.
 //
-//  Composition root: builds the SwiftData container, wires the local
-//  repositories into `PlanStore`, and injects app-wide dependencies. The UI
-//  depends on `PlanStore` + repository protocols — never SwiftData directly —
-//  so a remote repository / sync layer can be swapped in later here alone.
-//
-//  This is also the only place that knows the concrete connectors, engines and
-//  the real clock: see `AppContainer`. Adding a data source means adding a line
-//  there, not touching the intelligence core.
+//  App entry point. It builds the SwiftData container and hands everything
+//  else to `AppContainer` — the single place where repositories, connectors,
+//  engines and the real clock are wired together. The UI depends on stores and
+//  protocols, never on SwiftData or HealthKit directly, so a remote repository
+//  or a new data source can be swapped in here alone.
 //
 
 import SwiftUI
@@ -23,30 +20,20 @@ struct LineaApp: App {
     @State private var appState = AppState()
 
     /// The single read-only HealthKit boundary, shared across screens.
-    @State private var healthKit = HealthKitManager()
+    @State private var healthKit: HealthKitManager
 
-    /// Tasks & goals store, backed by local SwiftData repositories.
-    @State private var planStore: PlanStore
-
-    private let modelContainer: ModelContainer
+    @State private var container: AppContainer
 
     init() {
-        let container: ModelContainer
+        let modelContainer: ModelContainer
         do {
-            container = try ModelContainer(for: Schema(LineaSchema.models))
+            modelContainer = try ModelContainer(for: Schema(LineaSchema.models))
         } catch {
             fatalError("Failed to create SwiftData ModelContainer: \(error)")
         }
-        modelContainer = container
-
-        let taskRepository = LocalTaskRepository(context: container.mainContext)
-        let goalRepository = LocalGoalRepository(context: container.mainContext)
-        _planStore = State(
-            initialValue: PlanStore(
-                taskRepository: taskRepository,
-                goalRepository: goalRepository
-            )
-        )
+        let health = HealthKitManager()
+        _healthKit = State(initialValue: health)
+        _container = State(initialValue: AppContainer(modelContainer: modelContainer, healthKit: health))
     }
 
     var body: some Scene {
@@ -54,8 +41,11 @@ struct LineaApp: App {
             RootView()
                 .environment(appState)
                 .environment(healthKit)
-                .environment(planStore)
+                .environment(container.planStore)
+                .environment(container.nutritionStore)
+                .environment(container.profileStore)
                 .tint(LineaColor.ink)
         }
+        .modelContainer(container.modelContainer)
     }
 }
