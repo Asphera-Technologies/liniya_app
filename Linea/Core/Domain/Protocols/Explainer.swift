@@ -12,7 +12,19 @@
 import Foundation
 
 nonisolated enum ExplanationMoment: String, Codable, Sendable {
-    case morning, nudge, evening, taskDeferred
+    /// The morning brief (headline + body).
+    case morning
+    /// «План немного отстаёт…» — headline = first sentence, body = the rest incl. the question.
+    case nudge
+    /// «Как прошёл день?»
+    case evening
+    /// «Сегодня нагрузку лучше немного снизить.» as a standalone recommendation.
+    case loadAdjustment
+    case taskDeferred
+    /// Meal advice from the nutrition rule.
+    case meal
+    /// «Собираю базу: день N из 7» / «Не вижу данных Apple Health».
+    case dataSituation
 }
 
 nonisolated struct ExplanationRequest: Codable, Sendable {
@@ -48,4 +60,11 @@ nonisolated struct Explanation: Codable, Hashable, Sendable {
 nonisolated protocol Explainer: Sendable {
     var id: String { get }
     func explain(_ request: ExplanationRequest) async throws -> Explanation
+}
+
+/// Synchronous, deterministic text from facts. Engines and rules use it to
+/// fill `Recommendation.message` and `Nudge.title/body`; the rule-based
+/// explainer conforms to both `TextRenderer` and `Explainer`.
+nonisolated protocol TextRenderer: Sendable {
+    func render(_ request: ExplanationRequest) -> Explanation
 }
