@@ -54,6 +54,9 @@ final class IntelligenceStore {
     private let scheduler: NudgeScheduler?
     private let timeProvider: @MainActor () -> TimeContext
     private let config: EngineConfig
+    /// Built on demand so the connector only exists while the user keeps the
+    /// calendar switched on. Nil in previews and tests.
+    private let calendarProvider: (@MainActor () -> any ContextProvider)?
 
     /// Cached daily aggregates, so a foreground refresh does not re-read weeks
     /// of HealthKit every time.
@@ -75,7 +78,8 @@ final class IntelligenceStore {
         planStore: PlanStore,
         scheduler: NudgeScheduler? = nil,
         config: EngineConfig = .default,
-        time: @escaping @MainActor () -> TimeContext = { .live }
+        time: @escaping @MainActor () -> TimeContext = { .live },
+        calendarProvider: (@MainActor () -> any ContextProvider)? = nil
     ) {
         self.planDayUseCase = planDay
         self.acceptPlanUseCase = acceptPlan
@@ -91,6 +95,7 @@ final class IntelligenceStore {
         self.scheduler = scheduler
         self.config = config
         self.timeProvider = time
+        self.calendarProvider = calendarProvider
     }
 
     var time: TimeContext { timeProvider() }
@@ -126,9 +131,9 @@ final class IntelligenceStore {
                     previousLoadAdvice: previousAdvice,
                     existing: existing,
                     historyDays: 0,
-                    // Nutrition data changes between refreshes, so its
-                    // connector is built here with what was just loaded.
-                    additionalProviders: [NutritionContextProvider(profile: nutrition, meals: meals)]
+                    // Connectors whose data or availability changes between
+                    // refreshes are built here rather than registered once.
+                    additionalProviders: connectors(nutrition: nutrition, meals: meals, profile: profile)
                 )
             )
 
@@ -140,6 +145,14 @@ final class IntelligenceStore {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func connectors(nutrition: NutritionProfile?, meals: [MealLog], profile: UserProfile) -> [any ContextProvider] {
+        var providers: [any ContextProvider] = [NutritionContextProvider(profile: nutrition, meals: meals)]
+        if profile.isCalendarEnabled, let calendarProvider {
+            providers.append(calendarProvider())
+        }
+        return providers
     }
 
     /// Health history is read once a day: HealthKit is the source of truth,

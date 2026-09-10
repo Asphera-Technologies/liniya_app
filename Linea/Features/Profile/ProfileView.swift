@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import EventKit
 
 struct ProfileView: View {
     @Environment(UserProfileStore.self) private var profile
@@ -16,8 +17,13 @@ struct ProfileView: View {
     @Environment(HealthKitManager.self) private var healthKit
     @Environment(IntelligenceStore.self) private var intelligence
 
+    /// Used only to ask for calendar access from this screen. Authorization is
+    /// app-wide, so this may be a different instance from the connector's.
+    @State private var eventStore = EKEventStore()
+
     @State private var isEditingProfile = false
     @State private var isShowingCalibration = false
+    @State private var calendarDenied = false
 
     var body: some View {
         NavigationStack {
@@ -81,8 +87,51 @@ struct ProfileView: View {
                 LineaListRow(title: connection.title, value: connection.statusText, showsChevron: false)
             }
             LineaHairline()
-            LineaListRow(title: "Календарь", value: "Скоро", showsChevron: false)
+            calendarRow
         }
+    }
+
+    /// The calendar is the second connector, and it is opt-in: the permission
+    /// dialog belongs to a deliberate tap here, not to a background refresh.
+    private var calendarRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: Binding(
+                get: { profile.profile.isCalendarEnabled },
+                set: { isOn in Task { await setCalendar(enabled: isOn) } }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Календарь")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                    Text("События займут время в плане дня")
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textTertiary)
+                }
+            }
+            .tint(LineaColor.ink)
+            .padding(.vertical, 10)
+
+            if calendarDenied {
+                Text("Доступ к календарю запрещён. Включить его можно в «Настройках» iOS.")
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textSecondary)
+                    .padding(.bottom, 8)
+            }
+        }
+    }
+
+    private func setCalendar(enabled: Bool) async {
+        var updated = profile.profile
+        guard enabled else {
+            calendarDenied = false
+            updated.isCalendarEnabled = false
+            await profile.save(updated)
+            return
+        }
+        let granted = await CalendarAccess.request(eventStore)
+        calendarDenied = !granted
+        updated.isCalendarEnabled = granted
+        await profile.save(updated)
     }
 
     private var healthStatusText: String {

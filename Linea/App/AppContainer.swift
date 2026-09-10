@@ -11,6 +11,7 @@
 import Foundation
 import SwiftData
 import HealthKit
+import EventKit
 
 @MainActor
 final class AppContainer {
@@ -38,6 +39,10 @@ final class AppContainer {
     /// Local notifications for nudges.
     let nudgeScheduler: NudgeScheduler
 
+    /// One calendar store for the app: the connector reads through it and the
+    /// Profile screen asks for access through it.
+    let eventStore: EKEventStore
+
     /// Explains decisions in Russian. Templates always; the on-device model is
     /// added here when it is available, and it can only rephrase.
     let explainer: any Explainer
@@ -60,6 +65,9 @@ final class AppContainer {
         calibrationRepository = calibration
         userProfileRepository = profile
         nutritionRepository = nutrition
+
+        let events = EKEventStore()
+        eventStore = events
 
         let reader = HealthKitHistoryReader(store: healthKit.healthStore)
         healthHistory = reader
@@ -111,7 +119,8 @@ final class AppContainer {
             history: reader,
             planStore: plan,
             scheduler: scheduler,
-            config: engineConfig
+            config: engineConfig,
+            calendarProvider: { CalendarContextProvider(store: events) }
         )
 
         // Any change to tasks, goals, the profile or nutrition rebuilds the day.
