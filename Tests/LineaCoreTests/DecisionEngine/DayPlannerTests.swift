@@ -65,7 +65,7 @@ struct DayPlannerTests {
     @Test("LoadAdjustmentRule добавляет рекомендацию с фактами сна и восстановления")
     func loadAdjustment() {
         let time = WowFixture.morning
-        let plan = PlanFixture.engine().plan(
+        let plan = PlanFixture.engine(rules: [LoadAdjustmentRule()]).plan(
             snapshot: WowFixture.snapshot(at: time), state: PlanFixture.reducedState(at: time),
             time: time, planID: WowFixture.planID
         )
@@ -80,7 +80,7 @@ struct DayPlannerTests {
         // Текст пришёл от рендерера, движок его не сочинял.
         #expect(recommendation.title == "headline:loadAdjustment")
 
-        let normal = PlanFixture.engine().plan(
+        let normal = PlanFixture.engine(rules: [LoadAdjustmentRule()]).plan(
             snapshot: WowFixture.snapshot(at: time),
             state: PlanFixture.state(energy: 0.6, confidence: 0.8, advice: .normal, at: time),
             time: time, planID: WowFixture.planID

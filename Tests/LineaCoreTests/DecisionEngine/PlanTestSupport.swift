@@ -80,8 +80,8 @@ nonisolated enum PlanFixture {
         )
     }
 
-    static func engine(config: EngineConfig = .default) -> DecisionEngine {
-        DecisionEngine(renderer: StubRenderer(), config: config)
+    static func engine(rules: [any PlanRule] = [DayBriefRule()], config: EngineConfig = .default) -> DecisionEngine {
+        DecisionEngine(rules: rules, renderer: StubRenderer(), config: config)
     }
 
     static func nudgeEngine(config: EngineConfig = .default) -> NudgeEngine {

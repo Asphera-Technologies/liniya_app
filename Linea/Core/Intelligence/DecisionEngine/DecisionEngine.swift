@@ -42,7 +42,7 @@ nonisolated struct DecisionEngine: Sendable {
     let config: EngineConfig
     private let scorer = TaskScorer()
 
-    init(rules: [any PlanRule] = [LoadAdjustmentRule()], renderer: any TextRenderer, config: EngineConfig = .default) {
+    init(rules: [any PlanRule] = [DayBriefRule()], renderer: any TextRenderer, config: EngineConfig = .default) {
         self.rules = rules
         self.renderer = renderer
         self.config = config
