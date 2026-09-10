@@ -14,7 +14,7 @@ extension PlanStore {
     @MainActor
     static var preview: PlanStore {
         let container = try! ModelContainer(
-            for: TaskEntity.self, GoalEntity.self,
+            for: Schema(LineaSchema.models),
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         return PlanStore(

@@ -9,6 +9,10 @@
 //  depends on `PlanStore` + repository protocols — never SwiftData directly —
 //  so a remote repository / sync layer can be swapped in later here alone.
 //
+//  This is also the only place that knows the concrete connectors, engines and
+//  the real clock: see `AppContainer`. Adding a data source means adding a line
+//  there, not touching the intelligence core.
+//
 
 import SwiftUI
 import SwiftData
@@ -29,7 +33,7 @@ struct LineaApp: App {
     init() {
         let container: ModelContainer
         do {
-            container = try ModelContainer(for: TaskEntity.self, GoalEntity.self)
+            container = try ModelContainer(for: Schema(LineaSchema.models))
         } catch {
             fatalError("Failed to create SwiftData ModelContainer: \(error)")
         }

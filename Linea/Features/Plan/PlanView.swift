@@ -37,6 +37,12 @@ struct PlanView: View {
                     onNext: { plan.goToNext() }
                 )
 
+                if let warning = plan.warningMessage {
+                    Text(warning)
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textSecondary)
+                }
+
                 goalsSection
                 tasksSection
             }
