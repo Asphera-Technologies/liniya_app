@@ -29,8 +29,11 @@
 
 ## Этап 2. Движки (Linux) — ◐
 
-- ◐ State Engine: SleepAnalyzer, BaselineCalculator, анализаторы sleep /
-  recovery / strain, EnergyFusion.
+- ☑ State Engine: SleepAnalyzer (дедупликация источников), BaselineCalculator
+  (медиана/MAD, полы, окно 28 дней), анализаторы sleep / recovery / strain,
+  EnergyFusion с гистерезисом; покрыт тестами (55 тестов ядра зелёные).
+- ☑ Аналитика сна (`SleepInsight`) для экрана Health.
+- ☑ Подсказка связи задачи с целью (`KeywordGoalMatcher`).
 - ◐ Decision Engine: TaskScorer, FreeWindows, DayPlanner, LoadAdjustmentRule,
   NudgeEngine (BehindSchedule, EveningCheckIn), replan.
 - ◐ Объяснения: RussianText, RuleBasedExplainer (golden-строки брифа),
@@ -40,19 +43,19 @@
   RecordDayRating; SleepInsight для экрана Health; end-to-end тест
   wow-сценария (утро → 14:30 → вечер).
 
-## Этап 3. Apple-слой (пишется на Linux, компилируется на Mac) — ☐ ⚠
+## Этап 3. Apple-слой (пишется на Linux, компилируется на Mac) — ◐ ⚠
 
-- ☐ `TaskEntity`/`GoalEntity`: новые optional-поля (lightweight-миграция);
-  `DayRecordEntity`, `CalibrationEntity`, `UserProfileEntity`,
-  `NutritionProfileEntity`, `MealLogEntity`; `Local*Repository`;
-  `ModelContainer` в `LineaApp`.
-- ☐ `HealthKitManager+History` (28 дней: сегменты сна с источниками, HRV,
+- ☑ `TaskEntity`/`GoalEntity`: новые optional-поля (lightweight-миграция);
+  `DayRecordEntity`, `DocumentEntity` (калибровка, профиль, питание),
+  `MealLogEntity`; `Local*Repository`; общая схема `LineaSchema`.
+- ☑ `HealthKitHistoryReader` (28 дней: сегменты сна с источниками, HRV,
   RHR, шаги, энергия, тренировки) и `HealthKitContextProvider`;
-  `healthStore` становится internal.
-- ☐ `AppContainer` (composition root: провайдеры, анализаторы, правила,
-  объяснитель, `TimeContext.live`), `IntelligenceStore` (view-facing).
-- ☐ Редакторы: задача (дедлайн, время начала, длительность, сложность,
-  цель), цель (горизонт, активность).
+  тайл сна в `HealthKitManager` переведён на `SleepAnalyzer`.
+- ☑ `AppContainer` (репозитории, хранилища, провайдеры, `TimeContext.live`).
+- ☐ `IntelligenceStore` (view-facing состояние, план, нуджи) — после движков.
+- ☑ Редакторы: задача (дедлайн, время начала, длительность, сложность,
+  цель + подсказка), цель (горизонт, активность), питание (профиль,
+  окна еды, «Поел»), «О себе» (рабочий день, тихие часы, сон).
 - ☐ Today: утренний бриф, «Принять план», тайм-блоки вместо демо-расписания,
   карточка нуджа, вечерняя оценка. Health: «Сон за 7/28 дней». Nutrition:
   профиль и «Поел». Profile: «Подключения», «AI», «Калибровка», «О себе».
@@ -90,4 +93,10 @@
 - **2026-09-10.** Проведён разбор архитектуры (четыре независимых
   проработки + критика брифа + судейство + синтез). Решения записаны в
   `Docs/decisions.md`. Реализованы этапы 0–1, спецификация
-  `Docs/intelligence.md`, начат этап 2.
+  `Docs/intelligence.md`, рецепт `Docs/connectors.md`.
+- **2026-09-10.** Готов State Engine и его тесты (55 тестов ядра зелёные в
+  Docker). Опорные числа wow-сценария: energy 0.396, сон 0.674, восстановление
+  0.04, вердикт «снизить нагрузку». Написан Apple-слой: персистентность
+  документами, чтение истории HealthKit, композиционный корень, редакторы
+  задачи/цели/питания/профиля. Всё, что импортирует SwiftUI, SwiftData или
+  HealthKit, ждёт сборки на Mac.
