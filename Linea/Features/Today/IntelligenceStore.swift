@@ -297,11 +297,16 @@ final class IntelligenceStore {
         return planStore.tasks.first { $0.id == id }
     }
 
-    /// Blocks from now on, plus the current one — Today is about what is left.
+    /// What is still ahead: everything that has not ended yet, plus tasks that
+    /// were due earlier and are still open. A meal that already happened is not
+    /// news; an unfinished task is.
     var visibleBlocks: [PlanBlock] {
         let now = time.now
         return (plan?.blocks ?? [])
-            .filter { $0.end > now || isDone($0) == false }
+            .filter { block in
+                if block.end > now { return true }
+                return block.taskID != nil && !isDone(block)
+            }
             .sorted { $0.start < $1.start }
     }
 

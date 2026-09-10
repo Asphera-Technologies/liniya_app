@@ -53,8 +53,9 @@ final class HealthKitManager {
     @ObservationIgnored let healthStore = HKHealthStore()
 
     /// Reads history and sleep segments for the intelligence core; also used
-    /// here for the sleep tile, so both show the same night.
-    @ObservationIgnored private lazy var historyReader = HealthKitHistoryReader(store: healthStore)
+    /// here for the sleep tile, so both show the same night. Built on demand:
+    /// it is a thin wrapper around the store above.
+    private var historyReader: HealthKitHistoryReader { HealthKitHistoryReader(store: healthStore) }
 
     /// The read-only set of types Linea requests. Nothing outside this list is
     /// requested, and no write/share types are requested at all.

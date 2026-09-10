@@ -38,7 +38,8 @@ struct TaskEditorView: View {
     @State private var start: Date
     @State private var goalID: UUID?
     @FocusState private var titleFocused: Bool
-    @Namespace private var segments
+    @Namespace private var prioritySegments
+    @Namespace private var demandSegments
 
     private static let durations = [15, 30, 45, 60, 90, 120]
     private let matcher = KeywordGoalMatcher()
@@ -169,7 +170,7 @@ struct TaskEditorView: View {
                     get: { [TaskPriority.low, .normal, .important].firstIndex(of: priority) ?? 1 },
                     set: { priority = [TaskPriority.low, .normal, .important][$0] }
                 ),
-                namespace: segments
+                namespace: prioritySegments
             )
         }
     }
@@ -183,7 +184,7 @@ struct TaskEditorView: View {
                     get: { CognitiveDemand.allCases.firstIndex(of: demand) ?? 1 },
                     set: { demand = CognitiveDemand.allCases[$0] }
                 ),
-                namespace: segments
+                namespace: demandSegments
             )
         }
     }
