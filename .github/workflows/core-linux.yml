@@ -2,7 +2,7 @@ name: core-linux
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/**", "fix/**"]
   pull_request:
 
 jobs:

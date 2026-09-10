@@ -10,7 +10,7 @@ name: ios-macos
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/**", "fix/**"]
   pull_request:
   workflow_dispatch:
     inputs:
