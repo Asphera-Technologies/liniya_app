@@ -35,7 +35,7 @@ nonisolated struct FakeContextProvider: ContextProvider {
     }
 }
 
-actor InMemoryDayRecordRepository: DayRecordRepository {
+final class InMemoryDayRecordRepository: DayRecordRepository {
     private var records: [Date: DayRecord] = [:]
 
     init(records: [DayRecord] = []) {
@@ -51,21 +51,21 @@ actor InMemoryDayRecordRepository: DayRecordRepository {
     func save(_ record: DayRecord) async throws { records[record.day] = record }
 }
 
-actor InMemoryCalibrationRepository: CalibrationRepository {
+final class InMemoryCalibrationRepository: CalibrationRepository {
     private var calibration: Calibration
     init(_ calibration: Calibration = .default) { self.calibration = calibration }
     func load() async throws -> Calibration { calibration }
     func save(_ calibration: Calibration) async throws { self.calibration = calibration }
 }
 
-actor InMemoryUserProfileRepository: UserProfileRepository {
+final class InMemoryUserProfileRepository: UserProfileRepository {
     private var profile: UserProfile
     init(_ profile: UserProfile = .default) { self.profile = profile }
     func load() async throws -> UserProfile { profile }
     func save(_ profile: UserProfile) async throws { self.profile = profile }
 }
 
-actor InMemoryNutritionRepository: NutritionRepository {
+final class InMemoryNutritionRepository: NutritionRepository {
     private var stored: NutritionProfile?
     private var logs: [MealLog] = []
     init(_ profile: NutritionProfile? = nil, meals: [MealLog] = []) {

@@ -6,27 +6,32 @@
 //  own files). Implementations live in Data/Repositories (SwiftData) and in
 //  Tests (in-memory). Each is a small document store — no queries by content.
 //
+//  These protocols are main-actor isolated on purpose: they are backed by
+//  SwiftData's `mainContext`. `HealthHistorySource` below is the exception —
+//  it really is nonisolated, so it stays `Sendable` and can be read off the
+//  main actor while the day is being planned.
+//
 
 import Foundation
 
-nonisolated protocol DayRecordRepository: Sendable {
+protocol DayRecordRepository {
     func record(for day: Date) async throws -> DayRecord?
     /// Records with `day >= since`, oldest first.
     func records(since: Date) async throws -> [DayRecord]
     func save(_ record: DayRecord) async throws
 }
 
-nonisolated protocol CalibrationRepository: Sendable {
+protocol CalibrationRepository {
     func load() async throws -> Calibration
     func save(_ calibration: Calibration) async throws
 }
 
-nonisolated protocol UserProfileRepository: Sendable {
+protocol UserProfileRepository {
     func load() async throws -> UserProfile
     func save(_ profile: UserProfile) async throws
 }
 
-nonisolated protocol NutritionRepository: Sendable {
+protocol NutritionRepository {
     func profile() async throws -> NutritionProfile?
     func save(_ profile: NutritionProfile) async throws
     func meals(on day: DateInterval) async throws -> [MealLog]

@@ -52,7 +52,11 @@ jobs:
       - name: Core tests on the Apple toolchain
         run: swift test
 
+      # The build never fails this step: the next one prints a readable list of
+      # errors first and only then fails the job. Otherwise the useful lines are
+      # buried in ~900 lines of xcodebuild output.
       - name: Build the app
+        id: build
         run: |
           set -o pipefail
           xcodebuild \
@@ -62,20 +66,25 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee build.log
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: Compile errors
-        if: failure()
+      - name: Errors and warnings
         run: |
-          echo "### Ошибки сборки" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -E "error:" build.log | sed 's|^.*/Linea/|Linea/|' | sort -u | head -100 \
-            | tee -a "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Warnings
-        if: success()
-        run: |
-          grep -E "warning:" build.log | sed 's|^.*/Linea/|Linea/|' | sort -u | head -50 || true
+          {
+            echo "### Ошибки сборки"
+            echo '```'
+            grep -E "error:" build.log | sed 's|^.*/liniya_app/||' | sort -u | head -100 \
+              || echo "(ошибок нет)"
+            echo '```'
+            echo "### Предупреждения"
+            echo '```'
+            grep -E "warning:" build.log | sed 's|^.*/liniya_app/||' | sort -u | head -50 \
+              || echo "(предупреждений нет)"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit ${{ steps.build.outputs.status }}
 
       - uses: actions/upload-artifact@v4
         if: always()

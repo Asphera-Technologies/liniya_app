@@ -9,7 +9,7 @@
 
 import Foundation
 
-protocol GoalRepository: Sendable {
+protocol GoalRepository {
     func all() async throws -> [LineaGoal]
     func add(_ goal: LineaGoal) async throws
     func update(_ goal: LineaGoal) async throws
