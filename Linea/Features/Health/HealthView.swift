@@ -2,22 +2,21 @@
 //  HealthView.swift
 //  Linea
 //
-//  The Health screen: a grid of real Apple Health metrics plus today's
-//  workouts, backed entirely by the read-only `HealthKitManager`. No demo
-//  values: each tile reflects its true state (loading / no data / value), and
-//  we never fabricate a number when HealthKit returns nothing.
+//  The Health screen: a grid of real Apple Health metrics, the sleep analysis
+//  that the plan is actually built on, and today's workouts. No demo values:
+//  each tile reflects its true state (loading / no data / value), and we never
+//  fabricate a number when HealthKit returns nothing.
 //
-//  The "Контекст / Документы / Питание" rows remain placeholder navigation
-//  (sample) — they are not health metrics and are out of Phase 2 scope.
+//  The sleep section is the point: one night deduplicated across sources, the
+//  last week against this user's own norm, and an honest «собираю базу» while
+//  there is not enough history to compare with.
 //
 
 import SwiftUI
 
 struct HealthView: View {
     @Environment(HealthKitManager.self) private var healthKit
-    private let backend: LineaBackend = SampleBackend()
-
-    @State private var navRows: [LineaRow] = []
+    @Environment(IntelligenceStore.self) private var intelligence
 
     private let columns = [
         GridItem(.flexible(), spacing: 20, alignment: .leading),
@@ -26,16 +25,16 @@ struct HealthView: View {
 
     var body: some View {
         NavigationStack {
-            LineaScaffold(title: "Health") {
+            LineaScaffold(title: "Здоровье") {
                 metricsSection
                 connectSection
+                sleepSection
                 workoutsSection
-                LineaRowList(rows: navRows)
             }
         }
         .task {
-            navRows = await backend.healthSections()
             await healthKit.probeExistingAuthorization()
+            await intelligence.refresh(reason: .appeared)
         }
     }
 
@@ -120,6 +119,61 @@ struct HealthView: View {
         case .requesting, .authorized:
             EmptyView()
         }
+    }
+
+    // MARK: Sleep analysis
+
+    @ViewBuilder
+    private var sleepSection: some View {
+        let insight = intelligence.sleepInsight
+        if !insight.recentNights.isEmpty {
+            VStack(alignment: .leading, spacing: 16) {
+                SectionLabel(text: "Сон", trailing: sleepTag(insight))
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
+                    MetricTile(label: "За неделю", value: duration(insight.weekAverageSeconds))
+                    MetricTile(
+                        label: insight.canCompare ? "Обычно" : "Ориентир",
+                        value: duration(insight.usualSeconds),
+                        isPlaceholder: !insight.canCompare
+                    )
+                    MetricTile(label: "Эффективность", value: percent(insight.weekEfficiency))
+                    MetricTile(label: "Отбой ±", value: minutes(insight.bedtimeStabilityMinutes))
+                }
+                SleepWeekChart(nights: insight.recentNights, usualSeconds: insight.usualSeconds)
+                if let delta = insight.deltaSeconds, insight.canCompare {
+                    Text(deltaText(delta))
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textSecondary)
+                }
+            }
+        }
+    }
+
+    private func sleepTag(_ insight: SleepInsight) -> String? {
+        guard let progress = insight.baselineProgress, !progress.isComplete else { return nil }
+        return "база \(progress.days)/\(progress.needed)"
+    }
+
+    private func duration(_ seconds: TimeInterval?) -> String {
+        guard let seconds else { return "—" }
+        return HealthFormat.sleep(seconds)
+    }
+
+    private func percent(_ ratio: Double?) -> String {
+        guard let ratio else { return "—" }
+        return "\(Int((ratio * 100).rounded()))%"
+    }
+
+    private func minutes(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return "\(Int(value.rounded())) мин"
+    }
+
+    private func deltaText(_ delta: TimeInterval) -> String {
+        let magnitude = HealthFormat.sleep(abs(delta))
+        return delta < 0
+            ? "За неделю на \(magnitude) меньше обычного."
+            : "За неделю на \(magnitude) больше обычного."
     }
 
     // MARK: Workouts

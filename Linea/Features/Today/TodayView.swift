@@ -2,10 +2,15 @@
 //  TodayView.swift
 //  Linea
 //
-//  The Today / Overview screen: a time-aware greeting, the day's single most
-//  important REAL task (from PlanStore), what's next on the schedule, and the
-//  next meal. Schedule and meal remain sample data (calendar & nutrition are
-//  out of Phase 2 scope) and are tagged "Демо".
+//  The Today screen — the whole wow-scenario in one place:
+//    • morning: what Linea sees about the state, the day's plan, «Принять план»;
+//    • during the day: the nudge card with the same two answers the
+//      notification offers;
+//    • evening: three taps that close the feedback loop.
+//
+//  The screen composes; it never decides. Every string comes ready from the
+//  core (`Recommendation.message`, `Nudge.title/body`), so what the user reads
+//  here is exactly what the golden tests assert.
 //
 
 import SwiftUI
@@ -13,33 +18,76 @@ import SwiftUI
 struct TodayView: View {
     @Environment(AppState.self) private var appState
     @Environment(PlanStore.self) private var plan
-
-    private let backend: LineaBackend = SampleBackend()
-
-    @State private var schedule: [ScheduleItem] = []
-    @State private var meal: MealFocus?
+    @Environment(IntelligenceStore.self) private var intelligence
 
     var body: some View {
         NavigationStack {
             LineaScaffold(title: greeting, subtitle: dateSubtitle) {
+                if let nudge = intelligence.dueNudge {
+                    NudgeCard(nudge: nudge) { action in
+                        Task { await intelligence.respond(to: nudge, action: action) }
+                    }
+                }
+
+                briefSection
                 mainToday
-                upNext
-                nutrition
+                timeline
+
+                if intelligence.isEveningReviewDue {
+                    EveningReviewCard { rating in
+                        Task { await intelligence.rateDay(rating) }
+                    }
+                }
+
+                adviceSection
             }
         }
-        .task {
-            await plan.load()
-            schedule = await backend.schedule()
-            meal = await backend.mealFocus()
+        .task { await intelligence.refresh(reason: .appeared) }
+        .refreshable { await intelligence.refresh(reason: .manual) }
+    }
+
+    // MARK: Brief
+
+    @ViewBuilder
+    private var briefSection: some View {
+        if let brief = intelligence.brief {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionLabel(text: "План на сегодня", trailing: intelligence.stateTag)
+                Text(brief.message)
+                    .font(LineaFont.feature)
+                    .foregroundStyle(LineaColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let explanation = brief.explanation, !explanation.isEmpty {
+                    Text(explanation)
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !intelligence.reasons.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(intelligence.reasons, id: \.self) { reason in
+                            Text(reason)
+                                .font(LineaFont.caption)
+                                .foregroundStyle(LineaColor.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                if intelligence.canAcceptPlan {
+                    LineaOutlineButton(title: "Принять план") {
+                        Task { await intelligence.acceptPlan() }
+                    }
+                }
+            }
         }
     }
 
-    // MARK: Sections
+    // MARK: Main task
 
     private var mainToday: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionLabel(text: "Главное сегодня")
-            if let task = plan.topTaskToday {
+            if let task = intelligence.topTask ?? plan.topTaskToday {
                 Text(task.title)
                     .font(LineaFont.feature)
                     .foregroundStyle(LineaColor.textPrimary)
@@ -51,34 +99,66 @@ struct TodayView: View {
         }
     }
 
-    private var upNext: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SectionLabel(text: "Дальше", trailing: "Демо")
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(schedule) { item in
-                    HStack(alignment: .firstTextBaseline, spacing: 20) {
-                        Text(item.time)
-                            .font(LineaFont.rowTitle)
-                            .foregroundStyle(LineaColor.textTertiary)
-                            .monospacedDigit()
-                        Text(item.title)
-                            .font(LineaFont.rowTitle)
-                            .foregroundStyle(LineaColor.textPrimary)
+    // MARK: Timeline
+
+    @ViewBuilder
+    private var timeline: some View {
+        let blocks = intelligence.visibleBlocks
+        if !blocks.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(text: "Дальше", trailing: intelligence.planTag)
+                VStack(spacing: 0) {
+                    ForEach(blocks) { block in
+                        PlanBlockRow(
+                            block: block,
+                            time: intelligence.time,
+                            isDone: intelligence.isDone(block)
+                        )
                     }
                 }
             }
         }
     }
 
-    private var nutrition: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SectionLabel(text: "Питание", trailing: "Демо")
-            Text(meal?.meal ?? "—")
-                .font(LineaFont.feature)
-                .foregroundStyle(LineaColor.textPrimary)
-            LineaOutlineButton(title: "Подобрать") {
-                appState.openAI(prompt: "Подбери \(meal?.meal.lowercased() ?? "обед")")
+    // MARK: Advice (nutrition and the like)
+
+    @ViewBuilder
+    private var adviceSection: some View {
+        let advice = intelligence.advice
+        if !advice.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionLabel(text: "Советы")
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(advice) { item in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(item.message)
+                                .font(LineaFont.rowTitle)
+                                .foregroundStyle(LineaColor.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if !item.actions.isEmpty {
+                                HStack(spacing: 12) {
+                                    ForEach(Array(item.actions.enumerated()), id: \.offset) { _, action in
+                                        if let title = actionTitle(action) {
+                                            LineaOutlineButton(title: title) {
+                                                Task { await intelligence.perform(action) }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    private func actionTitle(_ action: RecommendationAction) -> String? {
+        switch action {
+        case .markMealEaten: return "Поел"
+        case .openTask: return "Открыть"
+        case .deferTask: return "Перенести"
+        case .acceptPlan, .dismiss: return nil
         }
     }
 
