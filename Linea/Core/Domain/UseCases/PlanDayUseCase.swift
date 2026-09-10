@@ -59,6 +59,8 @@ nonisolated struct PlanDayUseCase: Sendable {
         let existing: DayRecord?
         /// How many days of history the providers should fetch.
         let historyDays: Int
+        /// Connectors built from data the caller just loaded (see ContextEngine).
+        let additionalProviders: [any ContextProvider]
 
         init(
             time: TimeContext,
@@ -71,7 +73,8 @@ nonisolated struct PlanDayUseCase: Sendable {
             calibration: Calibration = .default,
             previousLoadAdvice: LoadAdvice? = nil,
             existing: DayRecord? = nil,
-            historyDays: Int = 0
+            historyDays: Int = 0,
+            additionalProviders: [any ContextProvider] = []
         ) {
             self.time = time
             self.tasks = tasks
@@ -84,6 +87,7 @@ nonisolated struct PlanDayUseCase: Sendable {
             self.previousLoadAdvice = previousLoadAdvice
             self.existing = existing
             self.historyDays = historyDays
+            self.additionalProviders = additionalProviders
         }
     }
 
@@ -110,7 +114,8 @@ nonisolated struct PlanDayUseCase: Sendable {
             goals: input.goals,
             profile: input.profile,
             nutrition: input.nutrition,
-            meals: input.meals
+            meals: input.meals,
+            additionalProviders: input.additionalProviders
         )
 
         let baselines = baselineCalculator.compute(history: input.history, config: config, time: time)

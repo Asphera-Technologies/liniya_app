@@ -57,4 +57,5 @@ struct RootView: View {
         .environment(PlanStore.preview)
         .environment(NutritionStore.preview)
         .environment(UserProfileStore.preview)
+        .environment(IntelligenceStore.preview)
 }

@@ -44,6 +44,7 @@ struct LineaApp: App {
                 .environment(container.planStore)
                 .environment(container.nutritionStore)
                 .environment(container.profileStore)
+                .environment(container.intelligenceStore)
                 .tint(LineaColor.ink)
         }
         .modelContainer(container.modelContainer)

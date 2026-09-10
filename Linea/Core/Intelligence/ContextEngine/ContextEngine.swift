@@ -25,6 +25,9 @@ nonisolated struct ContextEngine: Sendable {
         self.timeout = timeout
     }
 
+    /// `additionalProviders` are connectors whose data the caller has just
+    /// loaded (the nutrition profile changes between refreshes, so its
+    /// provider is built per capture instead of being registered once).
     func capture(
         request: ContextRequest,
         snapshotID: UUID,
@@ -32,10 +35,12 @@ nonisolated struct ContextEngine: Sendable {
         goals: [LineaGoal],
         profile: UserProfile,
         nutrition: NutritionProfile?,
-        meals: [MealLog]
+        meals: [MealLog],
+        additionalProviders: [any ContextProvider] = []
     ) async -> ContextSnapshot {
+        let allProviders = providers + additionalProviders
         let results = await withTaskGroup(of: (ProviderID, ProviderFetchResult).self) { group in
-            for provider in providers {
+            for provider in allProviders {
                 group.addTask {
                     (provider.id, await fetch(provider, request: request, timeout: timeout))
                 }
