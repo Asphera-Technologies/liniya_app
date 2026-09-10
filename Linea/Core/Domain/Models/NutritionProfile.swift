@@ -65,6 +65,19 @@ nonisolated struct NutritionProfile: Codable, Hashable, Sendable {
         self.mealWindows = mealWindows
     }
 
+    /// Lenient decoding, like `UserProfile`: an added field must not wipe a
+    /// profile written by an older build.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = NutritionProfile()
+        dietType = try container.decodeIfPresent(String.self, forKey: .dietType)
+        restrictions = try container.decodeIfPresent([String].self, forKey: .restrictions) ?? fallback.restrictions
+        excludedProducts = try container.decodeIfPresent([String].self, forKey: .excludedProducts) ?? fallback.excludedProducts
+        preferredProducts = try container.decodeIfPresent([String].self, forKey: .preferredProducts) ?? fallback.preferredProducts
+        conditions = try container.decodeIfPresent([String].self, forKey: .conditions) ?? fallback.conditions
+        mealWindows = try container.decodeIfPresent([MealWindow].self, forKey: .mealWindows) ?? fallback.mealWindows
+    }
+
     static let defaultMealWindows: [MealWindow] = [
         MealWindow(kind: .lunch, start: TimeOfDay(hour: 13), durationMinutes: 40),
     ]

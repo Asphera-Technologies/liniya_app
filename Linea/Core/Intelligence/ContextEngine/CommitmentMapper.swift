@@ -67,9 +67,7 @@ nonisolated struct CommitmentMapper: Sendable {
         }
     }
 
-    /// A workout is recognised by its name — Linea has no separate «событие»
-    /// entity in v1, and «Тренировка 17:00» must still read as training.
     private static func kind(of task: LineaTask) -> CommitmentKind {
-        task.title.lowercased().contains("тренировк") ? .workout : .task
+        CommitmentKind.inferred(fromTitle: task.title, default: .task)
     }
 }

@@ -56,6 +56,23 @@ nonisolated struct Calibration: Codable, Hashable, Sendable {
         self.changeLog = changeLog
     }
 
+    /// Lenient decoding: calibration is a long-lived document, and losing it
+    /// would throw away everything Linea learned about the user.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = Calibration()
+        energyBias = try container.decodeIfPresent(Double.self, forKey: .energyBias) ?? fallback.energyBias
+        reduceThreshold = try container.decodeIfPresent(Double.self, forKey: .reduceThreshold) ?? fallback.reduceThreshold
+        pushThreshold = try container.decodeIfPresent(Double.self, forKey: .pushThreshold) ?? fallback.pushThreshold
+        capacityFactor = try container.decodeIfPresent(Double.self, forKey: .capacityFactor) ?? fallback.capacityFactor
+        estimateMultiplier = try container.decodeIfPresent(Double.self, forKey: .estimateMultiplier) ?? fallback.estimateMultiplier
+        nudgeGraceMinutes = try container.decodeIfPresent(Int.self, forKey: .nudgeGraceMinutes) ?? fallback.nudgeGraceMinutes
+        nudgeCooldownMultiplier = try container.decodeIfPresent(Double.self, forKey: .nudgeCooldownMultiplier) ?? fallback.nudgeCooldownMultiplier
+        lastRatingAppliedDay = try container.decodeIfPresent(Date.self, forKey: .lastRatingAppliedDay)
+        ratingsCount = try container.decodeIfPresent(Int.self, forKey: .ratingsCount) ?? fallback.ratingsCount
+        changeLog = try container.decodeIfPresent([CalibrationChange].self, forKey: .changeLog) ?? fallback.changeLog
+    }
+
     static let `default` = Calibration()
 }
 

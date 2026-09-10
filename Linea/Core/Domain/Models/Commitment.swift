@@ -12,6 +12,13 @@ import Foundation
 
 nonisolated enum CommitmentKind: String, Codable, Hashable, Sendable {
     case meeting, meal, workout, task, other
+
+    /// Linea has no separate «событие» entity in v1, so a training session is
+    /// recognised by its name — whether it came from a task the user pinned to
+    /// a time or from a calendar event. Shared so both sides agree.
+    static func inferred(fromTitle title: String, default fallback: CommitmentKind) -> CommitmentKind {
+        title.lowercased().contains("тренировк") ? .workout : fallback
+    }
 }
 
 nonisolated struct Commitment: Codable, Hashable, Sendable, Identifiable {
