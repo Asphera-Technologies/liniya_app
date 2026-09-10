@@ -21,6 +21,8 @@ tested without Xcode), the API contract and the project documentation.
 ## Opening the iOS project
 
 Open `Linea.xcodeproj` in Xcode 26 and build the `Linea` scheme.
+Step-by-step instructions for running it on an iPhone and what to look at:
+`Docs/how-to-run.md` (in Russian).
 
 ## Testing the core without Xcode
 
