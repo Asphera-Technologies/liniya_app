@@ -1,20 +1,85 @@
 name: ios-macos
 
-# Manual for now: macOS minutes are not allocated and the app build can only be
-# verified with Xcode 26. Run it from the Actions tab when a Mac runner is
-# available; the Linux core job is the blocking one.
+# Compiles the iOS app. Most of Linea's logic lives in `Linea/Core` and is
+# covered by the Linux job, but everything that touches SwiftUI, SwiftData,
+# HealthKit or UserNotifications can only be checked here.
+#
+# The runner label is an input because the project needs Xcode 26 (deployment
+# target 26.5). If `macos-26` is not yet available to this account, re-run the
+# workflow with `macos-15` and see the "Toolchain" step for what it has.
+
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner image label (macos-26 / macos-15 / macos-latest)"
+        default: "macos-26"
+        type: string
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 40
+
     steps:
       - uses: actions/checkout@v4
-      - name: Core tests on Apple Foundation
-        run: swift test
-      - name: Build iOS app (simulator, no signing)
+
+      - name: Toolchain
         run: |
-          xcodebuild -project Linea.xcodeproj -scheme Linea \
+          echo "Available Xcode versions:"
+          ls -d /Applications/Xcode*.app || true
+          # Prefer Xcode 26; fall back to the newest installed one and say so.
+          if [ -d /Applications/Xcode_26.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.app
+          else
+            newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)"
+            echo "::warning::Xcode 26 not found, falling back to $newest"
+            [ -n "$newest" ] && sudo xcode-select -s "$newest"
+          fi
+          xcodebuild -version
+          swift --version
+
+      - name: Schemes
+        run: xcodebuild -project Linea.xcodeproj -list
+
+      - name: Core tests on the Apple toolchain
+        run: swift test
+
+      - name: Build the app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Linea.xcodeproj \
+            -scheme Linea \
             -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug build CODE_SIGNING_ALLOWED=NO
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee build.log
+
+      - name: Compile errors
+        if: failure()
+        run: |
+          echo "### Ошибки сборки" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "error:" build.log | sed 's|^.*/Linea/|Linea/|' | sort -u | head -100 \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Warnings
+        if: success()
+        run: |
+          grep -E "warning:" build.log | sed 's|^.*/Linea/|Linea/|' | sort -u | head -50 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
