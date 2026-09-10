@@ -48,7 +48,13 @@ final class HealthKitManager {
     private(set) var vo2Max: MetricState<Double> = .loading               // latest ml/kg/min
     private(set) var workouts: MetricState<[WorkoutSummary]> = .loading   // today's workouts
 
-    @ObservationIgnored private let healthStore = HKHealthStore()
+    /// Shared with `HealthKitHistoryReader` (the intelligence connector), so the
+    /// app keeps exactly one store. Not private for that reason only.
+    @ObservationIgnored let healthStore = HKHealthStore()
+
+    /// Reads history and sleep segments for the intelligence core; also used
+    /// here for the sleep tile, so both show the same night.
+    @ObservationIgnored private lazy var historyReader = HealthKitHistoryReader(store: healthStore)
 
     /// The read-only set of types Linea requests. Nothing outside this list is
     /// requested, and no write/share types are requested at all.
@@ -176,39 +182,29 @@ final class HealthKitManager {
         }
     }
 
-    /// Total time asleep over the last 24 hours (sums the "asleep" categories).
+    /// Last night's sleep, deduplicated across sources.
+    ///
+    /// Watch and iPhone write overlapping samples for the same night, so
+    /// summing every "asleep" sample (what this used to do) inflated a 6-hour
+    /// night to 9-12 hours. `SleepAnalyzer` picks ONE source — stages first,
+    /// then the longest — and unions its intervals; the same code the
+    /// intelligence core uses, so the tile and the plan never disagree.
     private func sleepDuration() async -> MetricState<TimeInterval> {
-        let sleepType = HKCategoryType(.sleepAnalysis)
-        let end = Date()
-        let start = Calendar.current.date(byAdding: .hour, value: -24, to: end) ?? end
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
-        let sort = [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
-
-        let asleepValues: Set<Int> = [
-            HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
-            HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-            HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
-            HKCategoryValueSleepAnalysis.asleepREM.rawValue
-        ]
-
-        return await withCheckedContinuation { continuation in
-            let query = HKSampleQuery(
-                sampleType: sleepType,
-                predicate: predicate,
-                limit: HKObjectQueryNoLimit,
-                sortDescriptors: sort
-            ) { _, samples, _ in
-                guard let categorySamples = samples as? [HKCategorySample],
-                      !categorySamples.isEmpty else {
-                    continuation.resume(returning: .noData)
-                    return
-                }
-                let total = categorySamples
-                    .filter { asleepValues.contains($0.value) }
-                    .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
-                continuation.resume(returning: total > 0 ? .value(total) : .noData)
+        let time = TimeContext.live
+        let window = DateInterval(
+            start: time.date(on: time.adding(days: -1, to: time.today), at: TimeOfDay(hour: 18)),
+            end: time.now
+        )
+        do {
+            let signals = try await historyReader.signals(in: window, time: time)
+                .filter { $0.kind == .sleepSegment }
+            guard let night = SleepAnalyzer().night(for: time.today, signals: signals, time: time),
+                  night.asleepSeconds > 0 else {
+                return .noData
             }
-            healthStore.execute(query)
+            return .value(night.asleepSeconds)
+        } catch {
+            return .noData
         }
     }
 
