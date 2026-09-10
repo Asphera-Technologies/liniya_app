@@ -1,24 +1,14 @@
 //
-//  TaskRepository.swift
+//  LocalTaskRepository.swift
 //  Linea
 //
-//  The task persistence boundary. Feature UI depends on this protocol, not on
-//  SwiftData. The methods are async so a future `RemoteTaskRepository` (and a
-//  `SyncService` coordinating local + remote) can adopt the same interface
-//  without any change to the Plan UI.
+//  Local, on-device `TaskRepository` backed by SwiftData. Implementation
+//  detail of the Data layer; the protocol lives in Core/Domain/Protocols.
 //
 
 import Foundation
 import SwiftData
 
-protocol TaskRepository {
-    func all() async throws -> [LineaTask]
-    func add(_ task: LineaTask) async throws
-    func update(_ task: LineaTask) async throws
-    func delete(id: UUID) async throws
-}
-
-/// Local, on-device implementation backed by SwiftData.
 @MainActor
 final class LocalTaskRepository: TaskRepository {
     private let context: ModelContext

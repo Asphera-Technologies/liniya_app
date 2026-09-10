@@ -1,10 +1,11 @@
 //
-//  Models.swift
+//  SampleModels.swift
 //  Linea
 //
-//  Shared value types for still-sample features (Today's schedule, the meal
-//  focus). Tasks & goals now live in domain types (see PlanModels.swift) and
-//  health metrics in HealthModels.swift.
+//  Value types for still-sample features (Today's schedule, the meal focus).
+//  They are NOT part of the domain: real tasks & goals live in
+//  Core/Domain/Models/PlanModels.swift, health in HealthModels.swift. These
+//  types disappear together with SampleData once calendar/nutrition are real.
 //
 
 import Foundation

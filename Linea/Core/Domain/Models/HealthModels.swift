@@ -3,11 +3,12 @@
 //  Linea
 //
 //  Domain models for the health context read from Apple Health. Kept separate
-//  from HealthKit types so the rest of the app never imports HealthKit.
+//  from HealthKit types so the rest of the app (and the Foundation-only core)
+//  never imports HealthKit. The `HKWorkoutActivityType.displayName` helper
+//  lives in Data/HealthKit/HKWorkoutActivityType+Display.swift.
 //
 
 import Foundation
-import HealthKit
 
 /// The state of a single health metric.
 ///
@@ -43,27 +44,4 @@ struct WorkoutSummary: Identifiable, Equatable, Sendable {
     let duration: TimeInterval
     let energyKilocalories: Double?
     let start: Date
-}
-
-extension HKWorkoutActivityType {
-    /// A short, human-readable name (Russian) for the common activity types.
-    var displayName: String {
-        switch self {
-        case .running: return "Бег"
-        case .walking: return "Ходьба"
-        case .cycling: return "Велосипед"
-        case .hiking: return "Поход"
-        case .swimming: return "Плавание"
-        case .yoga: return "Йога"
-        case .functionalStrengthTraining, .traditionalStrengthTraining:
-            return "Силовая"
-        case .highIntensityIntervalTraining: return "HIIT"
-        case .coreTraining: return "Кор"
-        case .pilates: return "Пилатес"
-        case .dance, .cardioDance: return "Танцы"
-        case .elliptical: return "Эллипс"
-        case .rowing: return "Гребля"
-        default: return "Тренировка"
-        }
-    }
 }

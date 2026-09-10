@@ -1,23 +1,14 @@
 //
-//  GoalRepository.swift
+//  LocalGoalRepository.swift
 //  Linea
 //
-//  The goal persistence boundary. Same design as `TaskRepository`: async
-//  protocol the UI depends on, with a SwiftData-backed local implementation.
-//  A `RemoteGoalRepository` can adopt this later without UI changes.
+//  Local, on-device `GoalRepository` backed by SwiftData. Implementation
+//  detail of the Data layer; the protocol lives in Core/Domain/Protocols.
 //
 
 import Foundation
 import SwiftData
 
-protocol GoalRepository {
-    func all() async throws -> [LineaGoal]
-    func add(_ goal: LineaGoal) async throws
-    func update(_ goal: LineaGoal) async throws
-    func delete(id: UUID) async throws
-}
-
-/// Local, on-device implementation backed by SwiftData.
 @MainActor
 final class LocalGoalRepository: GoalRepository {
     private let context: ModelContext
