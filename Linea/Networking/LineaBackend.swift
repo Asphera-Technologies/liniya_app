@@ -2,33 +2,22 @@
 //  LineaBackend.swift
 //  Linea
 //
-//  The seam between Linea's UI and its (existing) web backend, for the
-//  features that are still sample-only after Phase 2.
+//  The seam between Linea's UI and a future web backend.
 //
-//  Tasks & goals are NO LONGER here — they go through `TaskRepository` /
-//  `GoalRepository` (local SwiftData now; remote + sync later). Health goes
-//  through `HealthKitManager`. This protocol now covers only the remaining
-//  sample surfaces (schedule, nutrition, profile, health nav).
+//  In v1 the backend takes part in nothing: decisions are made on the device
+//  (Linea/Core) and texts come from the rule-based explainer or the on-device
+//  model. The first planned endpoint is a proxy for a cloud LLM, so provider
+//  keys stay on the server and only derived facts — never raw health samples —
+//  would leave the device, with explicit consent. See Docs/decisions.md
+//  (ADR-001, ADR-011) and API/openapi.yaml.
 //
-//  No production endpoints, auth, or payload shapes are invented. A live
-//  implementation needs the real API contract from the backend team.
+//  No production endpoints, auth or payload shapes are invented here.
 //
 
 import Foundation
 
 protocol LineaBackend: Sendable {
-    func schedule() async -> [ScheduleItem]
-    func mealFocus() async -> MealFocus
-    func nutritionSections() async -> [LineaRow]
-    func healthSections() async -> [LineaRow]
-    func profileSections() async -> [LineaRow]
-}
-
-/// A backend backed entirely by `SampleData`, isolated from production logic.
-struct SampleBackend: LineaBackend {
-    func schedule() async -> [ScheduleItem] { SampleData.schedule }
-    func mealFocus() async -> MealFocus { SampleData.mealFocus }
-    func nutritionSections() async -> [LineaRow] { SampleData.nutritionRows }
-    func healthSections() async -> [LineaRow] { SampleData.healthRows }
-    func profileSections() async -> [LineaRow] { SampleData.profileRows }
+    /// Rephrases an already-made decision. The request carries typed facts,
+    /// not measurements; the response is text only.
+    func explain(_ request: ExplanationRequest) async throws -> Explanation
 }

@@ -2,29 +2,198 @@
 //  ProfileView.swift
 //  Linea
 //
-//  The Profile screen: a simple hairline-separated list of the user's areas
-//  (about, goals, health, nutrition, documents, connections, AI provider) —
-//  mirroring the Linea reference.
+//  The Profile screen. Everything here is real: the working day that defines
+//  available time, the state of every connector, which explainer writes the
+//  texts, and what Linea has learned from the evening ratings — with a way to
+//  reset it. Nothing is shown that Linea does not actually use.
 //
 
 import SwiftUI
 
 struct ProfileView: View {
-    private let backend: LineaBackend = SampleBackend()
+    @Environment(UserProfileStore.self) private var profile
+    @Environment(PlanStore.self) private var plan
+    @Environment(HealthKitManager.self) private var healthKit
+    @Environment(IntelligenceStore.self) private var intelligence
 
-    @State private var rows: [LineaRow] = []
+    @State private var isEditingProfile = false
+    @State private var isShowingCalibration = false
 
     var body: some View {
         NavigationStack {
-            LineaScaffold(title: "Profile") {
-                LineaRowList(rows: rows)
+            LineaScaffold(title: "Профиль") {
+                aboutSection
+                connectionsSection
+                intelligenceSection
             }
         }
-        .task { rows = await backend.profileSections() }
+        .task {
+            await profile.load()
+        }
+        .sheet(isPresented: $isEditingProfile) {
+            AboutMeEditor(profile: profile.profile) { updated in
+                Task { await profile.save(updated) }
+            }
+        }
+        .sheet(isPresented: $isShowingCalibration) {
+            CalibrationView(
+                calibration: intelligence.calibration,
+                onReset: { Task { await intelligence.resetCalibration() } }
+            )
+        }
+    }
+
+    // MARK: About
+
+    private var aboutSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel(text: "О себе")
+            LineaListRow(title: "Имя", value: profile.profile.name ?? "Не задано") { isEditingProfile = true }
+            LineaHairline()
+            LineaListRow(title: "Рабочий день", value: workdayText) { isEditingProfile = true }
+            LineaHairline()
+            LineaListRow(title: "Тихие часы", value: quietText) { isEditingProfile = true }
+            LineaHairline()
+            LineaListRow(title: "Цели", value: "\(plan.activeGoals.count) активных", showsChevron: false)
+        }
+    }
+
+    private var workdayText: String {
+        "\(clock(profile.profile.workdayStart)) — \(clock(profile.profile.workdayEnd))"
+    }
+
+    private var quietText: String {
+        "\(clock(profile.profile.quietHoursStart)) — \(clock(profile.profile.quietHoursEnd))"
+    }
+
+    private func clock(_ time: TimeOfDay) -> String {
+        String(format: "%d:%02d", time.hour, time.minute)
+    }
+
+    // MARK: Connections
+
+    private var connectionsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel(text: "Подключения", trailing: "источники данных")
+            LineaListRow(title: "Apple Health", value: healthStatusText, showsChevron: false)
+            ForEach(intelligence.connections, id: \.id) { connection in
+                LineaHairline()
+                LineaListRow(title: connection.title, value: connection.statusText, showsChevron: false)
+            }
+            LineaHairline()
+            LineaListRow(title: "Календарь", value: "Скоро", showsChevron: false)
+        }
+    }
+
+    private var healthStatusText: String {
+        switch healthKit.authState {
+        case .authorized: return "Подключено"
+        case .requesting: return "Подключаем…"
+        case .unavailable: return "Недоступно"
+        case .failed: return "Ошибка доступа"
+        case .notRequested: return "Не подключено"
+        }
+    }
+
+    // MARK: Intelligence
+
+    private var intelligenceSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel(text: "Linea AI")
+            LineaListRow(title: "Тексты пишет", value: intelligence.explainerTitle, showsChevron: false)
+            LineaHairline()
+            LineaListRow(title: "Калибровка", value: calibrationText) { isShowingCalibration = true }
+        }
+    }
+
+    private var calibrationText: String {
+        let count = intelligence.calibration.ratingsCount
+        return count == 0 ? "Пока нет оценок" : "\(count) оценок дня"
     }
 }
 
-#Preview {
-    ProfileView()
-        .environment(AppState())
+/// What Linea learned from the evening ratings, in plain words, plus a reset.
+struct CalibrationView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let calibration: Calibration
+    let onReset: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: LineaMetrics.sectionSpacing) {
+                    Text("Linea подстраивается под тебя по вечерним оценкам. Порядок задач она не переучивает — меняются только эти настройки.")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        SectionLabel(text: "Что подстроено")
+                        row("Оценка сил", value: signed(calibration.energyBias))
+                        LineaHairline()
+                        row("Порог «снизить нагрузку»", value: percent(calibration.reduceThreshold))
+                        LineaHairline()
+                        row("Порог «можно больше»", value: percent(calibration.pushThreshold))
+                        LineaHairline()
+                        row("Ёмкость дня", value: percent(calibration.capacityFactor))
+                        LineaHairline()
+                        row("Запас на задачи", value: multiplier(calibration.estimateMultiplier))
+                        LineaHairline()
+                        row("Пауза перед напоминанием", value: "\(calibration.nudgeGraceMinutes) мин")
+                    }
+
+                    if !calibration.changeLog.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            SectionLabel(text: "Что менялось")
+                            ForEach(Array(calibration.changeLog.suffix(8).reversed().enumerated()), id: \.offset) { _, change in
+                                Text(change.reason)
+                                    .font(LineaFont.caption)
+                                    .foregroundStyle(LineaColor.textTertiary)
+                                    .padding(.vertical, 4)
+                            }
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        onReset()
+                        dismiss()
+                    } label: {
+                        Text("Сбросить калибровку")
+                            .font(LineaFont.control)
+                            .foregroundStyle(.red)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, LineaMetrics.screenPadding)
+                .padding(.vertical, 20)
+            }
+            .background(LineaColor.background.ignoresSafeArea())
+            .navigationTitle("Калибровка")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") { dismiss() }.tint(LineaColor.ink)
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
+    }
+
+    private func row(_ title: String, value: String) -> some View {
+        LineaListRow(title: title, value: value, showsChevron: false)
+    }
+
+    private func signed(_ value: Double) -> String {
+        value == 0 ? "по умолчанию" : String(format: "%+.2f", value)
+    }
+
+    private func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    private func multiplier(_ value: Double) -> String {
+        String(format: "×%.2f", value)
+    }
 }
