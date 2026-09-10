@@ -57,7 +57,8 @@ Linea/
 │   ├── Intelligence/
 │   │   ├── ContextEngine/    сбор снапшота из провайдеров, CommitmentMapper
 │   │   ├── StateEngine/      SleepAnalyzer, BaselineCalculator, анализаторы, EnergyFusion, Circadian
-│   │   ├── DecisionEngine/   TaskScorer, FreeWindows, DayPlanner, правила, NudgeEngine
+│   │   ├── DecisionEngine/   TaskScorer, FreeWindows, DayPlanner, правила (DayBrief, LoadAdjustment,
+│   │   │                     BehindSchedule, EveningCheckIn), NudgeEngine
 │   │   ├── FeedbackEngine/   калибровка по истории DayRecord
 │   │   └── LLM/              RuleBasedExplainer, RussianText, ExplanationValidator, FallbackExplainer
 │   └── Connectors/           Foundation-only части коннекторов (Nutrition: провайдер окон еды + правило)
@@ -152,6 +153,11 @@ nonisolated protocol PlanRule: Sendable   { var id: String { get }; func apply(t
 nonisolated protocol NudgeRule: Sendable  { var id: String { get }; func nudges(_ context: NudgeContext) -> [Nudge] }
 nonisolated protocol Explainer: Sendable  { var id: String { get }; func explain(_ request: ExplanationRequest) async throws -> Explanation }
 ```
+
+`ContextEngine.capture` принимает `additionalProviders`: коннекторы, чьи
+данные вызывающая сторона только что загрузила (профиль питания меняется между
+обновлениями, поэтому его провайдер создаётся на каждый сбор контекста, а не
+регистрируется один раз).
 
 Отличия от брифового `fetchContext() async throws -> [ContextSignal]`:
 явный запрос (день, время, глубина истории) — иначе провайдер вызовет
@@ -334,9 +340,19 @@ push 1.1 / unknown 0.9)`.
 `hardWorkDeadline(12:00)` — если задача с максимальным demand поставлена
 целиком до 12:00.
 
-**PlanRule** (после расстановки): `LoadAdjustmentRule` (при `reduce` →
-`Recommendation(.loadAdjustment)`), `NutritionRule` (см. §10). Правила
-детерминированы и могут добавлять блоки `.meal/.rest`.
+**PlanRule** (после расстановки, по умолчанию `[DayBriefRule()]`):
+- `DayBriefRule` — утренний бриф `Recommendation(.dayBrief)`: собирает факты
+  плана (`topTaskCount`, `hardWorkDeadline`) и состояния (сон, восстановление,
+  cold start, отсутствующие данные) и отдаёт их рендереру. Именно его текст
+  читает пользователь на Today.
+- `LoadAdjustmentRule` — отдельная карточка «снизить нагрузку», если нужен
+  совет без брифа.
+- `NutritionRule` — см. §10.
+Правила детерминированы и могут добавлять блоки `.meal/.rest`.
+
+Правило, которому нужен текст, объявляет себя `RendererAwarePlanRule`
+(`bound(to:)`), и движок передаёт ему свой `TextRenderer`. Так протоколы
+Domain остаются без знания о текстах, а список правил — обычным литералом.
 
 **Nudge Engine** (по принятому плану):
 - `BehindScheduleRule`: для top-блока с незакрытой задачей `fireAt = block.end
@@ -423,6 +439,8 @@ Foundation-only) из `NutritionProfile` и `[MealLog]` эмитит `.commitmen
 ## 11. Тесты
 
 `Tests/LineaCoreTests`, Swift Testing, запуск `Scripts/test-core.sh`:
+Состояние на 2026-09-10: **153 теста ядра зелёные** в Docker.
+
 - `Fixtures/WowFixture` — сценарий брифа с явными числами: Europe/Moscow,
   2026-09-09, сон 6:03 (21 780 с) при обычных 7:13, HRV 38 при обычных 52,
   RHR 58 при 54, задачи A/B/C, цель «Запустить MVP Linea», обед 13:00,
@@ -431,9 +449,14 @@ Foundation-only) из `NutritionProfile` и `[MealLog]` эмитит `.commitmen
   `BaselineTests`, `StateEngineTests` (reduce, cold start 0/2/3/7 дней,
   отсутствие HRV), `TaskScorerTests`, `DayPlannerTests` (порядок A-C-B,
   блоки не пересекают обязательства, детерминизм), `NudgeEngineTests`
-  (14:30 → 80 мин; done → пусто; 23:00 → пусто), `FeedbackEngineTests`,
-  `ExplainerTests` (golden-строки), `UseCaseTests` (end-to-end утро → 14:30
-  → вечер), `CodableTests` (round-trip DayRecord).
+  (14:30 → напоминание с двумя ответами; задача закрыта → пусто; тихие часы →
+  пусто; вечерний вопрос и его исчезновение после оценки), `FeedbackEngineTests`,
+  `RuleBasedExplainerTests` (golden-строки брифа слово в слово),
+  `ExplanationValidatorTests` (числа вне фактов, латиница, «обычно» без базы,
+  чужое название задачи), `FallbackExplainerTests` (ошибка, таймаут,
+  галлюцинация → шаблон), `WowScenarioTests` (end-to-end утро → 14:30 → вечер,
+  включая деградацию без данных здоровья), `ContextEngineTests`,
+  `NutritionConnectorTests`, `CodableTests` (round-trip DayRecord).
 
 ## 12. Срез v1 и что осознанно не делаем
 

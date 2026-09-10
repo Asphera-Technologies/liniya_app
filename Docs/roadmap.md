@@ -27,21 +27,23 @@
 - ☑ `WowFixture` (сценарий брифа в числах), фейки, Codable round-trip,
   `Circadian`.
 
-## Этап 2. Движки (Linux) — ◐
+## Этап 2. Движки (Linux) — ☑
 
 - ☑ State Engine: SleepAnalyzer (дедупликация источников), BaselineCalculator
   (медиана/MAD, полы, окно 28 дней), анализаторы sleep / recovery / strain,
   EnergyFusion с гистерезисом; покрыт тестами (55 тестов ядра зелёные).
 - ☑ Аналитика сна (`SleepInsight`) для экрана Health.
 - ☑ Подсказка связи задачи с целью (`KeywordGoalMatcher`).
-- ◐ Decision Engine: TaskScorer, FreeWindows, DayPlanner, LoadAdjustmentRule,
-  NudgeEngine (BehindSchedule, EveningCheckIn), replan.
-- ◐ Объяснения: RussianText, RuleBasedExplainer (golden-строки брифа),
-  ExplanationValidator, FallbackExplainer.
-- ◐ ContextEngine + CommitmentMapper, FeedbackEngine, коннектор Nutrition.
-- ☐ Use cases: BuildDayPlan, AcceptPlan, CheckIn, RespondToNudge,
-  RecordDayRating; SleepInsight для экрана Health; end-to-end тест
-  wow-сценария (утро → 14:30 → вечер).
+- ☑ Decision Engine: TaskScorer, FreeWindows, DayPlanner, правила
+  (DayBrief, LoadAdjustment), NudgeEngine (BehindSchedule, EveningCheckIn),
+  пересборка плана.
+- ☑ Объяснения: RussianText, RuleBasedExplainer (golden-строки брифа слово в
+  слово), ExplanationValidator, FallbackExplainer.
+- ☑ ContextEngine + CommitmentMapper, FeedbackEngine, коннектор Nutrition
+  (провайдер окон еды, правило обеда и перекуса, компонент «топливо»).
+- ☑ Use cases: PlanDay, AcceptPlan, CheckIn, RespondToNudge, RecordDayRating;
+  сквозной тест wow-сценария (утро → 14:30 → вечер) и деградации без данных.
+- ☑ 153 теста ядра зелёные в Docker.
 
 ## Этап 3. Apple-слой (пишется на Linux, компилируется на Mac) — ◐ ⚠
 
@@ -52,15 +54,22 @@
   RHR, шаги, энергия, тренировки) и `HealthKitContextProvider`;
   тайл сна в `HealthKitManager` переведён на `SleepAnalyzer`.
 - ☑ `AppContainer` (репозитории, хранилища, провайдеры, `TimeContext.live`).
-- ☐ `IntelligenceStore` (view-facing состояние, план, нуджи) — после движков.
+- ☑ `IntelligenceStore` (состояние, план, нуджи, калибровка, ответы AI-экрана)
+  и подписка на изменения задач, целей, профиля и питания.
 - ☑ Редакторы: задача (дедлайн, время начала, длительность, сложность,
   цель + подсказка), цель (горизонт, активность), питание (профиль,
   окна еды, «Поел»), «О себе» (рабочий день, тихие часы, сон).
-- ☐ Today: утренний бриф, «Принять план», тайм-блоки вместо демо-расписания,
-  карточка нуджа, вечерняя оценка. Health: «Сон за 7/28 дней». Nutrition:
-  профиль и «Поел». Profile: «Подключения», «AI», «Калибровка», «О себе».
-- ☐ `Platform/NudgeScheduler` (UserNotifications с категориями действий),
-  `Platform/FoundationModelsExplainer` за `#if canImport`.
+- ☑ Today: утренний бриф, «Принять план», тайм-блоки, карточка нуджа,
+  вечерняя оценка, советы по питанию. Health: «Сон за 7 дней» с графиком
+  против личной нормы. Nutrition: профиль и «Поел». Profile: «Подключения»,
+  «AI», «Калибровка», «О себе». Демо-данные удалены.
+- ☑ `Platform/NudgeScheduler` (UserNotifications с категориями действий) и
+  `AppDelegate` для ответов на уведомления.
+- ☐ `Platform/FoundationModelsExplainer` (on-device модель iOS 26) — **не
+  начат осознанно**: API нельзя проверить без Mac, а ошибка в нём уронит
+  сборку целиком. Точка подключения готова:
+  `FallbackExplainer(primary:)` в `AppContainer`; сегодня передаётся `nil`,
+  и приложение работает на шаблонах.
 
 ## Этап 4. Проверка на Mac и приёмка — ☐ ⚠
 
@@ -72,9 +81,11 @@
 5. Утренний план на реальных данных: тексты, три действия, «Принять план», блоки без пересечений.
 6. Нудж: задача не закрыта → карточка и уведомление с действиями; закрыть задачу → уведомление снято.
 7. Вечерняя оценка → Profile «Калибровка» показывает изменения.
-8. FoundationModels: доступность, русский текст, fallback без Apple Intelligence.
+8. Уведомления: разрешение запрашивается при первом «Принять план», кнопки «Закрываем сейчас» / «Переносим» доходят до приложения, выполненная задача снимает уведомление.
 9. Xcode-навигатор: `Linea/Core`, `Data`, `Platform` видны; `Tests/` и `Package.swift` не в таргете.
 10. Previews (`PlanStore.preview`, `RootView`) компилируются.
+11. Экран «Питание»: редактор профиля, чипы, «Поел» — и обед появляется в плане дня.
+12. Экран «Профиль» → «Калибровка»: после вечерней оценки значения меняются.
 
 ## v1.1 (после приёмки)
 
@@ -94,6 +105,13 @@
   проработки + критика брифа + судейство + синтез). Решения записаны в
   `Docs/decisions.md`. Реализованы этапы 0–1, спецификация
   `Docs/intelligence.md`, рецепт `Docs/connectors.md`.
+- **2026-09-10.** Ядро закончено: Decision Engine (scoring, свободные окна,
+  расстановка блоков, ограничение нагрузки, пересборка), Nudge Engine,
+  объяснения с golden-строками брифа, валидатор текста от модели, Feedback
+  Engine, коннектор питания, use case'ы и сквозной тест wow-сценария.
+  153 теста в Docker. Собран Apple-слой: экраны Today, Health, Nutrition,
+  Profile, хранилище Intelligence, уведомления с кнопками. Осталось: сборка на
+  Mac по чек-листу и on-device модель.
 - **2026-09-10.** Готов State Engine и его тесты (55 тестов ядра зелёные в
   Docker). Опорные числа wow-сценария: energy 0.396, сон 0.674, восстановление
   0.04, вердикт «снизить нагрузку». Написан Apple-слой: персистентность
