@@ -3,16 +3,18 @@
 //  Linea
 //
 //  The ambient Linea AI surface, presented as a sheet from the command bar.
-//  Phase 1 is a faithful, calm shell: an intro from Linea, quick suggestions,
-//  and a composer. Replies are LOCAL PLACEHOLDERS — there is no model wired in
-//  yet. The real assistant channel plugs in via `LineaBackend` once the API
-//  contract exists.
+//
+//  The three starter prompts answer for real — from the day plan and the sleep
+//  analysis the core already computed, not from a model. Free-form questions
+//  still say plainly that the assistant is not connected yet: Linea does not
+//  pretend to understand what it cannot.
 //
 
 import SwiftUI
 
 struct LineaAIView: View {
     @Environment(AppState.self) private var appState
+    @Environment(IntelligenceStore.self) private var intelligence
     @Environment(\.dismiss) private var dismiss
 
     @State private var input = ""
@@ -138,11 +140,7 @@ struct LineaAIView: View {
         messages.append(AIMessage(role: .user, text: trimmed))
         input = ""
         inputFocused = false
-        // Placeholder reply — no model connected in Phase 1.
-        messages.append(AIMessage(
-            role: .assistant,
-            text: "Пока я в демо-режиме: ассистент подключится, когда будет готов бэкенд. Твой запрос сохранён."
-        ))
+        messages.append(AIMessage(role: .assistant, text: intelligence.answer(to: trimmed)))
     }
 }
 
@@ -176,4 +174,5 @@ private struct MessageBubble: View {
 #Preview {
     LineaAIView()
         .environment(AppState())
+        .environment(IntelligenceStore.preview)
 }
