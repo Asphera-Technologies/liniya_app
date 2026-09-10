@@ -46,3 +46,6 @@ temp/
 
 # SwiftPM (LineaCore package)
 .swiftpm/
+
+# Local AI-agent workspace (worktrees etc.)
+.claude/

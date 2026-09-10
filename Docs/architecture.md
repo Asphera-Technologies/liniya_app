@@ -2,42 +2,101 @@
 
 ## Current architecture
 
-Linea is an iOS app built with Swift and SwiftUI.
+Linea is an iOS app built with Swift and SwiftUI. The repository also
+contains a Foundation-only **intelligence core** (`Linea/Core`) that is
+compiled twice: by Xcode as part of the app target, and by SwiftPM
+(`Package.swift`) on Linux/CI for tests. See `Docs/intelligence.md` for the
+core's specification and `Docs/decisions.md` for why.
 
-The current app entry point is `LineaApp`. It creates a SwiftData `ModelContainer`, wires local repositories, and injects shared dependencies into the SwiftUI environment.
+### Layers
 
-App-wide UI state is held in `AppState` using Observation. The root navigation is `RootView`, which uses a SwiftUI `TabView` for Today, Plan, Nutrition, Health, and Profile.
+```text
+Linea/
+├── App/          LineaApp (composition root), AppState, RootView
+├── Core/         Foundation-only. Domain models, protocols, use cases, engines, connector logic
+│   ├── Domain/{Models,Protocols,UseCases}
+│   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,FeedbackEngine,LLM}
+│   └── Connectors/   Foundation-only parts of connectors (Nutrition)
+├── Data/         Apple frameworks allowed: SwiftData entities and Local* repositories,
+│                 HealthKit history reader and context provider, EventKit later
+├── Platform/     iOS adapters: notifications (nudges), on-device LLM (FoundationModels)
+├── Features/     SwiftUI screens and view-facing stores (Today, Plan, Health, Nutrition, Profile, AI)
+├── Components/, DesignSystem/   shared UI
+├── Networking/   LineaBackend (sample-only protocol; no production API yet)
+└── Services/     SampleData / SampleModels for screens not yet backed by real data
+HealthKitManager.swift   read-only HealthKit boundary; stays at repo root (explicit pbxproj reference)
+Package.swift, Tests/, Scripts/   core build & tests without Xcode
+```
 
-Tasks and goals use domain models in `Models/PlanModels.swift`. Persistence is kept behind `TaskRepository` and `GoalRepository` protocols. The current implementations, `LocalTaskRepository` and `LocalGoalRepository`, are backed by SwiftData entities in `Persistence/`.
+Dependency rules:
 
-`PlanStore` is the view-facing state for tasks and goals. It depends on repository protocols, exposes domain values to SwiftUI, and uses async methods for loading and mutations.
+| Layer | May import | Must not |
+|---|---|---|
+| `Core/Domain` | Foundation | anything else |
+| `Core/Intelligence`, `Core/Connectors` | Foundation, Domain | Apple frameworks; `Date()`, `Calendar.current` (use `TimeContext`) |
+| `Data`, `Platform` | Core + SwiftData / HealthKit / EventKit / UserNotifications / FoundationModels | Features |
+| `Features` | Core types, stores, design system | HealthKit, SwiftData, notification center directly |
+| `App` | everything | — |
 
-Health data is handled through `HealthKitManager`, a read-only HealthKit boundary. Feature screens do not access `HKHealthStore` directly. HealthKit authorization and metric reads stay in the iOS client.
+`Scripts/check-layers.sh` enforces the first two rows; the Docker build
+(`Scripts/test-core.sh`) enforces them by construction — Apple frameworks do
+not exist on Linux.
 
-Networking is currently represented by the `LineaBackend` protocol and `SampleBackend`. This layer is sample-only and does not define production endpoints, authentication, or payload shapes. There are no direct `URLSession` calls or production API client implementation in the current Swift code.
+### App wiring
 
-The Xcode project uses:
+The entry point is `LineaApp`. It creates the SwiftData `ModelContainer`,
+wires local repositories into `PlanStore`, and injects app-wide dependencies
+into the SwiftUI environment. App-wide UI state is held in `AppState`
+(Observation). The root navigation is `RootView` with a `TabView` for Today,
+Plan, Nutrition, Health, and Profile.
 
-- Swift
-- SwiftUI
-- Observation
-- SwiftData
-- Swift concurrency with async/await
-- HealthKit
-- iOS deployment target 26.5
+Tasks and goals are domain values (`LineaTask`, `LineaGoal` in
+`Core/Domain/Models/PlanModels.swift`) behind `TaskRepository` /
+`GoalRepository` protocols (`Core/Domain/Protocols`), implemented by
+`LocalTaskRepository` / `LocalGoalRepository` on SwiftData (`Data/`).
+`PlanStore` is the view-facing state for tasks and goals.
+
+Health data goes through `HealthKitManager`, a read-only HealthKit boundary;
+feature screens never touch `HKHealthStore`. The intelligence core receives
+health data only as `ContextSignal`s from a `ContextProvider`.
+
+Concurrency: the project compiles with `SWIFT_DEFAULT_ACTOR_ISOLATION =
+MainActor`. Stores and repositories are `@MainActor`; every type in
+`Linea/Core` is explicitly `nonisolated` and `Sendable` so engines can run
+off the main actor and tests do not need `@MainActor`.
+
+The Xcode project uses Swift, SwiftUI, Observation, SwiftData, Swift
+concurrency, HealthKit; iOS deployment target 26.5; Xcode 26.6 (Swift 6.3).
+
+## Intelligence data flow
+
+```text
+ContextProviders (HealthKit, Nutrition, later Calendar…)
+        ↓  ContextSignal
+ContextEngine  → ContextSnapshot (signals + tasks + goals + commitments + profile)
+        ↓
+StateEngine    → UserState (sleep, recovery, energy, loadAdvice, facts)
+        ↓
+DecisionEngine → DayPlan (time blocks, top-3, recommendations) + NudgeEngine → Nudges
+        ↓
+Explainer      → Russian text (rule-based always; on-device LLM optional, validated)
+        ↓
+Today / notifications → UserFeedback → FeedbackEngine → Calibration
+```
 
 ## Target architecture
 
 ```text
-iOS Client
-    ↓
-API Client
-    ↓
-Linea Backend
-    ↓
-Database / AI services / integrations
+iOS Client (intelligence core on device)
+    ↓ optional, with consent
+API Client → Linea Backend (LLM proxy, later sync) → AI services
 ```
 
-`API/openapi.yaml` is the source of truth for the iOS-backend contract. Backend and iOS changes that affect requests, responses, authentication, or error shapes should start there.
+`API/openapi.yaml` remains the source of truth for the iOS–backend contract.
+In v1 the backend is not required: decisions are made on the device, and
+explanations come from templates or the on-device model. The first endpoint
+(`POST /v1/explain`) is added to the contract only together with a remote
+explainer implementation.
 
-HealthKit and other Apple-specific APIs are handled directly by the iOS client where required by the architecture and Apple's privacy model.
+HealthKit and other Apple-specific APIs are handled by the iOS client, as
+required by Apple's privacy model; raw health samples never leave the device.
