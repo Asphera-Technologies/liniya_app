@@ -12,6 +12,8 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var appState
+    @Environment(IntelligenceStore.self) private var intelligence
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selection: AppTab = .today
 
     enum AppTab: Hashable {
@@ -36,13 +38,19 @@ struct RootView: View {
 
             HealthView()
                 .tag(AppTab.health)
-                .tabItem { Image(systemName: "waveform.path.ecg").accessibilityLabel("Health") }
+                .tabItem { Image(systemName: "waveform.path.ecg").accessibilityLabel("Здоровье") }
 
             ProfileView()
                 .tag(AppTab.profile)
-                .tabItem { Image(systemName: "person").accessibilityLabel("Profile") }
+                .tabItem { Image(systemName: "person").accessibilityLabel("Профиль") }
         }
         .tint(LineaColor.ink)
+        // Coming back to the app is the moment to re-check the day: iOS runs
+        // no code of ours at 14:30, so this is when a slipping plan is noticed.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await intelligence.refresh(reason: .appeared) }
+        }
         .sheet(isPresented: $appState.isPresentingAI) {
             LineaAIView()
                 .presentationDetents([.large])

@@ -16,6 +16,9 @@ import SwiftData
 
 @main
 struct LineaApp: App {
+    /// Receives answers to notification buttons (see AppDelegate).
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     /// App-wide UI state (ambient AI surface, etc.).
     @State private var appState = AppState()
 
@@ -46,6 +49,7 @@ struct LineaApp: App {
                 .environment(container.profileStore)
                 .environment(container.intelligenceStore)
                 .tint(LineaColor.ink)
+                .onAppear { appDelegate.intelligence = container.intelligenceStore }
         }
         .modelContainer(container.modelContainer)
     }
