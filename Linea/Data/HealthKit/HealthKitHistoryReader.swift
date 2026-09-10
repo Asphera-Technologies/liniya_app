@@ -176,20 +176,20 @@ nonisolated final class HealthKitHistoryReader: HealthHistorySource {
             summaries[dayStart] = updated
         }
 
-        for (dayStart, minutes) in Dictionary(grouping: workoutList, by: { time.startOfDay($0.start) })
-            .mapValues({ $0.reduce(0) { $0 + $1.duration } / 60 })
-        where dayStart >= start && dayStart < end {
+        let workoutsByDay = Dictionary(grouping: workoutList) { time.startOfDay($0.start) }
+        for (dayStart, dayWorkouts) in workoutsByDay where dayStart >= start && dayStart < end {
+            let seconds = dayWorkouts.reduce(TimeInterval.zero) { total, signal in total + signal.duration }
             var updated = row(dayStart)
-            updated[.workoutMinutes] = minutes
+            updated[.workoutMinutes] = seconds / 60
             summaries[dayStart] = updated
         }
 
-        for (dayStart, total) in stepTotals {
+        for (dayStart, total) in stepTotals where dayStart >= start && dayStart < end {
             var updated = row(dayStart)
             updated[.steps] = total
             summaries[dayStart] = updated
         }
-        for (dayStart, total) in energyTotals {
+        for (dayStart, total) in energyTotals where dayStart >= start && dayStart < end {
             var updated = row(dayStart)
             updated[.activeEnergy] = total
             summaries[dayStart] = updated
