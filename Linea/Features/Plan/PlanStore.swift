@@ -22,6 +22,15 @@ final class PlanStore {
     private(set) var goals: [LineaGoal] = []
     private(set) var errorMessage: String?
 
+    /// A quiet warning shown on the Plan screen, e.g. when more than three
+    /// goals are active. Advisory on purpose: the brief asks for 1-3 active
+    /// goals, but blocking the user over it would be rude.
+    private(set) var warningMessage: String?
+
+    /// Called after every mutation so the day plan can be recomputed.
+    /// Set by the composition root; nil in previews and tests.
+    var onPlanInputsChanged: (@MainActor () async -> Void)?
+
     /// Plan screen scope + which week/month is being viewed.
     var scope: PlanScope = .week
     var referenceDate: Date = Date()
@@ -38,9 +47,17 @@ final class PlanStore {
             tasks = try await taskRepository.all()
             goals = try await goalRepository.all()
             errorMessage = nil
+            updateWarning()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func updateWarning() {
+        let active = goals.filter { $0.isActive && !$0.isCompleted }.count
+        warningMessage = active > LineaGoal.recommendedActiveLimit
+            ? "Активных целей \(active). Linea лучше помогает, когда их не больше \(LineaGoal.recommendedActiveLimit)."
+            : nil
     }
 
     // MARK: - Task intents
@@ -54,14 +71,27 @@ final class PlanStore {
                 try await taskRepository.add(task)
             }
             await load()
+            await onPlanInputsChanged?()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
+    /// Marks a task done/undone. `completedAt` is what lets the plan know the
+    /// day is on track, so it is stamped here rather than in the UI.
     func toggleTask(_ task: LineaTask) async {
         var updated = task
         updated.isDone.toggle()
+        updated.completedAt = updated.isDone ? Date() : nil
+        await saveTask(updated)
+    }
+
+    /// The "переносим" answer to a nudge: move the task to another day and
+    /// let the plan rebuild without it.
+    func deferTask(_ task: LineaTask, to day: Date) async {
+        var updated = task
+        updated.date = Calendar.current.startOfDay(for: day)
+        updated.scheduledStart = nil
         await saveTask(updated)
     }
 
@@ -69,6 +99,7 @@ final class PlanStore {
         do {
             try await taskRepository.delete(id: task.id)
             await load()
+            await onPlanInputsChanged?()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -84,6 +115,7 @@ final class PlanStore {
                 try await goalRepository.add(goal)
             }
             await load()
+            await onPlanInputsChanged?()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -93,9 +125,23 @@ final class PlanStore {
         do {
             try await goalRepository.delete(id: goal.id)
             await load()
+            await onPlanInputsChanged?()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Goals the Decision Engine may align tasks with.
+    var activeGoals: [LineaGoal] {
+        goals.filter { $0.isActive && !$0.isCompleted }
+    }
+
+    /// Progress derived from linked tasks when there are any, so a goal moves
+    /// on its own; the manual slider stays the source otherwise.
+    func derivedProgress(for goal: LineaGoal) -> Double? {
+        let linked = tasks.filter { $0.goalID == goal.id }
+        guard !linked.isEmpty else { return nil }
+        return Double(linked.filter(\.isDone).count) / Double(linked.count)
     }
 
     // MARK: - Derived: Today
