@@ -4,6 +4,8 @@
 //
 //  SwiftData persistence model for goals. Implementation detail of the local
 //  repository; mapping to/from the `LineaGoal` domain type lives here.
+//  New fields are optional (lightweight migration); nil = pre-migration
+//  defaults (week horizon, start = createdAt, active).
 //
 
 import Foundation
@@ -17,18 +19,28 @@ final class GoalEntity {
     var isCompleted: Bool
     var createdAt: Date
 
+    var horizonRaw: String?
+    var startDate: Date?
+    var isActive: Bool?
+
     init(
         id: UUID,
         title: String,
         progress: Double,
         isCompleted: Bool,
-        createdAt: Date
+        createdAt: Date,
+        horizonRaw: String? = nil,
+        startDate: Date? = nil,
+        isActive: Bool? = nil
     ) {
         self.id = id
         self.title = title
         self.progress = progress
         self.isCompleted = isCompleted
         self.createdAt = createdAt
+        self.horizonRaw = horizonRaw
+        self.startDate = startDate
+        self.isActive = isActive
     }
 }
 
@@ -39,7 +51,10 @@ extension GoalEntity {
             title: goal.title,
             progress: goal.progress,
             isCompleted: goal.isCompleted,
-            createdAt: goal.createdAt
+            createdAt: goal.createdAt,
+            horizonRaw: goal.horizon.rawValue,
+            startDate: goal.startDate,
+            isActive: goal.isActive
         )
     }
 
@@ -49,7 +64,10 @@ extension GoalEntity {
             title: title,
             progress: progress,
             isCompleted: isCompleted,
-            createdAt: createdAt
+            createdAt: createdAt,
+            horizon: horizonRaw.flatMap(GoalHorizon.init(rawValue:)) ?? .week,
+            startDate: startDate ?? createdAt,
+            isActive: isActive ?? true
         )
     }
 
@@ -57,5 +75,8 @@ extension GoalEntity {
         title = goal.title
         progress = goal.progress
         isCompleted = goal.isCompleted
+        horizonRaw = goal.horizon.rawValue
+        startDate = goal.startDate
+        isActive = goal.isActive
     }
 }

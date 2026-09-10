@@ -29,7 +29,7 @@ nonisolated struct SignalKind: RawRepresentable, Hashable, Codable, Sendable,
 }
 
 /// Core signal kinds consumed by the built-in engines.
-extension SignalKind {
+nonisolated extension SignalKind {
     // Health (values from Apple Health; all read-only)
     /// A sleep segment: interval + `stage` attribute (inBed/core/deep/rem/unspecified/awake).
     static let sleepSegment: SignalKind = "health.sleep.segment"

@@ -6,6 +6,9 @@
 //  the local repository — it must not leak into feature UI. Mapping to/from
 //  the `LineaTask` domain type lives here.
 //
+//  Intelligence fields were added as OPTIONAL properties so SwiftData performs
+//  a lightweight migration on devices that already have data.
+//
 
 import Foundation
 import SwiftData
@@ -15,10 +18,18 @@ final class TaskEntity {
     @Attribute(.unique) var id: UUID
     var title: String
     var notes: String?
-    var dueDate: Date?
+    var dueDate: Date?          // = LineaTask.date (the planned DAY); name kept for migration
     var priorityRaw: String
     var isDone: Bool
     var createdAt: Date
+
+    // Intelligence inputs (all optional → lightweight migration)
+    var deadline: Date?
+    var scheduledStart: Date?
+    var estimatedMinutes: Int?
+    var cognitiveDemandRaw: String?
+    var goalID: UUID?
+    var completedAt: Date?
 
     init(
         id: UUID,
@@ -27,7 +38,13 @@ final class TaskEntity {
         dueDate: Date?,
         priorityRaw: String,
         isDone: Bool,
-        createdAt: Date
+        createdAt: Date,
+        deadline: Date? = nil,
+        scheduledStart: Date? = nil,
+        estimatedMinutes: Int? = nil,
+        cognitiveDemandRaw: String? = nil,
+        goalID: UUID? = nil,
+        completedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -36,6 +53,12 @@ final class TaskEntity {
         self.priorityRaw = priorityRaw
         self.isDone = isDone
         self.createdAt = createdAt
+        self.deadline = deadline
+        self.scheduledStart = scheduledStart
+        self.estimatedMinutes = estimatedMinutes
+        self.cognitiveDemandRaw = cognitiveDemandRaw
+        self.goalID = goalID
+        self.completedAt = completedAt
     }
 }
 
@@ -48,7 +71,13 @@ extension TaskEntity {
             dueDate: task.date,
             priorityRaw: task.priority.rawValue,
             isDone: task.isDone,
-            createdAt: task.createdAt
+            createdAt: task.createdAt,
+            deadline: task.deadline,
+            scheduledStart: task.scheduledStart,
+            estimatedMinutes: task.estimatedMinutes,
+            cognitiveDemandRaw: task.cognitiveDemand.rawValue,
+            goalID: task.goalID,
+            completedAt: task.completedAt
         )
     }
 
@@ -61,7 +90,13 @@ extension TaskEntity {
             date: dueDate,
             priority: TaskPriority(rawValue: priorityRaw) ?? .normal,
             isDone: isDone,
-            createdAt: createdAt
+            createdAt: createdAt,
+            deadline: deadline,
+            scheduledStart: scheduledStart,
+            estimatedMinutes: estimatedMinutes,
+            cognitiveDemand: cognitiveDemandRaw.flatMap(CognitiveDemand.init(rawValue:)) ?? .normal,
+            goalID: goalID,
+            completedAt: completedAt
         )
     }
 
@@ -72,5 +107,11 @@ extension TaskEntity {
         dueDate = task.date
         priorityRaw = task.priority.rawValue
         isDone = task.isDone
+        deadline = task.deadline
+        scheduledStart = task.scheduledStart
+        estimatedMinutes = task.estimatedMinutes
+        cognitiveDemandRaw = task.cognitiveDemand.rawValue
+        goalID = task.goalID
+        completedAt = task.completedAt
     }
 }

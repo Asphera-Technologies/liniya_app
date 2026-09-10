@@ -27,7 +27,7 @@ nonisolated struct DailyHealthSummary: Codable, Hashable, Sendable {
 }
 
 /// Derived daily kinds (aggregates, not raw signals).
-extension SignalKind {
+nonisolated extension SignalKind {
     /// Seconds asleep for the night ending on that day.
     static let sleepAsleep: SignalKind = "health.sleep.asleep"
     /// Seconds in bed for the night ending on that day.

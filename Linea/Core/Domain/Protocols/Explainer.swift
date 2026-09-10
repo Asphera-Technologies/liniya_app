@@ -36,14 +36,25 @@ nonisolated struct ExplanationRequest: Codable, Sendable {
     /// Hour of day (for the greeting).
     let hour: Int
     let userName: String?
+    /// IANA time zone for rendering moments inside facts («до 12:00»).
+    let timeZoneIdentifier: String
 
-    init(moment: ExplanationMoment, facts: [Fact], taskTitles: [String] = [], localeIdentifier: String = "ru_RU", hour: Int, userName: String? = nil) {
+    init(
+        moment: ExplanationMoment,
+        facts: [Fact],
+        taskTitles: [String] = [],
+        localeIdentifier: String = "ru_RU",
+        hour: Int,
+        userName: String? = nil,
+        timeZoneIdentifier: String = "UTC"
+    ) {
         self.moment = moment
         self.facts = facts
         self.taskTitles = taskTitles
         self.localeIdentifier = localeIdentifier
         self.hour = hour
         self.userName = userName
+        self.timeZoneIdentifier = timeZoneIdentifier
     }
 }
 
