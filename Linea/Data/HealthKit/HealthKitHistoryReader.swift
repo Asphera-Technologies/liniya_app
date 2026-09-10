@@ -23,9 +23,9 @@ import HealthKit
 
 nonisolated final class HealthKitHistoryReader: HealthHistorySource {
 
-    /// `HKHealthStore` is documented as safe to use from any thread; the app
-    /// keeps exactly one instance (created by `HealthKitManager`).
-    private nonisolated(unsafe) let store: HKHealthStore
+    /// The app keeps exactly one store (created by `HealthKitManager`) and
+    /// shares it with this reader, so both see the same authorization.
+    private let store: HKHealthStore
 
     init(store: HKHealthStore) {
         self.store = store

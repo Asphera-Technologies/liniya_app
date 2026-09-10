@@ -6,10 +6,13 @@
 //  place outside HealthKitManager that imports HealthKit; the domain model
 //  (`WorkoutSummary`) carries the resulting string, never the HK type.
 //
+//  `nonisolated` because the context provider reads it while collecting
+//  signals off the main actor: it is a pure mapping with no state to protect.
+//
 
 import HealthKit
 
-extension HKWorkoutActivityType {
+nonisolated extension HKWorkoutActivityType {
     /// A short, human-readable name (Russian) for the common activity types.
     var displayName: String {
         switch self {
