@@ -88,9 +88,17 @@ final class HealthKitManager {
     /// access was granted in a previous session and flip to `.authorized`.
     /// If nothing comes back we stay `.notRequested` and show the connect CTA
     /// (we can't distinguish "denied read" from "no data" — see MetricState).
+    ///
+    /// Once authorized it re-reads on every call. It used to return early in
+    /// that case, so the numbers were read once and then stayed frozen for the
+    /// whole session — steps taken since morning never appeared.
     func probeExistingAuthorization() async {
         guard HKHealthStore.isHealthDataAvailable() else {
             authState = .unavailable
+            return
+        }
+        if authState == .authorized {
+            await refreshAll()
             return
         }
         guard authState == .notRequested else { return }

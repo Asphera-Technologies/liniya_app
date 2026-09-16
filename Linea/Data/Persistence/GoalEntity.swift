@@ -19,8 +19,12 @@ final class GoalEntity {
     var isCompleted: Bool
     var createdAt: Date
 
+    /// Больше не используется: раньше цель имела горизонт «неделя/месяц».
+    /// Колонка оставлена, чтобы обновление не стирало существующие цели — по
+    /// ней вычисляется срок для тех, что были созданы до появления `endDate`.
     var horizonRaw: String?
     var startDate: Date?
+    var endDate: Date?
     var isActive: Bool?
 
     init(
@@ -31,6 +35,7 @@ final class GoalEntity {
         createdAt: Date,
         horizonRaw: String? = nil,
         startDate: Date? = nil,
+        endDate: Date? = nil,
         isActive: Bool? = nil
     ) {
         self.id = id
@@ -40,6 +45,7 @@ final class GoalEntity {
         self.createdAt = createdAt
         self.horizonRaw = horizonRaw
         self.startDate = startDate
+        self.endDate = endDate
         self.isActive = isActive
     }
 }
@@ -52,8 +58,8 @@ extension GoalEntity {
             progress: goal.progress,
             isCompleted: goal.isCompleted,
             createdAt: goal.createdAt,
-            horizonRaw: goal.horizon.rawValue,
             startDate: goal.startDate,
+            endDate: goal.endDate,
             isActive: goal.isActive
         )
     }
@@ -65,8 +71,8 @@ extension GoalEntity {
             progress: progress,
             isCompleted: isCompleted,
             createdAt: createdAt,
-            horizon: horizonRaw.flatMap(GoalHorizon.init(rawValue:)) ?? .week,
             startDate: startDate ?? createdAt,
+            endDate: endDate ?? Self.migratedEndDate(horizonRaw: horizonRaw, startDate: startDate ?? createdAt),
             isActive: isActive ?? true
         )
     }
@@ -75,8 +81,19 @@ extension GoalEntity {
         title = goal.title
         progress = goal.progress
         isCompleted = goal.isCompleted
-        horizonRaw = goal.horizon.rawValue
         startDate = goal.startDate
+        endDate = goal.endDate
         isActive = goal.isActive
+    }
+
+    /// Цель, созданная до появления явного срока, получает его из старого
+    /// горизонта: конец той же недели или того же месяца.
+    private static func migratedEndDate(horizonRaw: String?, startDate: Date) -> Date? {
+        guard let horizonRaw else { return nil }
+        let calendar = Calendar.current
+        let component: Calendar.Component = horizonRaw == "week" ? .weekOfYear : .month
+        let start = calendar.startOfDay(for: startDate)
+        guard let next = calendar.date(byAdding: component, value: 1, to: start) else { return nil }
+        return calendar.date(byAdding: .day, value: -1, to: next)
     }
 }

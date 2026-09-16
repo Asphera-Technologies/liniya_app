@@ -2,14 +2,16 @@
 //  NutritionView.swift
 //  Linea
 //
-//  The Nutrition ("Питание") screen. No longer a demo list: it shows the next
-//  meal window with a one-tap «Поел», and opens the real profile editor —
-//  diet, what is allowed and excluded, condition tags and meal times.
+//  Экран «Питание»: ближайший приём пищи с кнопкой «Поел» и одна строка
+//  настроек. Раньше настройки были разбросаны шестью строками — диета,
+//  ограничения, продукты, особенности, время еды, — и экран выглядел как
+//  список без смысла. Теперь это одна кнопка, а разделы живут внутри
+//  редактора.
 //
-//  These are the values the rest of Linea uses: meal windows block time in the
-//  day plan, allowed products fill the meal advice, and «Поел» feeds the
-//  energy model. Nothing here is medical: conditions are user tags used as
-//  filters only.
+//  Эти значения использует всё остальное приложение: окна еды занимают время
+//  в плане дня, подходящие продукты попадают в советы, а «Поел» кормит оценку
+//  сил. Ничего медицинского здесь нет: особенности здоровья — это теги
+//  пользователя, они только фильтруют подсказки.
 //
 
 import SwiftUI
@@ -24,7 +26,7 @@ struct NutritionView: View {
         NavigationStack {
             LineaScaffold(title: "Питание") {
                 nextMealSection
-                constraintsSection
+                settingsSection
                 loggedSection
             }
         }
@@ -46,6 +48,7 @@ struct NutritionView: View {
                 Text("\(meal.kind.title) в \(clock(meal.start))")
                     .font(LineaFont.feature)
                     .foregroundStyle(LineaColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 12) {
                     LineaOutlineButton(title: "Поел") {
                         Task { await nutrition.logMeal(meal.kind) }
@@ -55,30 +58,38 @@ struct NutritionView: View {
                     }
                 }
             } else {
-                Text("Приёмы пищи на сегодня отмечены")
+                Text("Всё отмечено")
                     .font(LineaFont.feature)
                     .foregroundStyle(LineaColor.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    // MARK: Constraints
+    // MARK: Settings
 
-    private var constraintsSection: some View {
+    /// Одна кнопка вместо шести строк: внутри редактора те же разделы, но
+    /// экран перестаёт быть списком одинаковых пунктов.
+    private var settingsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel(text: "Что мне можно")
-            LineaListRow(title: "Диета", value: nutrition.profile.dietType ?? "Не задана") { isEditingProfile = true }
+            LineaListRow(title: "Настройки питания", value: settingsSummary) { isEditingProfile = true }
             LineaHairline()
-            LineaListRow(title: "Ограничения", value: countText(nutrition.profile.restrictions.count)) { isEditingProfile = true }
-            LineaHairline()
-            LineaListRow(title: "Не подходит", value: countText(nutrition.profile.excludedProducts.count)) { isEditingProfile = true }
-            LineaHairline()
-            LineaListRow(title: "Подходит", value: countText(nutrition.profile.preferredProducts.count)) { isEditingProfile = true }
-            LineaHairline()
-            LineaListRow(title: "Особенности здоровья", value: countText(nutrition.profile.conditions.count)) { isEditingProfile = true }
-            LineaHairline()
-            LineaListRow(title: "Время приёмов пищи", value: countText(nutrition.profile.mealWindows.count)) { isEditingProfile = true }
+            Text("Диета, ограничения, подходящие продукты, особенности здоровья и время приёмов пищи.")
+                .font(LineaFont.caption)
+                .foregroundStyle(LineaColor.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
         }
+    }
+
+    /// Короткая сводка, чтобы строка не была пустой: диета или число правил.
+    private var settingsSummary: String {
+        if let diet = nutrition.profile.dietType, !diet.isEmpty { return diet }
+        let rules = nutrition.profile.restrictions.count
+            + nutrition.profile.excludedProducts.count
+            + nutrition.profile.conditions.count
+        return rules == 0 ? "Не заданы" : "Правил: \(rules)"
     }
 
     @ViewBuilder
@@ -104,10 +115,6 @@ struct NutritionView: View {
                 }
             }
         }
-    }
-
-    private func countText(_ count: Int) -> String? {
-        count == 0 ? "—" : "\(count)"
     }
 
     private func clock(_ time: TimeOfDay) -> String {

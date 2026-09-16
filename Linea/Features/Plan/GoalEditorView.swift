@@ -5,10 +5,13 @@
 //  Create/edit a goal, including updating progress and marking complete.
 //  Native sheet, Linea-styled. Talks to `PlanStore` intents only.
 //
-//  A goal has a horizon (week/month) because that is what makes it comparable
-//  to today: the Decision Engine raises tasks linked to a goal that is running
-//  out of time. Progress is derived from linked tasks when there are any —
-//  the slider stays for goals that are not broken into tasks yet.
+//  У цели есть срок — дата, к которой она должна быть достигнута. Именно он
+//  делает цель сопоставимой с сегодняшним днём: чем ближе срок, тем выше
+//  Decision Engine поднимает связанные задачи. Срок необязателен: без него
+//  цель просто активна и тянет ровно.
+//
+//  Прогресс считается из связанных задач, если они есть; слайдер остаётся для
+//  целей, которые ещё не разложены на задачи.
 //
 
 import SwiftUI
@@ -22,17 +25,18 @@ struct GoalEditorView: View {
     @State private var title: String
     @State private var progress: Double
     @State private var isCompleted: Bool
-    @State private var horizon: GoalHorizon
+    @State private var hasDueDate: Bool
+    @State private var dueDate: Date
     @State private var isActive: Bool
     @FocusState private var titleFocused: Bool
-    @Namespace private var segments
 
     init(existing: LineaGoal? = nil) {
         self.existing = existing
         _title = State(initialValue: existing?.title ?? "")
         _progress = State(initialValue: existing?.progress ?? 0)
         _isCompleted = State(initialValue: existing?.isCompleted ?? false)
-        _horizon = State(initialValue: existing?.horizon ?? .week)
+        _hasDueDate = State(initialValue: existing?.endDate != nil)
+        _dueDate = State(initialValue: existing?.endDate ?? Self.defaultDueDate())
         _isActive = State(initialValue: existing?.isActive ?? true)
     }
 
@@ -45,7 +49,7 @@ struct GoalEditorView: View {
                     LineaTextField(placeholder: "Название цели", text: $title, axis: .vertical)
                         .focused($titleFocused)
 
-                    horizonSection
+                    dueDateSection
                     progressSection
 
                     VStack(spacing: 0) {
@@ -111,28 +115,57 @@ struct GoalEditorView: View {
         }
     }
 
-    private var horizonSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Горизонт", trailing: horizonHint)
-            LineaSegmentedControl(
-                options: GoalHorizon.allCases.map(\.title),
-                selection: Binding(
-                    get: { GoalHorizon.allCases.firstIndex(of: horizon) ?? 0 },
-                    set: { horizon = GoalHorizon.allCases[$0] }
-                ),
-                namespace: segments
-            )
+    private var dueDateSection: some View {
+        VStack(spacing: 0) {
+            Toggle(isOn: $hasDueDate.animation(.snappy)) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Срок")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                    Text(hasDueDate ? dueDateHint : "Без срока цель просто активна")
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textTertiary)
+                }
+            }
+            .tint(LineaColor.ink)
+            .padding(.vertical, 14)
+            LineaHairline()
+
+            if hasDueDate {
+                DatePicker("", selection: $dueDate, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .tint(LineaColor.ink)
+                    .labelsHidden()
+                    .padding(.top, 4)
+            }
         }
     }
 
-    private var horizonHint: String? {
-        let start = existing?.startDate ?? Date()
-        let goal = LineaGoal(title: "", createdAt: start, horizon: horizon, startDate: start)
-        let target = goal.targetDate(calendar: Calendar.current)
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "d MMMM"
-        return "до \(formatter.string(from: target))"
+    /// Сколько осталось — это и есть то, что двигает задачи цели вверх.
+    private var dueDateHint: String {
+        let calendar = Calendar.current
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()),
+                                           to: calendar.startOfDay(for: dueDate)).day ?? 0
+        if days < 0 { return "Срок прошёл" }
+        if days == 0 { return "Сегодня последний день" }
+        return "Осталось \(days) \(Self.dayWord(days))"
+    }
+
+    private static func dayWord(_ n: Int) -> String {
+        let lastTwo = abs(n) % 100
+        if (11...14).contains(lastTwo) { return "дней" }
+        switch abs(n) % 10 {
+        case 1: return "день"
+        case 2, 3, 4: return "дня"
+        default: return "дней"
+        }
+    }
+
+    /// По умолчанию — конец текущей недели: самый частый горизонт цели.
+    private static func defaultDueDate() -> Date {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return calendar.date(byAdding: .day, value: 7, to: today) ?? today
     }
 
     private var progressSection: some View {
@@ -174,8 +207,8 @@ struct GoalEditorView: View {
             progress: isCompleted ? 1 : progress,
             isCompleted: isCompleted,
             createdAt: existing?.createdAt ?? Date(),
-            horizon: horizon,
             startDate: existing?.startDate,
+            endDate: hasDueDate ? Calendar.current.startOfDay(for: dueDate) : nil,
             isActive: isActive
         )
         Task {

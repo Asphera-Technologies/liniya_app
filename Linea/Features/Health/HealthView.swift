@@ -17,6 +17,7 @@ import SwiftUI
 struct HealthView: View {
     @Environment(HealthKitManager.self) private var healthKit
     @Environment(IntelligenceStore.self) private var intelligence
+    @Environment(\.openURL) private var openURL
 
     private let columns = [
         GridItem(.flexible(), spacing: 20, alignment: .leading),
@@ -35,6 +36,10 @@ struct HealthView: View {
         .task {
             await healthKit.probeExistingAuthorization()
             await intelligence.refresh(reason: .appeared)
+        }
+        .refreshable {
+            await healthKit.refreshAll()
+            await intelligence.refresh(reason: .manual)
         }
     }
 
@@ -93,13 +98,16 @@ struct HealthView: View {
         switch healthKit.authState {
         case .notRequested:
             VStack(alignment: .leading, spacing: 10) {
-                Text("Подключи Apple Health, чтобы видеть свои реальные показатели.")
+                Text("Подключи Apple Health, чтобы видеть свои реальные показатели. В окне доступа включи все категории — выключенные Linea прочитать не сможет.")
                     .font(LineaFont.caption)
                     .foregroundStyle(LineaColor.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 LineaOutlineButton(title: "Подключить Apple Health") {
                     Task { await healthKit.connect() }
                 }
             }
+        case .authorized where !missingMetrics.isEmpty:
+            partialAccessSection
         case .failed(let message):
             VStack(alignment: .leading, spacing: 10) {
                 Text("Не удалось прочитать данные Apple Health")
@@ -119,6 +127,47 @@ struct HealthView: View {
         case .requesting, .authorized:
             EmptyView()
         }
+    }
+
+    /// Часть показателей пуста. Apple намеренно не сообщает, запрещено чтение
+    /// или данных просто нет, поэтому Linea не гадает, а показывает, что
+    /// именно не пришло, и ведёт туда, где это включается.
+    ///
+    /// Раньше этого экрана не было: как только приходил хотя бы один
+    /// показатель, кнопка доступа пропадала, и включить остальные было негде.
+    private var partialAccessSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Пока не вижу: \(missingMetrics.joined(separator: ", ")).")
+                .font(LineaFont.caption)
+                .foregroundStyle(LineaColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Либо доступ к этим категориям выключен, либо данных нет. Проверить: «Здоровье» → фото профиля → «Приложения» → Linea.")
+                .font(LineaFont.caption)
+                .foregroundStyle(LineaColor.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                LineaOutlineButton(title: "Открыть Здоровье") {
+                    if let url = URL(string: "x-apple-health://") { openURL(url) }
+                }
+                LineaOutlineButton(title: "Обновить") {
+                    Task { await healthKit.refreshAll() }
+                }
+            }
+        }
+    }
+
+    /// Названия показателей, по которым сегодня ничего не пришло.
+    private var missingMetrics: [String] {
+        var missing: [String] = []
+        func check<T>(_ label: String, _ state: MetricState<T>) {
+            if case .noData = state { missing.append(label) }
+        }
+        check("сон", healthKit.sleep)
+        check("шаги", healthKit.steps)
+        check("активность", healthKit.activeEnergy)
+        check("пульс покоя", healthKit.restingHeartRate)
+        check("HRV", healthKit.hrv)
+        return missing
     }
 
     // MARK: Sleep analysis

@@ -3,8 +3,9 @@
 //  Linea
 //
 //  A task row: a circular checkbox (filled ink when done), the title (struck
-//  through and dimmed when done), an optional meta line, an optional "Важно"
-//  tag, a chevron, and a delete affordance. Bound to the `LineaTask` domain.
+//  through and dimmed when done), an optional meta line, the priority when it
+//  is not the middle one, a chevron, and a delete affordance. Bound to the
+//  `LineaTask` domain.
 //
 
 import SwiftUI
@@ -15,8 +16,9 @@ struct TaskRow: View {
     var onOpen: () -> Void = {}
     var onDelete: () -> Void = {}
 
+    /// Средний приоритет не подписывается: подпись у каждой строки — шум.
     private var tag: String? {
-        task.priority.isImportant ? "Важно" : nil
+        task.priority == .normal ? nil : task.priority.title
     }
 
     private var meta: String? {

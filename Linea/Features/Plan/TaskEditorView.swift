@@ -163,12 +163,12 @@ struct TaskEditorView: View {
 
     private var prioritySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Важность")
+            SectionLabel(text: "Приоритет")
             LineaSegmentedControl(
-                options: ["Низкая", "Обычная", "Важная"],
+                options: TaskPriority.allCases.map(\.title),
                 selection: Binding(
-                    get: { [TaskPriority.low, .normal, .important].firstIndex(of: priority) ?? 1 },
-                    set: { priority = [TaskPriority.low, .normal, .important][$0] }
+                    get: { TaskPriority.allCases.firstIndex(of: priority) ?? 1 },
+                    set: { priority = TaskPriority.allCases[$0] }
                 ),
                 namespace: prioritySegments
             )
