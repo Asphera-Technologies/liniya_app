@@ -13,7 +13,7 @@
 import EventKit
 import Foundation
 
-nonisolated final class CalendarContextProvider: ContextProvider {
+nonisolated final class CalendarContextProvider: CalendarConnecting {
     let id: ProviderID = .calendar
     let displayName = "Календарь"
     let provides: Set<SignalKind> = [.commitment]
@@ -35,6 +35,14 @@ nonisolated final class CalendarContextProvider: ContextProvider {
         let events = store.events(matching: predicate).map(Self.event)
         let signals = mapper.signals(from: events, in: window, source: id)
         return ProviderFetchResult(signals: signals, status: signals.isEmpty ? .noData : .ready)
+    }
+
+    /// События за произвольный период — для экрана «План».
+    func commitments(in interval: DateInterval, time: TimeContext) async throws -> [Commitment] {
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return [] }
+        let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: nil)
+        let events = store.events(matching: predicate).map(Self.event)
+        return mapper.commitments(from: events, in: interval, source: id)
     }
 
     /// `EKEvent` → доменное событие. Ни одного решения здесь не принимается.

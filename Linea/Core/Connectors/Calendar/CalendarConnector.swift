@@ -56,6 +56,14 @@ nonisolated struct CalendarEvent: Sendable, Hashable, Identifiable {
     var durationMinutes: Int { Int(end.timeIntervalSince(start) / 60) }
 }
 
+/// Календарь умеет две вещи: отдавать сигналы за день (это нужно движку) и
+/// показывать события за произвольный период (это нужно экрану «План», где
+/// пользователь листает недели). Второе — не часть контекста дня, поэтому
+/// объявлено отдельно, а не запихнуто в `ContextProvider`.
+nonisolated protocol CalendarConnecting: ContextProvider {
+    func commitments(in interval: DateInterval, time: TimeContext) async throws -> [Commitment]
+}
+
 /// Превращает события в сигналы `.commitment`.
 nonisolated struct CalendarSignalMapper: Sendable {
     /// Событие короче этого времени не считается занятостью: календари полны
@@ -82,6 +90,21 @@ nonisolated struct CalendarSignalMapper: Sendable {
             .sorted { lhs, rhs in
                 lhs.start != rhs.start ? lhs.start < rhs.start : lhs.id < rhs.id
             }
+    }
+
+    /// Те же правила отбора, но сразу в виде обязательств — для экранов,
+    /// которым не нужен весь контекст дня.
+    func commitments(from events: [CalendarEvent], in window: DateInterval, source: ProviderID) -> [Commitment] {
+        blockingEvents(events, in: window).map { event in
+            Commitment(
+                id: "calendar-\(event.id)",
+                title: event.title.isEmpty ? "Событие" : event.title,
+                start: event.start,
+                end: event.end,
+                kind: CommitmentKind.inferred(fromTitle: event.title, default: .meeting),
+                source: source
+            )
+        }
     }
 
     func signals(from events: [CalendarEvent], in window: DateInterval, source: ProviderID) -> [ContextSignal] {

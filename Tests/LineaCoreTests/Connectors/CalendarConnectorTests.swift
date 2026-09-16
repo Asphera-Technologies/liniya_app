@@ -97,6 +97,23 @@ struct CalendarConnectorTests {
         #expect(mapper.blockingEvents([b, a], in: day).map(\.id) == ordered)
     }
 
+    @Test("Те же события отдаются обязательствами для экрана «План»")
+    func commitmentsForTheScreen() throws {
+        let events = [
+            event("Планёрка", (10, 0), (11, 0), id: "a"),
+            event("Тренировка", (17, 0), (18, 0), id: "b"),
+            event("День рождения", (0, 0), (23, 59), id: "c", allDay: true),
+        ]
+        let commitments = mapper.commitments(from: events, in: day, source: .calendar)
+        #expect(commitments.count == 2)
+        #expect(commitments.first?.title == "Планёрка")
+        #expect(commitments.first?.kind == .meeting)
+        #expect(commitments.last?.kind == .workout)
+        #expect(commitments.allSatisfy { $0.source == .calendar })
+        // Идентификаторы стабильны: строка не «прыгает» при обновлении экрана.
+        #expect(commitments.first?.id == "calendar-a")
+    }
+
     @Test("Событие календаря доходит до плана и вычитается из свободного времени")
     func calendarShapesTheDay() async throws {
         let meeting = event("Планёрка", (10, 0), (11, 30), id: "planning")

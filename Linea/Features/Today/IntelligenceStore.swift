@@ -57,9 +57,13 @@ final class IntelligenceStore {
     private let config: EngineConfig
     /// Built on demand so the connector only exists while the user keeps the
     /// calendar switched on. Nil in previews and tests.
-    private let calendarProvider: (@MainActor () -> any ContextProvider)?
+    private let calendarProvider: (@MainActor () -> any CalendarConnecting)?
     /// Свободный разговор с моделью. Nil, когда ключ не настроен.
     private let assistant: AssistantService?
+
+    /// События календаря за уже показанные периоды, чтобы листание недель на
+    /// экране «План» не перечитывало календарь каждый раз.
+    private var calendarCache: [DateInterval: [Commitment]] = [:]
 
     /// Cached daily aggregates, so a foreground refresh does not re-read weeks
     /// of HealthKit every time.
@@ -82,7 +86,7 @@ final class IntelligenceStore {
         scheduler: NudgeScheduler? = nil,
         config: EngineConfig = .default,
         time: @escaping @MainActor () -> TimeContext = { .live },
-        calendarProvider: (@MainActor () -> any ContextProvider)? = nil,
+        calendarProvider: (@MainActor () -> any CalendarConnecting)? = nil,
         assistant: AssistantService? = nil
     ) {
         self.planDayUseCase = planDay
@@ -145,6 +149,7 @@ final class IntelligenceStore {
             )
 
             apply(output.record)
+            calendarCache.removeAll()
             sleepInsight = output.insight
             try await records.save(output.record)
             await evaluateNudges(time: time)
@@ -157,7 +162,7 @@ final class IntelligenceStore {
     private func connectors(nutrition: NutritionProfile?, meals: [MealLog], profile: UserProfile) -> [any ContextProvider] {
         var providers: [any ContextProvider] = [NutritionContextProvider(profile: nutrition, meals: meals)]
         if profile.isCalendarEnabled, let calendarProvider {
-            providers.append(calendarProvider())
+            providers.append(calendarProvider() as any ContextProvider)
         }
         return providers
     }
@@ -264,6 +269,17 @@ final class IntelligenceStore {
         case .openTask, .dismiss:
             break
         }
+    }
+
+    // MARK: - Календарь на экране «План»
+
+    /// События календаря за период. Пусто, если календарь не подключён.
+    func calendarCommitments(in interval: DateInterval) async -> [Commitment] {
+        guard userProfile.isCalendarEnabled, let calendarProvider else { return [] }
+        if let cached = calendarCache[interval] { return cached }
+        let events = (try? await calendarProvider().commitments(in: interval, time: time)) ?? []
+        calendarCache[interval] = events
+        return events
     }
 
     // MARK: - Nudges
