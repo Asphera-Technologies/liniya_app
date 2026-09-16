@@ -12,16 +12,18 @@
 6. [intelligence.md](intelligence.md) — спецификация Intelligence-ядра:
    модель данных, протоколы, формулы State/Decision/Feedback Engine,
    объяснения, рецепт коннектора, тесты.
-7. [connectors.md](connectors.md) — как подключить новый источник данных
+7. [vkusvill.md](vkusvill.md) — интеграция с каталогом ВкусВилла: что
+   получилось, чего в их API нет и почему.
+8. [connectors.md](connectors.md) — как подключить новый источник данных
    (календарь, питание, локация) не трогая ядро.
-8. [decisions.md](decisions.md) — журнал архитектурных решений (ADR) с
+9. [decisions.md](decisions.md) — журнал архитектурных решений (ADR) с
    обоснованиями.
-9. [open-questions.md](open-questions.md) — вопросы заказчику и дефолты, по
+10. [open-questions.md](open-questions.md) — вопросы заказчику и дефолты, по
    которым идёт работа.
-10. [roadmap.md](roadmap.md) — этапы, статусы, чек-лист проверки на Mac,
+11. [roadmap.md](roadmap.md) — этапы, статусы, чек-лист проверки на Mac,
    журнал работ.
-11. [glossary.md](glossary.md) — термины и соответствующие типы.
-12. [development.md](development.md) — процесс команды (ветки, PR).
+12. [glossary.md](glossary.md) — термины и соответствующие типы.
+13. [development.md](development.md) — процесс команды (ветки, PR).
 
 Как запустить тесты ядра без Xcode: `Scripts/test-core.sh` (нужен Docker).
 Линтер границ ядра: `Scripts/check-layers.sh`.
