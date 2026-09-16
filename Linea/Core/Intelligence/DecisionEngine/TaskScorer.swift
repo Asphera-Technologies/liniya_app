@@ -43,7 +43,7 @@ nonisolated struct TaskScorer: Sendable {
     ) -> ScoreBreakdown {
         let planned = PlanDuration.minutes(for: task, calibration: calibration)
         let urgencyValue = urgency(task: task, plannedMinutes: planned, at: slotStart, profile: snapshot.profile, time: time)
-        let importanceValue = importance(task: task, snapshot: snapshot)
+        let importanceValue = importance(task: task, snapshot: snapshot, at: slotStart, time: time)
         let alignmentValue = goalAlignment(task: task, snapshot: snapshot, at: slotStart, time: time)
         let energyValue = energyFit(task: task, at: slotStart, state: state, config: config, time: time)
         let durationValue = durationFit(plannedMinutes: planned, windowMinutes: windowMinutes, config: config)
@@ -92,23 +92,41 @@ nonisolated struct TaskScorer: Sendable {
         return time.date(on: day, at: profile.workdayEnd)
     }
 
-    func importance(task: LineaTask, snapshot: ContextSnapshot) -> Double {
+    /// Задача горящей цели немного важнее прочих: срок у цели теперь явный,
+    /// поэтому «горит» значит «до срока неделя или меньше».
+    func importance(task: LineaTask, snapshot: ContextSnapshot, at slotStart: Date, time: TimeContext) -> Double {
         var value = task.priority.score
-        if let goal = activeGoal(of: task, in: snapshot), goal.horizon == .week {
-            value += 0.2
+        if let goal = activeGoal(of: task, in: snapshot) {
+            let daysLeft = goal.daysLeft(from: slotStart, calendar: time.calendar)
+            if goal.isOverdue(at: slotStart, calendar: time.calendar) || (daysLeft ?? .max) <= Self.urgentGoalDays {
+                value += 0.2
+            }
         }
         return StateMath.clamp(value)
     }
 
+    /// Насколько задача двигает активную цель. Чем ближе срок цели, тем выше;
+    /// почти достигнутая цель тянет чуть слабее — ей осталось немного.
     func goalAlignment(task: LineaTask, snapshot: ContextSnapshot, at slotStart: Date, time: TimeContext) -> Double {
         guard let goalID = task.goalID else { return 0 }
         guard let goal = snapshot.goals.first(where: { $0.id == goalID }) else { return 0 }
         guard goal.isActive, !goal.isCompleted else { return 0.2 }
-        let daysLeft = max(0, time.days(from: slotStart, to: goal.targetDate(calendar: time.calendar)))
-        let horizonBonus = goal.horizon == .week ? 0.3 : 0.15
-        let base = 0.6 + horizonBonus + 0.1 * exp(-Double(daysLeft) / 7)
+
+        let base: Double
+        if goal.isOverdue(at: slotStart, calendar: time.calendar) {
+            base = 1.0
+        } else if let daysLeft = goal.daysLeft(from: slotStart, calendar: time.calendar) {
+            // Срок через неделю добавляет ~0.11, сегодня — 0.3.
+            base = 0.6 + 0.3 * exp(-Double(daysLeft) / 7)
+        } else {
+            // Срок не задан: цель важна ровно, без гонки.
+            base = 0.7
+        }
         return StateMath.clamp(base * (1 - 0.3 * goal.progress))
     }
+
+    /// Сколько дней до срока цели считается «горит».
+    static let urgentGoalDays = 7
 
     /// `nil` when the day's energy is not trustworthy enough to judge fit.
     func energyFit(task: LineaTask, at slotStart: Date, state: UserState, config: EngineConfig, time: TimeContext) -> Double? {

@@ -78,8 +78,9 @@ nonisolated enum WowFixture {
     }
 
     static var goals: [LineaGoal] {
+        // Цель со сроком в конце недели: «Запустить MVP Linea» к воскресенью.
         [LineaGoal(id: goalMVP, title: "Запустить MVP Linea", progress: 0.3, createdAt: created,
-                   horizon: .week, startDate: moment(0, 0, dayOffset: -2))]
+                   startDate: moment(0, 0, dayOffset: -2), endDate: moment(0, 0, dayOffset: 4))]
     }
 
     static let profile = UserProfile()

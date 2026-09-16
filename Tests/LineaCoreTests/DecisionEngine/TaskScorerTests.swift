@@ -18,15 +18,67 @@ struct TaskScorerTests {
 
         // Дедлайн 12:00, оценка 90 мин → slack 1.5 ч → exp(−1.5/36).
         #expect(abs(score.urgency - exp(-1.5 / 36)) < 1e-9)
-        // important (1.0) + недельная цель (+0.2) → cap 1.0.
+        // Высокий приоритет (1.0) + горящая цель (+0.2) → cap 1.0.
         #expect(score.importance == 1.0)
-        // Активная недельная цель, 4 дня до конца, прогресс 0.3.
-        #expect(abs(score.goalAlignment - (0.6 + 0.3 + 0.1 * exp(-4.0 / 7)) * 0.91) < 1e-9)
+        // Активная цель со сроком через 4 дня, прогресс 0.3.
+        #expect(abs(score.goalAlignment - (0.6 + 0.3 * exp(-4.0 / 7)) * 0.91) < 1e-9)
         // capacity(09:00) = (0.5 + 0.5·0.38)·0.85; demand 0.9 → 1 − 1.5·gap.
         let capacity = (0.5 + 0.5 * 0.38) * 0.85
         #expect(abs((score.energyFit ?? -1) - (1 - 1.5 * (0.9 - capacity))) < 1e-9)
         #expect(score.durationFit == 1)
-        #expect(score.total > 0.85 && score.total < 0.9)
+        #expect(score.total > 0.80 && score.total < 0.90)
+    }
+
+    @Test("Срок цели двигает приоритет: просрочен, горит, не задан")
+    func goalDueDateShapesAlignment() {
+        let time = WowFixture.morning
+        let slot = WowFixture.moment(9)
+
+        func alignment(endDate: Date?, progress: Double = 0) -> Double {
+            var goal = WowFixture.goals[0]
+            goal.endDate = endDate
+            goal.progress = progress
+            var snapshot = WowFixture.snapshot(at: time)
+            snapshot.goals = [goal]
+            let task = snapshot.tasks.first { $0.id == WowFixture.taskA }!
+            return scorer.goalAlignment(task: task, snapshot: snapshot, at: slot, time: time)
+        }
+
+        let overdue = alignment(endDate: WowFixture.moment(0, 0, dayOffset: -1))
+        let today = alignment(endDate: WowFixture.today)
+        let inAWeek = alignment(endDate: WowFixture.moment(0, 0, dayOffset: 7))
+        let inAMonth = alignment(endDate: WowFixture.moment(0, 0, dayOffset: 30))
+        let noDate = alignment(endDate: nil)
+
+        #expect(overdue == 1.0)
+        #expect(today > inAWeek)
+        #expect(inAWeek > inAMonth)
+        // Бессрочная цель важна ровно: выше далёкого срока, ниже близкого.
+        #expect(noDate > inAMonth)
+        #expect(noDate < today)
+
+        // Почти достигнутая цель тянет слабее: осталось немного.
+        #expect(alignment(endDate: WowFixture.today, progress: 0.9) < today)
+    }
+
+    @Test("Горящая цель добавляет важности, далёкая — нет")
+    func urgentGoalRaisesImportance() {
+        let time = WowFixture.morning
+        let slot = WowFixture.moment(9)
+
+        func importance(endDate: Date?) -> Double {
+            var goal = WowFixture.goals[0]
+            goal.endDate = endDate
+            var snapshot = WowFixture.snapshot(at: time)
+            snapshot.goals = [goal]
+            var task = snapshot.tasks.first { $0.id == WowFixture.taskA }!
+            task.priority = .normal
+            return scorer.importance(task: task, snapshot: snapshot, at: slot, time: time)
+        }
+
+        #expect(importance(endDate: WowFixture.moment(0, 0, dayOffset: 3)) == 0.7)
+        #expect(importance(endDate: WowFixture.moment(0, 0, dayOffset: 30)) == 0.5)
+        #expect(importance(endDate: nil) == 0.5)
     }
 
     @Test("Без данных о состоянии energyFit исключается, а его вес перераспределяется")

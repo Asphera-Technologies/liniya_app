@@ -17,14 +17,24 @@
 
 import Foundation
 
-/// Task importance. `normal`/`important` match the «Важно» tag in the design;
-/// `low` is available for the editor's future three-step control.
+/// Приоритет задачи: низкий, средний, высокий.
+///
+/// Сырые значения (`low`/`normal`/`important`) намеренно оставлены прежними —
+/// по ним читаются уже сохранённые задачи. Пользователь видит только `title`.
 nonisolated enum TaskPriority: String, Codable, CaseIterable, Sendable {
     case low
     case normal
     case important
 
     var isImportant: Bool { self == .important }
+
+    var title: String {
+        switch self {
+        case .low: return "Низкий"
+        case .normal: return "Средний"
+        case .important: return "Высокий"
+        }
+    }
 
     /// Importance component for scoring, 0…1.
     var score: Double {
@@ -118,19 +128,6 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     var isFixed: Bool { scheduledStart != nil }
 }
 
-/// Horizon of a goal; the end date is derived from `startDate`.
-nonisolated enum GoalHorizon: String, Codable, CaseIterable, Sendable {
-    case week
-    case month
-
-    var title: String {
-        switch self {
-        case .week: return "Неделя"
-        case .month: return "Месяц"
-        }
-    }
-}
-
 /// A personal goal with coarse progress.
 nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
@@ -141,9 +138,11 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     var createdAt: Date
 
     // Intelligence inputs
-    var horizon: GoalHorizon
     /// Start of the goal period; defaults to the creation day.
     var startDate: Date
+    /// Когда цель должна быть достигнута. `nil` — срок не задан: цель просто
+    /// активна, и связанные с ней задачи получают ровный приоритет.
+    var endDate: Date?
     var isActive: Bool
 
     init(
@@ -152,8 +151,8 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         progress: Double = 0,
         isCompleted: Bool = false,
         createdAt: Date = Date(),
-        horizon: GoalHorizon = .week,
         startDate: Date? = nil,
+        endDate: Date? = nil,
         isActive: Bool = true
     ) {
         self.id = id
@@ -161,17 +160,23 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         self.progress = min(max(progress, 0), 1)
         self.isCompleted = isCompleted
         self.createdAt = createdAt
-        self.horizon = horizon
         self.startDate = startDate ?? createdAt
+        self.endDate = endDate
         self.isActive = isActive
     }
 
-    /// The day the goal period ends (inclusive), in the given calendar.
-    func targetDate(calendar: Calendar) -> Date {
-        let start = calendar.startOfDay(for: startDate)
-        let component: Calendar.Component = horizon == .week ? .weekOfYear : .month
-        let end = calendar.date(byAdding: component, value: 1, to: start) ?? start
-        return calendar.date(byAdding: .day, value: -1, to: end) ?? end
+    /// Сколько дней осталось до срока; `nil`, если срок не задан.
+    func daysLeft(from moment: Date, calendar: Calendar) -> Int? {
+        guard let endDate else { return nil }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: moment),
+                                           to: calendar.startOfDay(for: endDate)).day ?? 0
+        return max(0, days)
+    }
+
+    /// Срок прошёл, а цель не закрыта.
+    func isOverdue(at moment: Date, calendar: Calendar) -> Bool {
+        guard let endDate, !isCompleted else { return false }
+        return calendar.startOfDay(for: endDate) < calendar.startOfDay(for: moment)
     }
 
     /// Soft limit from the brief: 1–3 active goals.

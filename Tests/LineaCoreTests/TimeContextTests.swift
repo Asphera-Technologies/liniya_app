@@ -31,10 +31,16 @@ struct TimeContextTests {
         #expect(!p.isQuiet(TimeOfDay(hour: 14, minute: 30)))
     }
 
-    @Test("Goal target date follows the horizon")
-    func goalTarget() {
+    @Test("Срок цели считается в днях и знает о просрочке")
+    func goalDueDate() {
         let goal = WowFixture.goals[0]
-        let target = goal.targetDate(calendar: WowFixture.calendar)
-        #expect(target == WowFixture.calendar.startOfDay(for: WowFixture.moment(0, 0, dayOffset: 4)))  // Mon 7 → Sun 13
+        #expect(goal.daysLeft(from: WowFixture.today, calendar: WowFixture.calendar) == 4)
+        #expect(goal.isOverdue(at: WowFixture.today, calendar: WowFixture.calendar) == false)
+        #expect(goal.isOverdue(at: WowFixture.moment(12, 0, dayOffset: 9), calendar: WowFixture.calendar))
+
+        var open = goal
+        open.endDate = nil
+        #expect(open.daysLeft(from: WowFixture.today, calendar: WowFixture.calendar) == nil)
+        #expect(open.isOverdue(at: WowFixture.today, calendar: WowFixture.calendar) == false)
     }
 }
