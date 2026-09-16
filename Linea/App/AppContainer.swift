@@ -87,8 +87,8 @@ final class AppContainer {
         let renderer = RuleBasedExplainer()
         // Ключ приходит из Info.plist (см. Docs/secrets.md). Нет ключа —
         // приложение полностью работает на шаблонах.
-        let modelClient = AISettings.configuration.map(LanguageModelClient.init(configuration:))
-        assistant = modelClient.map(AssistantService.init(client:))
+        let modelClient = AISettings.configuration.map { LanguageModelClient(configuration: $0) }
+        assistant = modelClient.map { AssistantService(client: $0) }
         explainer = FallbackExplainer(
             primary: modelClient.map { RemoteExplainer(client: $0) },
             fallback: renderer
