@@ -28,6 +28,9 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
     /// Whether the calendar connector is switched on. Access is asked for in
     /// Profile, not in the middle of a refresh.
     var isCalendarEnabled: Bool
+    /// Разрешил ли пользователь облачного ассистента. Пока выключен, наружу
+    /// не уходит ничего: тексты собираются шаблонами на устройстве.
+    var isCloudAssistantEnabled: Bool
 
     init(
         name: String? = nil,
@@ -38,7 +41,8 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
         eveningCheckIn: TimeOfDay = TimeOfDay(hour: 20, minute: 30),
         sleepNeedSeconds: TimeInterval = 7.5 * 3600,
         onboardingCompleted: Bool = false,
-        isCalendarEnabled: Bool = false
+        isCalendarEnabled: Bool = false,
+        isCloudAssistantEnabled: Bool = false
     ) {
         self.name = name
         self.workdayStart = workdayStart
@@ -49,6 +53,7 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
         self.sleepNeedSeconds = sleepNeedSeconds
         self.onboardingCompleted = onboardingCompleted
         self.isCalendarEnabled = isCalendarEnabled
+        self.isCloudAssistantEnabled = isCloudAssistantEnabled
     }
 
     /// Decoded leniently: this profile is stored as a JSON document, and a
@@ -67,6 +72,7 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
         sleepNeedSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .sleepNeedSeconds) ?? fallback.sleepNeedSeconds
         onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? fallback.onboardingCompleted
         isCalendarEnabled = try container.decodeIfPresent(Bool.self, forKey: .isCalendarEnabled) ?? fallback.isCalendarEnabled
+        isCloudAssistantEnabled = try container.decodeIfPresent(Bool.self, forKey: .isCloudAssistantEnabled) ?? fallback.isCloudAssistantEnabled
     }
 
     static let `default` = UserProfile()

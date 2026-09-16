@@ -61,6 +61,9 @@ nonisolated struct PlanDayUseCase: Sendable {
         let historyDays: Int
         /// Connectors built from data the caller just loaded (see ContextEngine).
         let additionalProviders: [any ContextProvider]
+        /// Разрешено ли переписывать текст облачной моделью. Когда `false`,
+        /// объяснитель вообще не вызывается — наружу не уходит ничего.
+        let allowsRemoteExplanation: Bool
 
         init(
             time: TimeContext,
@@ -74,7 +77,8 @@ nonisolated struct PlanDayUseCase: Sendable {
             previousLoadAdvice: LoadAdvice? = nil,
             existing: DayRecord? = nil,
             historyDays: Int = 0,
-            additionalProviders: [any ContextProvider] = []
+            additionalProviders: [any ContextProvider] = [],
+            allowsRemoteExplanation: Bool = true
         ) {
             self.time = time
             self.tasks = tasks
@@ -88,6 +92,7 @@ nonisolated struct PlanDayUseCase: Sendable {
             self.existing = existing
             self.historyDays = historyDays
             self.additionalProviders = additionalProviders
+            self.allowsRemoteExplanation = allowsRemoteExplanation
         }
     }
 
@@ -144,7 +149,9 @@ nonisolated struct PlanDayUseCase: Sendable {
             )
         }
 
-        plan = await explained(plan, state: state, snapshot: snapshot, time: time)
+        if input.allowsRemoteExplanation {
+            plan = await explained(plan, state: state, snapshot: snapshot, time: time)
+        }
 
         let nudges = plan.status == .accepted
             ? nudgeEngine.nudges(

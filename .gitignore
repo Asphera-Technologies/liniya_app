@@ -49,3 +49,6 @@ temp/
 
 # Local AI-agent workspace (worktrees etc.)
 .claude/
+
+# Ключ доступа к модели (см. Docs/secrets.md)
+Linea/Resources/AISecrets.plist

@@ -35,6 +35,7 @@ final class IntelligenceStore {
     private(set) var sleepInsight: SleepInsight = .empty
     private(set) var calibration: Calibration = .default
     private(set) var providerStatuses: [ProviderID: ProviderStatus] = [:]
+    private(set) var userProfile: UserProfile = .default
     private(set) var isRefreshing = false
     private(set) var errorMessage: String?
 
@@ -57,6 +58,8 @@ final class IntelligenceStore {
     /// Built on demand so the connector only exists while the user keeps the
     /// calendar switched on. Nil in previews and tests.
     private let calendarProvider: (@MainActor () -> any ContextProvider)?
+    /// Свободный разговор с моделью. Nil, когда ключ не настроен.
+    private let assistant: AssistantService?
 
     /// Cached daily aggregates, so a foreground refresh does not re-read weeks
     /// of HealthKit every time.
@@ -79,7 +82,8 @@ final class IntelligenceStore {
         scheduler: NudgeScheduler? = nil,
         config: EngineConfig = .default,
         time: @escaping @MainActor () -> TimeContext = { .live },
-        calendarProvider: (@MainActor () -> any ContextProvider)? = nil
+        calendarProvider: (@MainActor () -> any ContextProvider)? = nil,
+        assistant: AssistantService? = nil
     ) {
         self.planDayUseCase = planDay
         self.acceptPlanUseCase = acceptPlan
@@ -96,6 +100,7 @@ final class IntelligenceStore {
         self.config = config
         self.timeProvider = time
         self.calendarProvider = calendarProvider
+        self.assistant = assistant
     }
 
     var time: TimeContext { timeProvider() }
@@ -111,6 +116,7 @@ final class IntelligenceStore {
         do {
             await planStore.load()
             let profile = try await profiles.load()
+            userProfile = profile
             calibration = try await calibrations.load()
             let nutrition = try await nutritionRepository.profile()
             let meals = try await nutritionRepository.meals(on: time.dayInterval(containing: time.now))
@@ -133,7 +139,8 @@ final class IntelligenceStore {
                     historyDays: 0,
                     // Connectors whose data or availability changes between
                     // refreshes are built here rather than registered once.
-                    additionalProviders: connectors(nutrition: nutrition, meals: meals, profile: profile)
+                    additionalProviders: connectors(nutrition: nutrition, meals: meals, profile: profile),
+                    allowsRemoteExplanation: profile.isCloudAssistantEnabled
                 )
             )
 
@@ -384,6 +391,37 @@ final class IntelligenceStore {
         }
     }
 
+    /// Может ли экран Linea AI разговаривать свободно.
+    var isAssistantAvailable: Bool {
+        assistant != nil && userProfile.isCloudAssistantEnabled
+    }
+
+    /// Свободный вопрос уходит модели вместе с уже посчитанным контекстом.
+    /// Готовые подсказки по-прежнему отвечают мгновенно и без сети.
+    func ask(_ question: String) async -> String {
+        if let quick = quickAnswer(to: question) { return quick }
+        guard let assistant, userProfile.isCloudAssistantEnabled else {
+            return AISettings.isConfigured
+                ? "Свободный разговор выключен. Включить: «Профиль» → «Linea AI»."
+                : "Пока отвечаю только про план, сон и еду: ключ доступа к модели не настроен."
+        }
+        do {
+            return try await assistant.answer(
+                to: question,
+                context: AssistantService.Context(
+                    state: state,
+                    plan: plan,
+                    sleep: sleepInsight,
+                    nutrition: record?.snapshot?.nutrition,
+                    taskTitles: planStore.tasks.filter { !$0.isDone }.map(\.title),
+                    time: time
+                )
+            )
+        } catch {
+            return "Не дозвонился до модели: \(error.localizedDescription)"
+        }
+    }
+
     /// Answers the three starter prompts on the AI screen from what is already computed.
     func answer(to question: String) -> String {
         let lowercased = question.lowercased()
@@ -398,6 +436,14 @@ final class IntelligenceStore {
                 ?? "Пока нечего подсказать по еде — заполни профиль питания."
         }
         return "Пока я отвечаю только про план, сон и еду. Свободный разговор появится позже."
+    }
+
+    /// Подсказки, на которые есть точный ответ без сети.
+    private func quickAnswer(to question: String) -> String? {
+        let lowercased = question.lowercased()
+        if lowercased.contains("сон") || lowercased.contains("спал") { return sleepAnswer }
+        if lowercased.contains("план на сегодня") { return brief?.message }
+        return nil
     }
 
     private var sleepAnswer: String {

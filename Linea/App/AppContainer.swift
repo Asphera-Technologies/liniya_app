@@ -43,9 +43,12 @@ final class AppContainer {
     /// Profile screen asks for access through it.
     let eventStore: EKEventStore
 
-    /// Explains decisions in Russian. Templates always; the on-device model is
-    /// added here when it is available, and it can only rephrase.
+    /// Explains decisions in Russian. Templates always; the cloud model only
+    /// rephrases, and only when a key is configured and the user agreed.
     let explainer: any Explainer
+
+    /// Свободный разговор на экране Linea AI. `nil`, если ключ не настроен.
+    let assistant: AssistantService?
 
     init(modelContainer: ModelContainer, healthKit: HealthKitManager) {
         self.modelContainer = modelContainer
@@ -82,7 +85,14 @@ final class AppContainer {
         // The intelligence core. This is the whole registration surface:
         // connectors, state analyzers and rules are named exactly once, here.
         let renderer = RuleBasedExplainer()
-        explainer = FallbackExplainer(primary: nil, fallback: renderer)
+        // Ключ приходит из Info.plist (см. Docs/secrets.md). Нет ключа —
+        // приложение полностью работает на шаблонах.
+        let modelClient = AISettings.configuration.map(LanguageModelClient.init(configuration:))
+        assistant = modelClient.map(AssistantService.init(client:))
+        explainer = FallbackExplainer(
+            primary: modelClient.map { RemoteExplainer(client: $0) },
+            fallback: renderer
+        )
 
         let engineConfig = EngineConfig.default
         let stateEngine = StateEngine(
@@ -120,7 +130,8 @@ final class AppContainer {
             planStore: plan,
             scheduler: scheduler,
             config: engineConfig,
-            calendarProvider: { CalendarContextProvider(store: events) }
+            calendarProvider: { CalendarContextProvider(store: events) },
+            assistant: assistant
         )
 
         // Any change to tasks, goals, the profile or nutrition rebuilds the day.

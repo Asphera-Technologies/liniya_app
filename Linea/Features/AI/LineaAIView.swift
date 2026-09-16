@@ -4,10 +4,10 @@
 //
 //  The ambient Linea AI surface, presented as a sheet from the command bar.
 //
-//  The three starter prompts answer for real — from the day plan and the sleep
-//  analysis the core already computed, not from a model. Free-form questions
-//  still say plainly that the assistant is not connected yet: Linea does not
-//  pretend to understand what it cannot.
+//  Три готовые подсказки отвечают мгновенно и без сети — из уже посчитанного
+//  плана и аналитики сна. Свободный вопрос уходит облачной модели, если
+//  пользователь её включил и ключ настроен; иначе экран честно говорит, что
+//  умеет только про план, сон и еду.
 //
 
 import SwiftUI
@@ -19,6 +19,7 @@ struct LineaAIView: View {
 
     @State private var input = ""
     @State private var messages: [AIMessage] = []
+    @State private var isThinking = false
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -32,6 +33,11 @@ struct LineaAIView: View {
                         } else {
                             ForEach(messages) { message in
                                 MessageBubble(message: message).id(message.id)
+                            }
+                            if isThinking {
+                                Text("Думаю…")
+                                    .font(LineaFont.caption)
+                                    .foregroundStyle(LineaColor.textTertiary)
                             }
                         }
                     }
@@ -136,11 +142,16 @@ struct LineaAIView: View {
 
     private func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !isThinking else { return }
         messages.append(AIMessage(role: .user, text: trimmed))
         input = ""
         inputFocused = false
-        messages.append(AIMessage(role: .assistant, text: intelligence.answer(to: trimmed)))
+        isThinking = true
+        Task {
+            let answer = await intelligence.ask(trimmed)
+            isThinking = false
+            messages.append(AIMessage(role: .assistant, text: answer))
+        }
     }
 }
 

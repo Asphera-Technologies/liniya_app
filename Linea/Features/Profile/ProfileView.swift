@@ -149,9 +149,50 @@ struct ProfileView: View {
     private var intelligenceSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel(text: "Linea AI")
+            LineaListRow(title: "Модель", value: AISettings.statusText, showsChevron: false)
+            LineaHairline()
+            assistantRow
+            LineaHairline()
             LineaListRow(title: "Тексты пишет", value: intelligence.explainerTitle, showsChevron: false)
             LineaHairline()
             LineaListRow(title: "Калибровка", value: calibrationText) { isShowingCalibration = true }
+        }
+    }
+
+    /// Пока переключатель выключен, наружу не уходит ничего: тексты собирает
+    /// само приложение. Включая его, пользователь соглашается отправлять
+    /// производные факты о дне — не сами замеры из «Здоровья».
+    private var assistantRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: Binding(
+                get: { profile.profile.isCloudAssistantEnabled },
+                set: { isOn in
+                    Task {
+                        var updated = profile.profile
+                        updated.isCloudAssistantEnabled = isOn
+                        await profile.save(updated)
+                    }
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Свободный разговор")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                    Text("Вопросы уходят модели вместе с кратким контекстом дня")
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textTertiary)
+                }
+            }
+            .tint(LineaColor.ink)
+            .disabled(!AISettings.isConfigured)
+            .padding(.vertical, 10)
+
+            if !AISettings.isConfigured {
+                Text("Ключ доступа к модели не настроен — см. Docs/secrets.md.")
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textSecondary)
+                    .padding(.bottom, 8)
+            }
         }
     }
 
