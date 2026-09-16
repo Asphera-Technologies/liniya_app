@@ -13,6 +13,7 @@ import SwiftData
 extension NutritionStore {
     @MainActor
     static var preview: NutritionStore {
+        // Превью не ходит в сеть: каталог не подключён.
         NutritionStore(repository: LocalNutritionRepository(context: PreviewContainer.shared.mainContext))
     }
 }

@@ -79,7 +79,7 @@ final class AppContainer {
 
         let plan = PlanStore(taskRepository: tasks, goalRepository: goals)
         planStore = plan
-        nutritionStore = NutritionStore(repository: nutrition)
+        nutritionStore = NutritionStore(repository: nutrition, catalog: VkusVillClient())
         profileStore = UserProfileStore(repository: profile)
 
         // The intelligence core. This is the whole registration surface:

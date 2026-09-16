@@ -19,6 +19,7 @@ import SwiftUI
 struct NutritionView: View {
     @Environment(AppState.self) private var appState
     @Environment(NutritionStore.self) private var nutrition
+    @Environment(\.openURL) private var openURL
 
     @State private var isEditingProfile = false
 
@@ -26,6 +27,7 @@ struct NutritionView: View {
         NavigationStack {
             LineaScaffold(title: "Питание") {
                 nextMealSection
+                orderSection
                 settingsSection
                 loggedSection
             }
@@ -62,6 +64,34 @@ struct NutritionView: View {
                     .font(LineaFont.feature)
                     .foregroundStyle(LineaColor.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: Заказ
+
+    /// Корзина из подходящих продуктов. Заказ оформляется во ВкусВилле, но
+    /// состав корзины собирает Linea — только так она знает, что человек взял:
+    /// истории заказов каталог не отдаёт.
+    @ViewBuilder
+    private var orderSection: some View {
+        if nutrition.isCatalogAvailable, !nutrition.allowedProducts.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Заказ", trailing: "ВкусВилл")
+                HStack(spacing: 12) {
+                    LineaOutlineButton(title: nutrition.isBuildingCart ? "Собираю…" : "Собрать корзину") {
+                        Task { await nutrition.buildCart() }
+                    }
+                    if let url = nutrition.cartURL {
+                        LineaOutlineButton(title: "Открыть") { openURL(url) }
+                    }
+                }
+                if let message = nutrition.cartMessage {
+                    Text(message)
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
