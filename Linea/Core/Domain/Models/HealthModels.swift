@@ -17,7 +17,7 @@ import Foundation
 /// denied read and a genuine absence of samples both surface here as `.noData`.
 /// Whole-integration authorization/availability is tracked separately on
 /// `HealthKitManager.authState`. We never fabricate a value for `.noData`.
-enum MetricState<Value: Equatable>: Equatable {
+nonisolated enum MetricState<Value: Equatable & Sendable>: Equatable, Sendable {
     case loading
     case noData
     case value(Value)
@@ -38,7 +38,7 @@ enum MetricState<Value: Equatable>: Equatable {
 }
 
 /// A lightweight summary of a single workout.
-struct WorkoutSummary: Identifiable, Equatable, Sendable {
+nonisolated struct WorkoutSummary: Identifiable, Equatable, Sendable {
     let id: UUID
     let activity: String
     let duration: TimeInterval
