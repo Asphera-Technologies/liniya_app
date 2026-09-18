@@ -53,7 +53,7 @@ struct CommandBar: View {
 
 /// Поверхность кнопки: стекло на iOS 26, прежняя рамка на старых системах.
 private struct CommandBarSurface: ViewModifier {
-    private var shape: some Shape {
+    private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: LineaMetrics.surfaceRadius, style: .continuous)
     }
 
