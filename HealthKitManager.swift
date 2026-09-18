@@ -26,6 +26,7 @@
 import Foundation
 import HealthKit
 import Observation
+import OSLog
 
 @Observable
 @MainActor
