@@ -12,6 +12,12 @@
 //  Metrics: step count · sleep analysis · resting HR · heart rate ·
 //  HRV (SDNN) · active energy · walking/running distance · workouts · VO2 Max.
 //
+//  Чтение параллельное и с таймаутом на каждый запрос. Раньше показатели
+//  читались строго по очереди и без ограничения по времени: один зависший
+//  запрос оставлял все следующие в состоянии «загружается» навсегда, и экран
+//  выглядел так, будто данных нет вовсе. HealthKit не обязан вызывать
+//  обработчик — при отказе в доступе он может промолчать.
+//
 //  The original working step-count proof of concept (availability check →
 //  read-only authorization → cumulative-sum statistics query for today) is
 //  preserved: see `readTypes`, `connect()`, and `sumToday(_:unit:)`.
@@ -120,8 +126,10 @@ final class HealthKitManager {
         do {
             try await healthStore.requestAuthorization(toShare: [], read: readTypes)
             authState = .authorized
+            LineaLog.health.notice("Доступ запрошен, читаю данные")
             await refreshAll()
         } catch {
+            LineaLog.health.error("Запрос доступа не удался: \(error.localizedDescription, privacy: .public)")
             authState = .failed(message: error.localizedDescription)
         }
     }
@@ -133,26 +141,58 @@ final class HealthKitManager {
             return
         }
 
-        // Each read is a fast HealthKit query; awaited in turn. Every `await`
-        // frees the main actor while the query runs off-thread.
-        steps = (await sumToday(HKQuantityType(.stepCount), unit: .count()))
-            .mapValue { Int($0.rounded()) }
-        activeEnergy = await sumToday(HKQuantityType(.activeEnergyBurned), unit: .kilocalorie())
-        distance = await sumToday(HKQuantityType(.distanceWalkingRunning), unit: .meter())
-        restingHeartRate = (await latest(HKQuantityType(.restingHeartRate), unit: Self.bpm))
-            .mapValue { Int($0.rounded()) }
-        heartRate = (await latest(HKQuantityType(.heartRate), unit: Self.bpm))
-            .mapValue { Int($0.rounded()) }
-        hrv = await latest(HKQuantityType(.heartRateVariabilitySDNN), unit: HKUnit.secondUnit(with: .milli))
-        vo2Max = await latest(HKQuantityType(.vo2Max), unit: Self.vo2Unit)
-        sleep = await sleepDuration()
-        workouts = await todaysWorkouts()
+        LineaLog.health.notice("Читаю показатели. \(LineaLog.environment(), privacy: .public)")
+        let startedAt = Date()
+
+        // Запросы идут одновременно: один медленный больше не задерживает
+        // остальные, и ни один не может подвесить экран насовсем.
+        async let stepsRead = sumToday(HKQuantityType(.stepCount), unit: .count(), name: "шаги")
+        async let energyRead = sumToday(HKQuantityType(.activeEnergyBurned), unit: .kilocalorie(), name: "активная энергия")
+        async let distanceRead = sumToday(HKQuantityType(.distanceWalkingRunning), unit: .meter(), name: "дистанция")
+        async let restingRead = latest(HKQuantityType(.restingHeartRate), unit: Self.bpm, name: "пульс покоя")
+        async let heartRateRead = latest(HKQuantityType(.heartRate), unit: Self.bpm, name: "пульс")
+        async let hrvRead = latest(HKQuantityType(.heartRateVariabilitySDNN), unit: HKUnit.secondUnit(with: .milli), name: "HRV")
+        async let vo2Read = latest(HKQuantityType(.vo2Max), unit: Self.vo2Unit, name: "VO2 Max")
+        async let sleepRead = sleepDuration()
+        async let workoutsRead = todaysWorkouts()
+
+        steps = (await stepsRead).mapValue { Int($0.rounded()) }
+        activeEnergy = await energyRead
+        distance = await distanceRead
+        restingHeartRate = (await restingRead).mapValue { Int($0.rounded()) }
+        heartRate = (await heartRateRead).mapValue { Int($0.rounded()) }
+        hrv = await hrvRead
+        vo2Max = await vo2Read
+        sleep = await sleepRead
+        workouts = await workoutsRead
+
+        let seconds = Date().timeIntervalSince(startedAt)
+        LineaLog.health.notice("Прочитано за \(String(format: "%.1f", seconds), privacy: .public) с, значений: \(self.valueCount, privacy: .public) из 9")
+    }
+
+    /// Сколько показателей реально пришло — первое, что смотрят в журнале.
+    private var valueCount: Int {
+        var count = 0
+        if steps.unwrapped != nil { count += 1 }
+        if sleep.unwrapped != nil { count += 1 }
+        if activeEnergy.unwrapped != nil { count += 1 }
+        if distance.unwrapped != nil { count += 1 }
+        if restingHeartRate.unwrapped != nil { count += 1 }
+        if heartRate.unwrapped != nil { count += 1 }
+        if hrv.unwrapped != nil { count += 1 }
+        if vo2Max.unwrapped != nil { count += 1 }
+        if workouts.unwrapped != nil { count += 1 }
+        return count
     }
 
     // MARK: - Query helpers (reusable, modular)
 
     /// Cumulative sum of a quantity type from the start of today until now.
-    private func sumToday(_ type: HKQuantityType, unit: HKUnit) async -> MetricState<Double> {
+    private func sumToday(_ type: HKQuantityType, unit: HKUnit, name: String) async -> MetricState<Double> {
+        await guarded(name) { await self.readSum(type, unit: unit) }
+    }
+
+    private func readSum(_ type: HKQuantityType, unit: HKUnit) async -> MetricState<Double> {
         let (start, end) = Self.todayRange()
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
         return await withCheckedContinuation { continuation in
@@ -172,7 +212,11 @@ final class HealthKitManager {
     }
 
     /// The most recent sample of a quantity type (e.g. latest resting HR).
-    private func latest(_ type: HKQuantityType, unit: HKUnit) async -> MetricState<Double> {
+    private func latest(_ type: HKQuantityType, unit: HKUnit, name: String) async -> MetricState<Double> {
+        await guarded(name) { await self.readLatest(type, unit: unit) }
+    }
+
+    private func readLatest(_ type: HKQuantityType, unit: HKUnit) async -> MetricState<Double> {
         let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
         return await withCheckedContinuation { continuation in
             let query = HKSampleQuery(
@@ -199,6 +243,10 @@ final class HealthKitManager {
     /// then the longest — and unions its intervals; the same code the
     /// intelligence core uses, so the tile and the plan never disagree.
     private func sleepDuration() async -> MetricState<TimeInterval> {
+        await guarded("сон") { await self.readSleep() }
+    }
+
+    private func readSleep() async -> MetricState<TimeInterval> {
         let time = TimeContext.live
         let window = DateInterval(
             start: time.date(on: time.adding(days: -1, to: time.today), at: TimeOfDay(hour: 18)),
@@ -219,6 +267,10 @@ final class HealthKitManager {
 
     /// Workouts that started today.
     private func todaysWorkouts() async -> MetricState<[WorkoutSummary]> {
+        await guarded("тренировки") { await self.readWorkouts() }
+    }
+
+    private func readWorkouts() async -> MetricState<[WorkoutSummary]> {
         let (start, end) = Self.todayRange()
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
         let sort = [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)]
@@ -250,6 +302,46 @@ final class HealthKitManager {
             }
             healthStore.execute(query)
         }
+    }
+
+    // MARK: - Таймаут и журнал
+
+    /// Сколько ждём один запрос, прежде чем считать, что ответа не будет.
+    private static let queryTimeout = Duration.seconds(8)
+
+    /// Выполняет чтение с ограничением по времени и пишет результат в журнал.
+    /// HealthKit не гарантирует вызов обработчика: при отказе в доступе он
+    /// может просто промолчать, и без таймаута показатель висел бы вечно.
+    private func guarded<T: Equatable & Sendable>(
+        _ name: String,
+        _ read: @escaping @Sendable () async -> MetricState<T>
+    ) async -> MetricState<T> {
+        let startedAt = Date()
+        let result: MetricState<T>? = await withTaskGroup(of: MetricState<T>?.self) { group in
+            group.addTask { await read() }
+            group.addTask {
+                try? await Task.sleep(for: Self.queryTimeout)
+                return nil
+            }
+            let winner = await group.next() ?? nil
+            group.cancelAll()
+            return winner
+        }
+
+        let seconds = Date().timeIntervalSince(startedAt)
+        guard let result else {
+            LineaLog.health.error("\(name, privacy: .public): нет ответа за \(String(format: "%.1f", seconds), privacy: .public) с")
+            return .noData
+        }
+        switch result {
+        case .value:
+            LineaLog.health.info("\(name, privacy: .public): есть значение (\(String(format: "%.2f", seconds), privacy: .public) с)")
+        case .noData:
+            LineaLog.health.notice("\(name, privacy: .public): данных нет — доступ закрыт или записей нет")
+        case .loading:
+            break
+        }
+        return result
     }
 
     // MARK: - Units & ranges

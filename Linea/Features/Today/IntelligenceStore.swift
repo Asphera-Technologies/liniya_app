@@ -151,10 +151,12 @@ final class IntelligenceStore {
             apply(output.record)
             calendarCache.removeAll()
             sleepInsight = output.insight
+            logSnapshot(output.record)
             try await records.save(output.record)
             await evaluateNudges(time: time)
             errorMessage = nil
         } catch {
+            LineaLog.plan.error("Пересчёт дня не удался: \(error.localizedDescription, privacy: .public)")
             errorMessage = error.localizedDescription
         }
     }
@@ -167,6 +169,29 @@ final class IntelligenceStore {
         return providers
     }
 
+    /// Что именно получил движок: по этим строкам разбирается любая жалоба
+    /// вида «приложение показывает не то».
+    private func logSnapshot(_ record: DayRecord) {
+        let statuses = (record.snapshot?.providerStatuses ?? [:])
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+            .map { "\($0.key.rawValue)=\($0.value)" }
+            .joined(separator: ", ")
+        LineaLog.context.notice("Источники: \(statuses.isEmpty ? "нет" : statuses, privacy: .public)")
+
+        if let state = record.state {
+            let components = state.components.map(\.kind.rawValue).joined(separator: ",")
+            let energy = String(format: "%.2f", state.energy)
+            let confidence = String(format: "%.2f", state.confidence)
+            LineaLog.plan.notice("Состояние: энергия \(energy, privacy: .public), уверенность \(confidence, privacy: .public), совет \(state.loadAdvice.rawValue, privacy: .public), компоненты [\(components, privacy: .public)]")
+        } else {
+            LineaLog.plan.error("Состояние не посчиталось")
+        }
+
+        if let plan = record.plan {
+            LineaLog.plan.notice("План: блоков \(plan.blocks.count, privacy: .public), приоритетов \(plan.topTaskIDs.count, privacy: .public), перенесено \(plan.deferredTaskIDs.count, privacy: .public)")
+        }
+    }
+
     /// Health history is read once a day: HealthKit is the source of truth,
     /// but four weeks of samples is not something to re-read on every tap.
     private func loadHistoryIfNeeded(time: TimeContext) async {
@@ -175,7 +200,8 @@ final class IntelligenceStore {
             historyCache = try await history.dailySummaries(days: config.baselineWindowDays, before: time.today, time: time)
             historyLoadedAt = time.now
         } catch {
-            // No history is a degraded mode, not a failure: the day is still planned.
+            // Без истории день всё равно планируется, просто осторожнее.
+            LineaLog.health.error("История здоровья не прочиталась: \(error.localizedDescription, privacy: .public)")
             historyCache = []
         }
     }
@@ -434,6 +460,7 @@ final class IntelligenceStore {
                 )
             )
         } catch {
+            LineaLog.ai.error("Модель не ответила: \(error.localizedDescription, privacy: .public)")
             return "Не дозвонился до модели: \(error.localizedDescription)"
         }
     }

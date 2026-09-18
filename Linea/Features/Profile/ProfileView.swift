@@ -23,6 +23,7 @@ struct ProfileView: View {
 
     @State private var isEditingProfile = false
     @State private var isShowingCalibration = false
+    @State private var isShowingDiagnostics = false
     @State private var calendarDenied = false
 
     var body: some View {
@@ -40,6 +41,9 @@ struct ProfileView: View {
             AboutMeEditor(profile: profile.profile) { updated in
                 Task { await profile.save(updated) }
             }
+        }
+        .sheet(isPresented: $isShowingDiagnostics) {
+            DiagnosticsView()
         }
         .sheet(isPresented: $isShowingCalibration) {
             CalibrationView(
@@ -156,6 +160,8 @@ struct ProfileView: View {
             LineaListRow(title: "Тексты пишет", value: intelligence.explainerTitle, showsChevron: false)
             LineaHairline()
             LineaListRow(title: "Калибровка", value: calibrationText) { isShowingCalibration = true }
+            LineaHairline()
+            LineaListRow(title: "Диагностика", value: "Журнал приложения") { isShowingDiagnostics = true }
         }
     }
 
