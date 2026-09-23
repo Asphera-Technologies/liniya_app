@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 status=0
 
 echo "• Apple framework imports inside Linea/Core"
-if grep -rnE '^\s*import (SwiftUI|SwiftData|HealthKit|UIKit|EventKit|UserNotifications|BackgroundTasks|FoundationModels|Observation|CoreData)\b' Linea/Core; then
+if grep -rnE '^\s*import (SwiftUI|SwiftData|HealthKit|UIKit|EventKit|UserNotifications|BackgroundTasks|FoundationModels|Observation|CoreData|Speech|AVFoundation|AVFAudio|CoreMedia|OSLog)\b' Linea/Core; then
   echo "  ✗ Core must stay Foundation-only"; status=1
 else
   echo "  ✓ none"

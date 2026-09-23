@@ -50,7 +50,7 @@ nonisolated struct FeedbackEngine: Sendable {
         let thresholds = thresholds(rated)
         result.reduceThreshold = thresholds.reduce
         result.pushThreshold = thresholds.push
-        result.capacityFactor = capacityFactor(rated)
+        result.capacityFactor = capacityFactor(days)
         result.estimateMultiplier = previous.estimateMultiplier   // needs real durations; see Docs/open-questions.md
         result.nudgeGraceMinutes = nudgeGrace(days)
         result.nudgeCooldownMultiplier = nudgeCooldown(days)
@@ -105,21 +105,28 @@ nonisolated struct FeedbackEngine: Sendable {
 
     /// How much of the free time a day may actually be filled with.
     ///
-    /// A proxy: DayRecord does not carry per-task completion, so the evening
-    /// rating stands in for «did the day fit». Replace with real completion
-    /// ratios once tasks record their finish against the plan
-    /// (see Docs/open-questions.md, item 11).
-    private func capacityFactor(_ rated: [(record: DayRecord, rating: DayRating)]) -> Double {
+    /// When the user told Linea how the day went (the check-in), the real
+    /// share of the plan that happened drives it: someone who closes two
+    /// thirds of the plan day after day gets lighter plans. Without a
+    /// check-in the evening rating stands in as a proxy.
+    private func capacityFactor(_ days: [DayRecord]) -> Double {
         var factor = Calibration.default.capacityFactor
-        for entry in rated {
-            guard let plan = entry.record.plan, !plan.focusBlocks.isEmpty else { continue }
+        for record in days {
+            guard let plan = record.plan, !plan.focusBlocks.isEmpty else { continue }
             let plannedMinutes = plan.focusBlocks.reduce(0) { $0 + $1.durationMinutes }
             guard plannedMinutes >= 30 else { continue }
             let ratio: Double
-            switch entry.rating {
-            case .great: ratio = 1.0
-            case .ok: ratio = 0.85
-            case .hard: ratio = 0.6
+            if let completion = record.report?.completionRatio {
+                // One disastrous day must not halve tomorrow's plan.
+                ratio = min(max(completion, 0.4), 1.1)
+            } else if let rating = record.rating {
+                switch rating {
+                case .great: ratio = 1.0
+                case .ok: ratio = 0.85
+                case .hard: ratio = 0.6
+                }
+            } else {
+                continue
             }
             factor = 0.8 * factor + 0.2 * ratio
         }
@@ -175,7 +182,7 @@ nonisolated struct FeedbackEngine: Sendable {
         record("pushThreshold", previous.pushThreshold, result.pushThreshold,
                "Порог «можно больше» подстроен под твои вечерние оценки.")
         record("capacityFactor", previous.capacityFactor, result.capacityFactor,
-               "Изменил, сколько работы помещается в день.")
+               "Изменил, сколько работы помещается в день — по тому, сколько плана получается сделать.")
         record("nudgeGraceMinutes", Double(previous.nudgeGraceMinutes), Double(result.nudgeGraceMinutes),
                "Изменил паузу перед напоминанием.")
         record("nudgeCooldownMultiplier", previous.nudgeCooldownMultiplier, result.nudgeCooldownMultiplier,

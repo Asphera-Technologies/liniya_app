@@ -40,5 +40,9 @@ nonisolated struct DayRecord: Codable, Sendable {
     }
 
     var rating: DayRating? { feedback.compactMap(\.dayRating).last }
+    /// План против факта из итога дня, если человек его рассказал.
+    var report: DayReportSummary? { feedback.compactMap(\.dayReport).last }
+    /// На вечерний вопрос уже ответили — оценкой или итогом дня.
+    var isReviewed: Bool { rating != nil || report != nil }
     var isPlanAccepted: Bool { plan?.status == .accepted }
 }

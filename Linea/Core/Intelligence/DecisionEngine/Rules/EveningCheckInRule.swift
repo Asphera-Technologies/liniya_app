@@ -24,7 +24,8 @@ nonisolated struct EveningCheckInRule: RendererAwareNudgeRule {
 
     func nudges(_ context: NudgeContext) -> [Nudge] {
         guard let renderer else { return [] }
-        guard !context.feedback.contains(where: { $0.dayRating != nil }) else { return [] }
+        // Ответ — это оценка тремя кнопками или итог дня голосом/текстом.
+        guard !context.feedback.contains(where: { $0.dayRating != nil || $0.dayReport != nil }) else { return [] }
 
         let time = context.time
         let profile = context.snapshot.profile
