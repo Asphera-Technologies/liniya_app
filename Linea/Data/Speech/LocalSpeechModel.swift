@@ -147,10 +147,11 @@ final class LocalSpeechModel {
                     continue
                 }
                 let before = done
-                let temporary = try await Self.fetch(file.url) { [weak self] fraction in
+                // Замыкание живёт только до конца загрузки файла — цикла ссылок нет.
+                let temporary = try await Self.fetch(file.url) { fraction in
                     let overall = (Double(before) + Double(file.bytes) * fraction) / total
                     Task { @MainActor in
-                        guard let self, case .downloading = self.state else { return }
+                        guard case .downloading = self.state else { return }
                         self.state = .downloading(progress: overall)
                     }
                 }

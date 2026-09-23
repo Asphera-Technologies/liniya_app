@@ -8,7 +8,9 @@
 //
 
 import Foundation
-import AVFoundation
+// Блок конвертера в SDK помечен @Sendable, а захватывает буферы AVFoundation.
+// Конвертер вызывает его синхронно в том же потоке, так что это безопасно.
+@preconcurrency import AVFoundation
 
 nonisolated enum AudioSamplesError: Error, LocalizedError {
     case unsupportedFormat
