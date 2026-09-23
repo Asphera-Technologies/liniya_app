@@ -30,56 +30,91 @@ nonisolated struct RuleBasedCheckInExtractor: CheckInExtracting {
 
     func parse(_ request: CheckInRequest) -> CheckInExtraction {
         let clauses = CheckInText.clauses(request.transcript)
-        let effective = effectiveStatuses(clauses)
+        let matchers = request.tasks.map { TitleMatcher(title: $0.title) }
 
-        var outcomes: [UUID: TaskOutcome] = [:]
-        var mentionedClauses = Set<Int>()
-        var mentionedSentences = Set<Int>()
-
-        for task in request.tasks {
-            let title = TitleMatcher(title: task.title)
-            var outcome: TaskOutcome?
-            var hasFullMatch = false
-            for (index, clause) in clauses.enumerated() {
-                guard let match = title.match(clause.words, threshold: mentionThreshold) else { continue }
-                // «Созвон с поставщиком» не должен закрывать «Созвон с командой»:
-                // неполное совпадение уступает полному и не мешает считать эту
-                // часть сделанным сверх плана.
-                if !match.isFull && hasFullMatch { continue }
+        // Где прозвучали задачи. Полное совпадение — задача названа; неполное
+        // («созвон с поставщиком» при задаче «Созвон с командой») — только намёк.
+        var full = Array(repeating: [(task: Int, match: TitleMatcher.Match)](), count: clauses.count)
+        var partial = Array(repeating: [(task: Int, match: TitleMatcher.Match)](), count: clauses.count)
+        for (clauseIndex, clause) in clauses.enumerated() {
+            for (taskIndex, matcher) in matchers.enumerated() {
+                guard let match = matcher.match(clause.words, threshold: mentionThreshold) else { continue }
                 if match.isFull {
-                    mentionedClauses.insert(index)
-                    mentionedSentences.insert(clause.sentence)
+                    full[clauseIndex].append((taskIndex, match))
+                } else {
+                    partial[clauseIndex].append((taskIndex, match))
                 }
-
-                // Глаголы названия («ответить», «подготовить») — тоже свидетельство,
-                // исключаются только ключевые слова.
-                let own = CheckInText.status(of: clause.words, ignoring: match.keyIndices)
-                let inherited = inheritsStatus(clauses, at: index) ? effective[index - 1] : nil
-                if let status = own ?? inherited {
-                    // Последнее упоминание побеждает: «начал утром, а вечером доделал».
-                    outcome = TaskOutcome(taskID: task.id, status: status, isConfident: match.isFull)
-                } else if outcome == nil || (match.isFull && !hasFullMatch) {
-                    outcome = TaskOutcome(taskID: task.id, status: .done, isConfident: false)
-                }
-                hasFullMatch = hasFullMatch || match.isFull
             }
-            if let outcome { outcomes[task.id] = outcome }
+        }
+        let fullyMentioned = Set(full.flatMap { $0.map(\.task) })
+
+        // Статус каждой части с наследованием: «сделал отчёт и презентацию».
+        var effective: [TaskOutcomeStatus?] = []
+        for (index, clause) in clauses.enumerated() {
+            let keys = full[index].reduce(into: Set<Int>()) { $0.formUnion($1.match.keyIndices) }
+            let own = CheckInText.status(of: clause.words, ignoring: keys, mentionsTask: !full[index].isEmpty)
+            effective.append(own ?? (inheritsStatus(clauses, at: index) ? effective[index - 1] : nil))
         }
 
-        let dayTasks = request.tasks.filter { task in
-            guard let date = task.date else { return false }
+        var outcomes: [Int: (outcome: TaskOutcome, byReference: Bool)] = [:]
+        var consumed = Set<Int>()
+        var mentionedSentences = Set<Int>()
+        var lastMentioned: (sentence: Int, task: Int)?
+
+        for (index, clause) in clauses.enumerated() {
+            if lastMentioned?.sentence != clause.sentence { lastMentioned = nil }
+            let inherited = inheritsStatus(clauses, at: index) ? effective[index - 1] : nil
+
+            if !full[index].isEmpty {
+                consumed.insert(index)
+                mentionedSentences.insert(clause.sentence)
+                for (taskIndex, match) in full[index] {
+                    let taskID = request.tasks[taskIndex].id
+                    let own = CheckInText.status(of: clause.words, ignoring: match.keyIndices, mentionsTask: true)
+                    if let status = own ?? inherited {
+                        // Последнее прямое упоминание побеждает: «начал утром, а вечером доделал отчёт».
+                        outcomes[taskIndex] = (TaskOutcome(taskID: taskID, status: status), false)
+                    } else if outcomes[taskIndex] == nil {
+                        outcomes[taskIndex] = (TaskOutcome(taskID: taskID, status: .done, isConfident: false), false)
+                    }
+                }
+                lastMentioned = (clause.sentence, full[index][full[index].count - 1].task)
+                continue
+            }
+
+            // «Сел за отчёт…, но в итоге доделал»: действие без названия задачи
+            // относится к последней задаче этого предложения, пока о ней не
+            // сказано прямо.
+            if let status = CheckInText.status(of: clause.words), let last = lastMentioned {
+                let current = outcomes[last.task]
+                if current == nil || current!.byReference || !current!.outcome.isConfident {
+                    outcomes[last.task] = (TaskOutcome(taskID: request.tasks[last.task].id, status: status), true)
+                    consumed.insert(index)
+                    continue
+                }
+            }
+
+            // Неполное совпадение — только для задач, которые нигде не названы полностью.
+            for (taskIndex, match) in partial[index] where !fullyMentioned.contains(taskIndex) && outcomes[taskIndex] == nil {
+                let own = CheckInText.status(of: clause.words, ignoring: match.keyIndices, mentionsTask: true)
+                outcomes[taskIndex] = (TaskOutcome(taskID: request.tasks[taskIndex].id, status: own ?? .done, isConfident: false), false)
+            }
+        }
+
+        let dayTasks = request.tasks.indices.filter { index in
+            guard let date = request.tasks[index].date else { return false }
             return request.time.isSameDay(date, request.day)
         }
         for statement in globalStatements(clauses, excluding: mentionedSentences) {
-            for task in dayTasks where outcomes[task.id] == nil {
-                outcomes[task.id] = TaskOutcome(taskID: task.id, status: statement, isConfident: true)
+            for index in dayTasks where outcomes[index] == nil {
+                outcomes[index] = (TaskOutcome(taskID: request.tasks[index].id, status: statement), false)
             }
         }
 
         let allWords = RussianWords.tokens(request.transcript).map(\.normalized)
         return CheckInExtraction(
-            outcomes: request.tasks.compactMap { outcomes[$0.id] },
-            extra: extraWork(clauses, excluding: mentionedClauses, globalSentences: globalSentenceIndices(clauses)),
+            outcomes: request.tasks.indices.compactMap { outcomes[$0]?.outcome },
+            extra: extraWork(clauses, excluding: consumed, globalSentences: globalSentenceIndices(clauses)),
             statedWorkMinutes: statedWorkMinutes(clauses),
             rating: CheckInText.rating(allWords),
             energy: CheckInText.energy(allWords),
@@ -87,20 +122,6 @@ nonisolated struct RuleBasedCheckInExtractor: CheckInExtracting {
             memory: MemoryCommand.candidates(in: request.transcript),
             extractorID: id
         )
-    }
-
-    // MARK: Статусы частей
-
-    /// Статус каждой части с учётом наследования: «сделал отчёт и презентацию» —
-    /// вторая часть без глагола получает «сделано» от первой.
-    private func effectiveStatuses(_ clauses: [CheckInClause]) -> [TaskOutcomeStatus?] {
-        var result: [TaskOutcomeStatus?] = []
-        for (index, clause) in clauses.enumerated() {
-            let own = CheckInText.status(of: clause.words)
-            let inherited = inheritsStatus(clauses, at: index) ? result[index - 1] : nil
-            result.append(own ?? inherited)
-        }
-        return result
     }
 
     private func inheritsStatus(_ clauses: [CheckInClause], at index: Int) -> Bool {
@@ -128,13 +149,12 @@ nonisolated struct RuleBasedCheckInExtractor: CheckInExtracting {
 
     private func globalStatement(in sentence: [CheckInClause]) -> TaskOutcomeStatus? {
         let words = sentence.flatMap(\.words)
-        if words.contains("ничего"), words.contains(where: CheckInText.negativeWords.contains) {
-            return .notDone
+        let statuses = sentence.map { CheckInText.status(of: $0.words) }
+        // «Ничего не успел» — да; «ничего не соображал» — нет: нужен глагол завершения.
+        if words.contains("ничего"), statuses.contains(.notDone) { return .notDone }
+        if words.contains("все"), statuses.contains(.done), !statuses.contains(.notDone), !statuses.contains(.partial) {
+            return .done
         }
-        let saysAll = words.contains("все")
-        let saysNo = words.contains(where: { $0 == "не" || $0 == "нет" })
-        let saysDone = sentence.contains { CheckInText.status(of: $0.words) == .done }
-        if saysAll && saysDone && !saysNo { return .done }
         return nil
     }
 
@@ -143,7 +163,8 @@ nonisolated struct RuleBasedCheckInExtractor: CheckInExtracting {
     private static let fillerWords: Set<String> = [
         "а", "и", "еще", "потом", "затем", "также", "плюс", "кстати", "ну", "вот", "сегодня",
         "днем", "утром", "вечером", "наконец", "вроде", "типа", "короче", "в", "общем",
-        "на", "с", "около", "где", "то", "примерно",
+        "на", "с", "около", "где", "то", "примерно", "итоге", "целом", "вообще", "опять",
+        "просто", "может", "наверное", "это", "тоже", "уже",
     ]
 
     private func extraWork(_ clauses: [CheckInClause], excluding mentioned: Set<Int>, globalSentences: Set<Int>) -> [ExtraWork] {
@@ -154,6 +175,9 @@ nonisolated struct RuleBasedCheckInExtractor: CheckInExtracting {
 
             let words = clause.words
             let durations = CheckInText.durations(in: words)
+            // «В целом поработал часов шесть» — это объём дня, а не отдельное дело.
+            let aboutVolume = words.contains { word in CheckInText.workStems.contains { word.hasPrefix($0) } }
+            guard !(aboutVolume && !durations.isEmpty) else { continue }
             let durationIndices = Set(durations.flatMap { Array($0.range) })
             let content = words.enumerated().filter { offset, word in
                 !durationIndices.contains(offset) && Self.isContent(word)

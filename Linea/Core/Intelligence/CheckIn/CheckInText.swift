@@ -87,7 +87,6 @@ nonisolated enum CheckInText {
 
     /// Основы, которые сами по себе значат «не сделал».
     static let negativeStems = ["перенес", "отлож", "отмен", "пропуст", "забыл", "провал", "сорвал", "сдался", "сдалась"]
-    static let negativeWords: Set<String> = ["не", "нет", "ни", "ничего"]
 
     /// Основы глаголов «сделал». Совпадение по началу слова.
     static let positiveStems = [
@@ -103,23 +102,47 @@ nonisolated enum CheckInText {
     ]
     static let positiveWords: Set<String> = ["готово", "готова", "готов", "сделано", "закрыто"]
 
-    /// Статус части предложения по её словам; `ignoring` — индексы слов из
-    /// названия задачи («Подготовить отчёт» не должен сам себя отмечать).
-    static func status(of words: [String], ignoring: Set<Int> = []) -> TaskOutcomeStatus? {
+    /// «был», «прошёл», «ходил» — событие случилось. Это «сделано», только если
+    /// в той же части прозвучала задача: «был созвон с командой», но не «день
+    /// был насыщенный».
+    static let presenceWords: Set<String> = [
+        "был", "была", "было", "были", "прошел", "прошла", "прошло", "прошли", "состоялся",
+        "состоялась", "состоялось", "пошел", "пошла", "пошли", "ходил", "ходила", "ходили",
+        "дошел", "дошла", "дошли",
+    ]
+
+    static func isCompletion(_ word: String) -> Bool {
+        positiveWords.contains(word) || positiveStems.contains { word.hasPrefix($0) }
+    }
+
+    /// Статус части предложения по её словам.
+    /// - `ignoring` — индексы ключевых слов названия задачи: «Подготовить отчёт»
+    ///   не должен отмечать сам себя;
+    /// - `mentionsTask` — в части прозвучала задача: тогда «был созвон» значит
+    ///   «сделано», а «а презентацию нет» — «не сделано».
+    /// Отрицание действует только на глагол завершения: «не успел», «так и не
+    /// позвонил» — да; «ничего не соображал», «не было сил» — нет.
+    static func status(of words: [String], ignoring: Set<Int> = [], mentionsTask: Bool = false) -> TaskOutcomeStatus? {
         let visible = words.enumerated().filter { !ignoring.contains($0.offset) }.map(\.element)
         guard !visible.isEmpty else { return nil }
 
         if visible.contains(where: partialWords.contains) || contains(visible, anyOf: partialPhrases) {
             return .partial
         }
-        if visible.contains(where: negativeWords.contains)
-            || visible.contains(where: { word in negativeStems.contains { word.hasPrefix($0) } }) {
+        if visible.contains(where: { word in negativeStems.contains { word.hasPrefix($0) } }) {
             return .notDone
         }
-        if visible.contains(where: positiveWords.contains)
-            || visible.contains(where: { word in positiveStems.contains { word.hasPrefix($0) } }) {
-            return .done
+        for (index, word) in words.enumerated() where word == "не" || word == "ни" {
+            // «не презентацию» — отрицание прямо перед названием задачи.
+            if mentionsTask, ignoring.contains(index + 1) { return .notDone }
+            let following = words[(index + 1)..<min(words.count, index + 3)]
+            if following.contains(where: isCompletion) { return .notDone }
+            if mentionsTask, following.contains(where: presenceWords.contains) { return .notDone }
         }
+        // «а презентацию нет»
+        if mentionsTask, visible.last == "нет" { return .notDone }
+        if visible.contains(where: isCompletion) { return .done }
+        if mentionsTask, visible.contains(where: presenceWords.contains) { return .done }
         return nil
     }
 

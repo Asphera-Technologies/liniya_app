@@ -44,9 +44,19 @@ struct RuleBasedCheckInExtractorTests {
 
     @Test("Упомянул без глагола — задача не отмечается сама")
     func mentionedOnly() throws {
-        let extraction = CheckInFixture.parse("Утром была презентация КП.")
+        let extraction = CheckInFixture.parse("Утром думал про презентацию КП.")
         let outcome = try #require(extraction.outcome(for: WowFixture.taskA))
         #expect(outcome.isConfident == false)
+    }
+
+    @Test("«Была презентация», «был созвон» — событие случилось; «день был» — не задача")
+    func presence() {
+        let extraction = CheckInFixture.parse("Утром была презентация КП. День был насыщенный.")
+        #expect(extraction.outcome(for: WowFixture.taskA) == TaskOutcome(taskID: WowFixture.taskA, status: .done))
+        #expect(extraction.extra.isEmpty)
+        let missed = CheckInFixture.parse("На тренировке не был.")
+        #expect(extraction.outcome(for: WowFixture.taskWorkout) == nil)
+        #expect(missed.outcome(for: WowFixture.taskWorkout)?.status == .notDone)
     }
 
     @Test("Глагол из названия — тоже свидетельство: «ответил на письма»")
@@ -121,6 +131,39 @@ struct RuleBasedCheckInExtractorTests {
         // Отдельной фразой «позвонил» тоже значит «сделано».
         let alone = CheckInFixture.parse("Позвонил маме.", tasks: tasks)
         #expect(alone.outcome(for: WowFixture.taskC) == TaskOutcome(taskID: WowFixture.taskC, status: .done))
+    }
+
+    @Test("Живая речь: действие без названия относится к последней задаче, «ничего не соображал» не отрицание")
+    func messySpeech() {
+        let tasks = [
+            LineaTask(id: WowFixture.taskA, title: "Отчёт для клиента", date: WowFixture.today, createdAt: WowFixture.created),
+            LineaTask(id: WowFixture.taskCall, title: "Созвон с командой", date: WowFixture.today, createdAt: WowFixture.created.addingTimeInterval(60)),
+            LineaTask(id: WowFixture.taskC, title: "Разобрать почту", date: WowFixture.today, createdAt: WowFixture.created.addingTimeInterval(120)),
+            LineaTask(id: WowFixture.taskB, title: "Спортзал", date: WowFixture.today, createdAt: WowFixture.created.addingTimeInterval(180)),
+            LineaTask(id: WowFixture.taskWorkout, title: "Позвонить маме", date: WowFixture.today, createdAt: WowFixture.created.addingTimeInterval(240)),
+        ]
+        // Так распознал рассказ GigaAM-v3 на телефоне (проверено 23.09.2026).
+        let story = "Ну, короче, сегодня день был такой насыщенный. Утром сел за отчёт для клиента, провозился часа два, но в итоге доделал и отправил. Потом был созвон с командой, как обычно, затянулся минут на 40 вместо 20. После обеда вообще ничего не соображал, сидел, тупил в почту, разобрал, может, половину. Спортзал опять пропустил, ну просто не было сил. Маме так и не позвонил, надо завтра обязательно. Ещё заскочил в банк, оформил карту. Это минут тридцать. В целом поработал часов шесть, наверное. Устал сильно, голова тяжёлая. И запомни, пожалуйста, что по вторникам и четвергам у меня бассейн в 7 вечера."
+        let extraction = CheckInFixture.parse(story, tasks: tasks)
+
+        #expect(extraction.outcome(for: WowFixture.taskA) == TaskOutcome(taskID: WowFixture.taskA, status: .done))
+        #expect(extraction.outcome(for: WowFixture.taskCall) == TaskOutcome(taskID: WowFixture.taskCall, status: .done))
+        #expect(extraction.outcome(for: WowFixture.taskC) == TaskOutcome(taskID: WowFixture.taskC, status: .partial))
+        #expect(extraction.outcome(for: WowFixture.taskB) == TaskOutcome(taskID: WowFixture.taskB, status: .notDone))
+        #expect(extraction.outcome(for: WowFixture.taskWorkout) == TaskOutcome(taskID: WowFixture.taskWorkout, status: .notDone))
+        #expect(extraction.extra == [ExtraWork(title: "Оформил карту")])
+        #expect(extraction.statedWorkMinutes == 360)
+        #expect(extraction.rating == .hard)
+        #expect(extraction.energy == .low)
+        #expect(extraction.memory.map(\.text) == ["По вторникам и четвергам у меня бассейн в 7 вечера"])
+    }
+
+    @Test("«Ничего не соображал» — не «ничего не сделал»")
+    func notEverythingIsNegation() {
+        let extraction = CheckInFixture.parse("Вообще ничего не соображал.")
+        #expect(extraction.outcomes.isEmpty)
+        let really = CheckInFixture.parse("Ничего не успел.")
+        #expect(really.outcomes.count == WowFixture.tasks.count)
     }
 
     @Test("Какие задачи спрашивать вечером: день, закрытые сегодня, просроченные, немного без дня")
