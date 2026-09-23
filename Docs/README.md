@@ -10,24 +10,28 @@
    смотреть. Для того, кто будет проверять результат.
 5. [testing-round-1.md](testing-round-1.md) — что проверить в правках от
    16 сентября: по каждой фиче, как должно работать и куда смотреть.
-6. [secrets.md](secrets.md) — где хранить ключ доступа к модели и почему
+6. [check-in.md](check-in.md) — итог дня голосом и память Linea: какая модель
+   распознаёт речь, что взяли у OpenClaw, сколько это стоит в токенах.
+7. [testing-round-2.md](testing-round-2.md) — как проверить итог дня и память
+   на телефоне.
+8. [secrets.md](secrets.md) — где хранить ключ доступа к модели и почему
    ключ внутри приложения не секрет.
-7. [architecture.md](architecture.md) — текущая архитектура приложения и слои.
-8. [intelligence.md](intelligence.md) — спецификация Intelligence-ядра:
+9. [architecture.md](architecture.md) — текущая архитектура приложения и слои.
+10. [intelligence.md](intelligence.md) — спецификация Intelligence-ядра:
    модель данных, протоколы, формулы State/Decision/Feedback Engine,
    объяснения, рецепт коннектора, тесты.
-9. [vkusvill.md](vkusvill.md) — интеграция с каталогом ВкусВилла: что
+11. [vkusvill.md](vkusvill.md) — интеграция с каталогом ВкусВилла: что
    получилось, чего в их API нет и почему.
-10. [connectors.md](connectors.md) — как подключить новый источник данных
+12. [connectors.md](connectors.md) — как подключить новый источник данных
    (календарь, питание, локация) не трогая ядро.
-11. [decisions.md](decisions.md) — журнал архитектурных решений (ADR) с
+13. [decisions.md](decisions.md) — журнал архитектурных решений (ADR) с
    обоснованиями.
-12. [open-questions.md](open-questions.md) — вопросы заказчику и дефолты, по
+14. [open-questions.md](open-questions.md) — вопросы заказчику и дефолты, по
    которым идёт работа.
-13. [roadmap.md](roadmap.md) — этапы, статусы, чек-лист проверки на Mac,
+15. [roadmap.md](roadmap.md) — этапы, статусы, чек-лист проверки на Mac,
    журнал работ.
-14. [glossary.md](glossary.md) — термины и соответствующие типы.
-15. [development.md](development.md) — процесс команды (ветки, PR).
+16. [glossary.md](glossary.md) — термины и соответствующие типы.
+17. [development.md](development.md) — процесс команды (ветки, PR).
 
 Как запустить тесты ядра без Xcode: `Scripts/test-core.sh` (нужен Docker).
 Линтер границ ядра: `Scripts/check-layers.sh`.

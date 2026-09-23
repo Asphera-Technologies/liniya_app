@@ -15,12 +15,13 @@ Linea/
 ├── App/          LineaApp (composition root), AppState, RootView
 ├── Core/         Foundation-only. Domain models, protocols, use cases, engines, connector logic
 │   ├── Domain/{Models,Protocols,UseCases}
-│   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,FeedbackEngine,LLM}
-│   └── Connectors/   Foundation-only parts of connectors (Nutrition)
+│   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,FeedbackEngine,LLM,CheckIn,Memory}
+│   └── Connectors/   Foundation-only parts of connectors (Nutrition, Calendar)
 ├── Data/         Apple frameworks allowed: SwiftData entities and Local* repositories,
-│                 HealthKit history reader and context provider, EventKit later
-├── Platform/     iOS adapters: notifications (nudges), on-device LLM (FoundationModels)
-├── Features/     SwiftUI screens and view-facing stores (Today, Plan, Health, Nutrition, Profile, AI)
+│                 HealthKit reader, EventKit provider, LLM and speech clients (xAI, Apple Speech)
+├── Platform/     iOS adapters: notifications (nudges), voice recording, diagnostics (OSLog)
+├── Features/     SwiftUI screens and view-facing stores (Today, Plan, Health, Nutrition,
+│                 Profile, AI, CheckIn, Memory)
 ├── Components/, DesignSystem/   shared UI
 ├── Networking/   LineaBackend (sample-only protocol; no production API yet)
 └── Services/     SampleData / SampleModels for screens not yet backed by real data
@@ -34,7 +35,7 @@ Dependency rules:
 |---|---|---|
 | `Core/Domain` | Foundation | anything else |
 | `Core/Intelligence`, `Core/Connectors` | Foundation, Domain | Apple frameworks; `Date()`, `Calendar.current` (use `TimeContext`) |
-| `Data`, `Platform` | Core + SwiftData / HealthKit / EventKit / UserNotifications / FoundationModels | Features |
+| `Data`, `Platform` | Core + SwiftData / HealthKit / EventKit / UserNotifications / Speech / AVFoundation / FoundationModels | Features |
 | `Features` | Core types, stores, design system | HealthKit, SwiftData, notification center directly |
 | `App` | everything | — |
 
@@ -66,7 +67,9 @@ MainActor`. Stores and repositories are `@MainActor`; every type in
 off the main actor and tests do not need `@MainActor`.
 
 The Xcode project uses Swift, SwiftUI, Observation, SwiftData, Swift
-concurrency, HealthKit; iOS deployment target 26.5; Xcode 26.6 (Swift 6.3).
+concurrency, HealthKit, EventKit, Speech, AVFoundation; iOS deployment
+target 18.0; Xcode 26.6 (Swift 6.3). APIs newer than iOS 18 (Liquid Glass,
+`SpeechAnalyzer`) are behind `#available`.
 
 ## Intelligence data flow
 
@@ -83,6 +86,25 @@ Explainer      → Russian text (rule-based always; on-device LLM optional, vali
         ↓
 Today / notifications → UserFeedback → FeedbackEngine → Calibration
 ```
+
+### Evening check-in and memory
+
+```text
+Голос (VoiceRecorder) → SpeechTranscribing (xAI с согласия / iPhone)
+Текст рассказа        → CheckInExtracting (Grok с согласия / правила)
+        ↓  CheckInExtraction → CheckInExtractionValidator
+CheckInDraft — экран «Проверь», галочки правит человек
+        ↓  SubmitCheckInUseCase
+задачи (закрыть, перенести) · дневник CheckInEntry · память UserMemory
+DayRecord.feedback += dayReport, dayRating → FeedbackEngine (ёмкость дня)
+
+Память + дневник → UserContextBuilder (≤ 900 токенов) → чат, разбор итога
+```
+
+The model reads, the code decides, the user confirms (ADR-016). Memory
+follows OpenClaw's layout — curated facts, a daily journal, search with
+recency decay, consolidation — but lives on the device (ADR-018). Details:
+`Docs/check-in.md`.
 
 ## Target architecture
 
