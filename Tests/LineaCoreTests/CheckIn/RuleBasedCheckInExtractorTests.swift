@@ -99,6 +99,30 @@ struct RuleBasedCheckInExtractorTests {
         #expect(extraction.memory.isEmpty)
     }
 
+    @Test("Рассказ из инструкции тестировщика разбирается как в ней написано")
+    func testerScenario() throws {
+        let tasks = [
+            LineaTask(id: WowFixture.taskA, title: "Отчёт для клиента", date: WowFixture.today, createdAt: WowFixture.created),
+            LineaTask(id: WowFixture.taskB, title: "Спортзал", date: WowFixture.today, createdAt: WowFixture.created.addingTimeInterval(60)),
+            LineaTask(id: WowFixture.taskC, title: "Позвонить маме", date: WowFixture.today, createdAt: WowFixture.created.addingTimeInterval(120)),
+            LineaTask(id: WowFixture.taskCall, title: "Разобрать почту", date: WowFixture.today, createdAt: WowFixture.created.addingTimeInterval(180)),
+        ]
+        let extraction = CheckInFixture.parse(
+            "Сделал отчёт для клиента и позвонил маме. Спортзал пропустил, не было сил. Почту начал разбирать, но не закончил. Работал часов шесть. Запомни, что по вторникам у меня бассейн.",
+            tasks: tasks
+        )
+        #expect(extraction.outcome(for: WowFixture.taskA) == TaskOutcome(taskID: WowFixture.taskA, status: .done))
+        #expect(extraction.outcome(for: WowFixture.taskC) == TaskOutcome(taskID: WowFixture.taskC, status: .done))
+        #expect(CheckInFixture.status(of: WowFixture.taskB, in: extraction) == .notDone)
+        #expect(CheckInFixture.status(of: WowFixture.taskCall, in: extraction) == .partial)
+        #expect(extraction.statedWorkMinutes == 360)
+        #expect(extraction.energy == .low)
+        #expect(extraction.memory.map(\.text) == ["По вторникам у меня бассейн"])
+        // Отдельной фразой «позвонил» тоже значит «сделано».
+        let alone = CheckInFixture.parse("Позвонил маме.", tasks: tasks)
+        #expect(alone.outcome(for: WowFixture.taskC) == TaskOutcome(taskID: WowFixture.taskC, status: .done))
+    }
+
     @Test("Какие задачи спрашивать вечером: день, закрытые сегодня, просроченные, немного без дня")
     func relevantTasks() {
         let time = WowFixture.evening
