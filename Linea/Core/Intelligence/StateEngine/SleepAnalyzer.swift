@@ -96,16 +96,24 @@ nonisolated struct SleepAnalyzer: Sendable {
     private func buildNight(day: Date, segments: [Segment], time: TimeContext) -> SleepNight? {
         guard !segments.isEmpty else { return nil }
 
-        let groups: [SourceGroup] = Dictionary(grouping: segments, by: \.sourceKey).map { key, segs in
-            SourceGroup(
+        // Split into steps with explicit types: as one chained expression it sits
+        // at the edge of the type checker's time limit and fails the build as
+        // soon as the module gains a few more Equatable types.
+        let stagedKinds: [SleepStage] = [.core, .deep, .rem]
+        let bySource: [String: [Segment]] = Dictionary(grouping: segments, by: \.sourceKey)
+        var groups: [SourceGroup] = []
+        for (key, segs) in bySource {
+            let asleepIntervals: [DateInterval] = segs.filter { $0.stage.isAsleep }.map(\.interval)
+            let inBedIntervals: [DateInterval] = segs.filter { $0.stage == SleepStage.inBed }.map(\.interval)
+            let group = SourceGroup(
                 key: key,
                 segments: segs,
-                asleep: StateMath.union(segs.filter { $0.stage.isAsleep }.map(\.interval)),
-                inBed: StateMath.union(segs.filter { $0.stage == .inBed }.map(\.interval)),
-                hasStages: segs.contains { [.core, .deep, .rem].contains($0.stage) }
+                asleep: StateMath.union(asleepIntervals),
+                inBed: StateMath.union(inBedIntervals),
+                hasStages: segs.contains { segment in stagedKinds.contains(segment.stage) }
             )
+            if !group.asleep.isEmpty || !group.inBed.isEmpty { groups.append(group) }
         }
-        .filter { !$0.asleep.isEmpty || !$0.inBed.isEmpty }
 
         // Stages first, then the longest asleep sum, then the name — fully deterministic.
         guard let source = groups.max(by: { a, b in
