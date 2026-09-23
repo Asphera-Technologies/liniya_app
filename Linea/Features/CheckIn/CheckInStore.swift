@@ -110,7 +110,8 @@ final class CheckInStore {
     func begin() async {
         recorder.cancel()
         day = Self.checkInDay(at: time)
-        usesCloud = isCloudAvailable && (await loadProfile()).isCloudCheckInEnabled
+        let profile = await loadProfile()
+        usesCloud = isCloudAvailable && profile.isCloudCheckInEnabled
         await memory.loadIfNeeded()
         draft = nil
         savedEntry = nil

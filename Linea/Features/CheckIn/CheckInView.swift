@@ -302,7 +302,7 @@ struct CheckInView: View {
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
-    static func analyzerTitle(_ extractorID: String) -> String {
+    nonisolated static func analyzerTitle(_ extractorID: String) -> String {
         extractorID.hasPrefix("cloud") ? "Разобрал Grok" : "Разобрано на телефоне"
     }
 }
