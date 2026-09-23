@@ -24,4 +24,13 @@ final class AppState {
         pendingPrompt = prompt
         isPresentingAI = true
     }
+
+    /// Whether the «Итог дня» sheet is presented (Today card, evening notification).
+    var isPresentingCheckIn = false
+
+    /// Opens the evening check-in: tell how the day went by voice or text.
+    func openCheckIn() {
+        isPresentingAI = false
+        isPresentingCheckIn = true
+    }
 }

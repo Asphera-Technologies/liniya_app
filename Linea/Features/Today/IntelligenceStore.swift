@@ -61,6 +61,8 @@ final class IntelligenceStore {
     private let calendarProvider: (@MainActor () -> any CalendarConnecting)?
     /// Свободный разговор с моделью. Nil, когда ключ не настроен.
     private let assistant: AssistantService?
+    /// Память Linea: контекст для разговора и «запомни». Nil в превью.
+    private let memory: MemoryStore?
 
     /// События календаря за уже показанные периоды, чтобы листание недель на
     /// экране «План» не перечитывало календарь каждый раз.
@@ -88,7 +90,8 @@ final class IntelligenceStore {
         config: EngineConfig = .default,
         time: @escaping @MainActor () -> TimeContext = { .live },
         calendarProvider: (@MainActor () -> any CalendarConnecting)? = nil,
-        assistant: AssistantService? = nil
+        assistant: AssistantService? = nil,
+        memory: MemoryStore? = nil
     ) {
         self.planDayUseCase = planDay
         self.acceptPlanUseCase = acceptPlan
@@ -106,6 +109,7 @@ final class IntelligenceStore {
         self.timeProvider = time
         self.calendarProvider = calendarProvider
         self.assistant = assistant
+        self.memory = memory
     }
 
     var time: TimeContext { timeProvider() }
@@ -118,6 +122,7 @@ final class IntelligenceStore {
         defer { isRefreshing = false }
 
         let time = self.time
+        await memory?.loadIfNeeded()
         do {
             await planStore.load()
             let profile = try await profiles.load()
@@ -149,17 +154,32 @@ final class IntelligenceStore {
                 )
             )
 
-            apply(output.record)
+            let record = mergingFeedback(into: output.record)
+            apply(record)
             calendarCache.removeAll()
             sleepInsight = output.insight
-            logSnapshot(output.record)
-            try await records.save(output.record)
+            logSnapshot(record)
+            try await records.save(record)
             await evaluateNudges(time: time)
             errorMessage = nil
         } catch {
             LineaLog.plan.error("Пересчёт дня не удался: \(error.localizedDescription, privacy: .public)")
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Пока день пересчитывался, человек мог оценить день или сохранить итог:
+    /// пересчёт начинал с прочитанной раньше записи и не должен эти ответы
+    /// потерять.
+    private func mergingFeedback(into record: DayRecord) -> DayRecord {
+        guard let current = self.record, current.day == record.day else { return record }
+        let known = Set(record.feedback.map(\.id))
+        let newer = current.feedback.filter { !known.contains($0.id) }
+        guard !newer.isEmpty else { return record }
+        var merged = record
+        merged.feedback = (record.feedback + newer).sorted { $0.at < $1.at }
+        if merged.isReviewed { merged.nudges.removeAll { $0.kind == .eveningCheckIn } }
+        return merged
     }
 
     private func connectors(nutrition: NutritionProfile?, meals: [MealLog], profile: UserProfile) -> [any ContextProvider] {
@@ -298,6 +318,60 @@ final class IntelligenceStore {
         }
     }
 
+    // MARK: - Итог дня
+
+    /// Что итогу дня нужно знать о самом дне: запись, месяц истории для
+    /// калибровки и текущую калибровку.
+    func checkInContext(for day: Date) async -> (record: DayRecord?, history: [DayRecord], calibration: Calibration) {
+        let time = self.time
+        let record: DayRecord?
+        if let current = self.record, time.isSameDay(current.day, day) {
+            record = current
+        } else {
+            record = try? await records.record(for: day)
+        }
+        let history = (try? await records.records(since: time.adding(days: -30, to: time.today))) ?? []
+        return (record, history, calibration)
+    }
+
+    /// Итог дня сохранён: в дне теперь план против факта и оценка, калибровка
+    /// пересчитана, вечерний вопрос снят — и на экране, и в уведомлениях.
+    func applyCheckIn(record: DayRecord, calibration: Calibration) async {
+        let time = self.time
+        if let current = self.record, time.isSameDay(current.day, record.day) {
+            apply(record)
+        }
+        self.calibration = calibration
+        do {
+            try await records.save(record)
+            try await calibrations.save(calibration)
+        } catch {
+            LineaLog.checkIn.error("Итог дня не записался в день: \(error.localizedDescription, privacy: .public)")
+            errorMessage = error.localizedDescription
+        }
+        if dueNudge?.kind == .eveningCheckIn { dueNudge = nil }
+        if let scheduler, time.isSameDay(record.day, time.today), record.isPlanAccepted {
+            await scheduler.sync(record.nudges, time: time)
+        }
+        await evaluateNudges(time: time)
+    }
+
+    /// Итог сегодняшнего дня, если он уже рассказан.
+    var todayCheckIn: CheckInEntry? { memory?.todayEntry }
+
+    /// Пора спросить «Как прошёл день?»: вечер, а итога ещё нет.
+    var isCheckInDue: Bool {
+        guard todayCheckIn == nil else { return false }
+        let profile = record?.snapshot?.profile ?? userProfile
+        return time.timeOfDay(of: time.now) >= profile.eveningCheckIn
+    }
+
+    /// Три кнопки оценки — только к принятому плану и пока день не оценён.
+    var canRateDay: Bool {
+        guard let record else { return false }
+        return record.rating == nil && record.isPlanAccepted
+    }
+
     // MARK: - Календарь на экране «План»
 
     /// События календаря за период. Пусто, если календарь не подключён.
@@ -332,7 +406,8 @@ final class IntelligenceStore {
             await respond(to: nudge, action: .deferTask(taskID: taskID))
         case .rate(let rating):
             await rateDay(rating)
-        case .open:
+        case .open, .tellDay:
+            // Экран итога дня открывает AppDelegate через AppState.
             break
         }
     }
@@ -382,12 +457,6 @@ final class IntelligenceStore {
         (plan?.recommendations ?? [])
             .filter { $0.kind != .dayBrief }
             .sorted { $0.priority > $1.priority }
-    }
-
-    var isEveningReviewDue: Bool {
-        guard let record, record.rating == nil, plan?.status == .accepted else { return false }
-        let profile = record.snapshot?.profile ?? .default
-        return time.timeOfDay(of: time.now) >= profile.eveningCheckIn
     }
 
     /// Short tag next to the section titles: «нагрузку снижаем», «база 3/7».
@@ -442,6 +511,12 @@ final class IntelligenceStore {
     /// Свободный вопрос уходит модели вместе с уже посчитанным контекстом.
     /// Готовые подсказки по-прежнему отвечают мгновенно и без сети.
     func ask(_ question: String) async -> String {
+        // «Запомни, что…» работает и без модели: память — на телефоне.
+        if let command = MemoryCommand.command(in: question), let memory {
+            let facts = await memory.remember([command], source: .chat)
+            guard !facts.isEmpty else { return "Не получилось сохранить — попробуй сформулировать иначе." }
+            return "Сохранено в памяти: «\(command.text)». Посмотреть или удалить — «Профиль» → «Память»."
+        }
         if let quick = quickAnswer(to: question) { return quick }
         guard let assistant, userProfile.isCloudAssistantEnabled else {
             return AISettings.isConfigured
@@ -449,6 +524,12 @@ final class IntelligenceStore {
                 : "Пока отвечаю только про план, сон и еду: ключ доступа к модели не настроен."
         }
         do {
+            // Память — в пределах бюджета: сколько бы дней ни прошло, в запрос
+            // уходит не больше нескольких сотен токенов выжимок и фактов.
+            let remembered = memory?.context(for: question)
+            if let remembered, !remembered.isEmpty {
+                LineaLog.ai.notice("Память в запросе: фактов \(remembered.factCount, privacy: .public), дней \(remembered.dayCount, privacy: .public), ≈\(remembered.estimatedTokens, privacy: .public) токенов")
+            }
             return try await assistant.answer(
                 to: question,
                 context: AssistantService.Context(
@@ -457,6 +538,7 @@ final class IntelligenceStore {
                     sleep: sleepInsight,
                     nutrition: record?.snapshot?.nutrition,
                     taskTitles: planStore.tasks.filter { !$0.isDone }.map(\.title),
+                    memory: remembered?.text,
                     time: time
                 )
             )

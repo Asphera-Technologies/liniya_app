@@ -6,7 +6,8 @@
 //    • morning: what Linea sees about the state, the day's plan, «Принять план»;
 //    • during the day: the nudge card with the same two answers the
 //      notification offers;
-//    • evening: three taps that close the feedback loop.
+//    • evening: «Как прошёл день?» — the check-in by voice or text, or three
+//      quick taps, which close the feedback loop.
 //
 //  The screen composes; it never decides. Every string comes ready from the
 //  core (`Recommendation.message`, `Nudge.title/body`), so what the user reads
@@ -33,9 +34,15 @@ struct TodayView: View {
                 mainToday
                 timeline
 
-                if intelligence.isEveningReviewDue {
-                    EveningReviewCard { rating in
-                        Task { await intelligence.rateDay(rating) }
+                if intelligence.isCheckInDue {
+                    EveningReviewCard(
+                        canRate: intelligence.canRateDay,
+                        onTell: { appState.openCheckIn() },
+                        onRate: { rating in Task { await intelligence.rateDay(rating) } }
+                    )
+                } else if let entry = intelligence.todayCheckIn {
+                    CheckInSummaryCard(numbers: DayDigestBuilder().numbers(for: entry.report)) {
+                        appState.openCheckIn()
                     }
                 }
 

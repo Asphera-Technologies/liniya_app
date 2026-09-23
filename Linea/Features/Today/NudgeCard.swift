@@ -42,8 +42,12 @@ struct NudgeCard: View {
     }
 }
 
-/// Three taps at the end of the day — the whole evening feedback loop.
+/// «Как прошёл день?» — вечером. Главное — рассказать итог голосом или
+/// текстом; три кнопки оценки остаются для тех, кому некогда.
 struct EveningReviewCard: View {
+    /// Показывать ли быстрые кнопки: только к принятому и ещё не оценённому плану.
+    let canRate: Bool
+    let onTell: () -> Void
     let onRate: (DayRating) -> Void
 
     var body: some View {
@@ -51,9 +55,31 @@ struct EveningReviewCard: View {
             Text("Как прошёл день?")
                 .font(LineaFont.feature)
                 .foregroundStyle(LineaColor.textPrimary)
-            HStack(spacing: 12) {
-                ForEach(DayRating.allCases, id: \.self) { rating in
-                    LineaOutlineButton(title: rating.title) { onRate(rating) }
+            Text("Пара минут голосом или текстом: Linea отметит сделанное и учтёт это в завтрашнем плане.")
+                .font(LineaFont.rowTitle)
+                .foregroundStyle(LineaColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: onTell) {
+                Label("Рассказать", systemImage: "mic.fill")
+                    .font(LineaFont.control)
+                    .foregroundStyle(LineaColor.onInk)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: LineaMetrics.controlRadius, style: .continuous)
+                            .fill(LineaColor.ink)
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if canRate {
+                Text("Или просто оцени:")
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textTertiary)
+                HStack(spacing: 12) {
+                    ForEach(DayRating.allCases, id: \.self) { rating in
+                        LineaOutlineButton(title: rating.title) { onRate(rating) }
+                    }
                 }
             }
         }
@@ -63,6 +89,25 @@ struct EveningReviewCard: View {
             RoundedRectangle(cornerRadius: LineaMetrics.surfaceRadius, style: .continuous)
                 .strokeBorder(LineaColor.separator, lineWidth: LineaMetrics.hairline)
         )
+    }
+}
+
+/// Итог дня уже рассказан: коротко, что получилось, и возможность поправить.
+struct CheckInSummaryCard: View {
+    let numbers: String
+    let onEdit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: "Итог дня", trailing: "записан")
+            Text(RussianWords.capitalizedFirst(numbers) + ".")
+                .font(LineaFont.rowTitle)
+                .foregroundStyle(LineaColor.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Изменить", action: onEdit)
+                .font(LineaFont.control)
+                .tint(LineaColor.textSecondary)
+        }
     }
 }
 

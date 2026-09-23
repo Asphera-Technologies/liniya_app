@@ -48,8 +48,13 @@ struct LineaApp: App {
                 .environment(container.nutritionStore)
                 .environment(container.profileStore)
                 .environment(container.intelligenceStore)
+                .environment(container.memoryStore)
+                .environment(container.checkInStore)
                 .tint(LineaColor.ink)
-                .onAppear { appDelegate.intelligence = container.intelligenceStore }
+                .onAppear {
+                    appDelegate.intelligence = container.intelligenceStore
+                    appDelegate.appState = appState
+                }
         }
         .modelContainer(container.modelContainer)
     }

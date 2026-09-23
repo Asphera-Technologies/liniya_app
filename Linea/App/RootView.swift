@@ -55,6 +55,10 @@ struct RootView: View {
             LineaAIView()
                 .presentationDetents([.large])
         }
+        .sheet(isPresented: $appState.isPresentingCheckIn) {
+            CheckInView()
+                .presentationDetents([.large])
+        }
     }
 }
 
@@ -66,4 +70,6 @@ struct RootView: View {
         .environment(NutritionStore.preview)
         .environment(UserProfileStore.preview)
         .environment(IntelligenceStore.preview)
+        .environment(MemoryStore.preview)
+        .environment(CheckInStore.preview)
 }

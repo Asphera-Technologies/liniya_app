@@ -28,7 +28,8 @@ final class DayRecordEntity {
     }
 }
 
-/// Singleton documents (calibration, user profile, nutrition profile), keyed by name.
+/// Documents keyed by name: calibration, user profile, nutrition profile,
+/// memory, and one check-in per day.
 @Model
 final class DocumentEntity {
     @Attribute(.unique) var key: String
@@ -47,6 +48,9 @@ final class DocumentEntity {
         static let calibration = "calibration"
         static let userProfile = "userProfile"
         static let nutritionProfile = "nutritionProfile"
+        /// Долговременная память о человеке (`UserMemory`). Итоги дня лежат
+        /// рядом, по одному документу на день: `checkIn.2026-09-22`.
+        static let userMemory = "userMemory"
     }
 }
 

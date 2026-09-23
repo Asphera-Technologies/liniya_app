@@ -27,6 +27,7 @@ nonisolated enum LineaLog {
     static let ai = Logger(subsystem: subsystem, category: "ai")
     static let nutrition = Logger(subsystem: subsystem, category: "nutrition")
     static let storage = Logger(subsystem: subsystem, category: "storage")
+    static let checkIn = Logger(subsystem: subsystem, category: "checkin")
 
     /// Окружение, с которого полезно начинать любой разбор: версия системы и
     /// сборки. Половина вопросов «почему у него не работает» отсюда и решается.

@@ -25,6 +25,8 @@ final class AppContainer {
     let calibrationRepository: any CalibrationRepository
     let userProfileRepository: any UserProfileRepository
     let nutritionRepository: any NutritionRepository
+    let checkInRepository: any CheckInRepository
+    let memoryRepository: any MemoryRepository
 
     // Health boundary shared by the UI and the connector, so both see one store.
     let healthKit: HealthKitManager
@@ -35,6 +37,10 @@ final class AppContainer {
     let nutritionStore: NutritionStore
     let profileStore: UserProfileStore
     let intelligenceStore: IntelligenceStore
+    /// Память Linea и дневник итогов дня.
+    let memoryStore: MemoryStore
+    /// «Итог дня»: запись, распознавание, разбор, сохранение.
+    let checkInStore: CheckInStore
 
     /// Local notifications for nudges.
     let nudgeScheduler: NudgeScheduler
@@ -61,6 +67,8 @@ final class AppContainer {
         let calibration = LocalCalibrationRepository(context: context)
         let profile = LocalUserProfileRepository(context: context)
         let nutrition = LocalNutritionRepository(context: context)
+        let checkIns = LocalCheckInRepository(context: context)
+        let memoryDocuments = LocalMemoryRepository(context: context)
 
         taskRepository = tasks
         goalRepository = goals
@@ -68,6 +76,8 @@ final class AppContainer {
         calibrationRepository = calibration
         userProfileRepository = profile
         nutritionRepository = nutrition
+        checkInRepository = checkIns
+        memoryRepository = memoryDocuments
 
         let events = EKEventStore()
         eventStore = events
@@ -81,6 +91,8 @@ final class AppContainer {
         planStore = plan
         nutritionStore = NutritionStore(repository: nutrition, catalog: VkusVillClient())
         profileStore = UserProfileStore(repository: profile)
+        let memory = MemoryStore(memoryRepository: memoryDocuments, checkInRepository: checkIns)
+        memoryStore = memory
 
         // The intelligence core. This is the whole registration surface:
         // connectors, state analyzers and rules are named exactly once, here.
@@ -111,7 +123,7 @@ final class AppContainer {
             HealthKitContextProvider(reader: reader),
         ])
 
-        intelligenceStore = IntelligenceStore(
+        let intelligence = IntelligenceStore(
             planDay: PlanDayUseCase(
                 contextEngine: contextEngine,
                 stateEngine: stateEngine,
@@ -131,11 +143,38 @@ final class AppContainer {
             scheduler: scheduler,
             config: engineConfig,
             calendarProvider: { CalendarContextProvider(store: events) },
-            assistant: assistant
+            assistant: assistant,
+            memory: memory
+        )
+        intelligenceStore = intelligence
+
+        // Итог дня. Облако — только с согласия человека в «Профиле»: тогда
+        // голос распознаёт xAI, а рассказ разбирает Grok. Иначе — телефон и
+        // правила. Облако не ответило — работу подхватывает телефон.
+        let checkInClient = AISettings.checkInConfiguration.map { LanguageModelClient(configuration: $0) }
+        let speech = AISettings.speechConfiguration
+        checkInStore = CheckInStore(
+            recorder: VoiceRecorder(),
+            planStore: plan,
+            intelligence: intelligence,
+            memory: memory,
+            isCloudAvailable: checkInClient != nil && speech != nil,
+            loadProfile: { (try? await profile.load()) ?? .default },
+            makeTranscriber: { useCloud, keyterms in
+                let onDevice = AppleSpeechTranscriber()
+                guard useCloud, let speech else { return onDevice }
+                return FallbackSpeechTranscriber(
+                    primary: CloudSpeechTranscriber(configuration: speech, keyterms: keyterms),
+                    fallback: onDevice
+                )
+            },
+            makeExtractor: { useCloud in
+                FallbackCheckInExtractor(primary: useCloud ? checkInClient.map { RemoteCheckInExtractor(client: $0) } : nil)
+            }
         )
 
         // Any change to tasks, goals, the profile or nutrition rebuilds the day.
-        let store = intelligenceStore
+        let store = intelligence
         plan.onPlanInputsChanged = { [weak store] in await store?.refresh(reason: .inputsChanged) }
         nutritionStore.onPlanInputsChanged = { [weak store] in await store?.refresh(reason: .inputsChanged) }
         profileStore.onPlanInputsChanged = { [weak store] in await store?.refresh(reason: .inputsChanged) }

@@ -2,9 +2,10 @@
 //  AppDelegate.swift
 //  Linea
 //
-//  Exists for one reason: when the user taps «Закрываем сейчас» or «Переносим»
-//  on a notification, iOS delivers that answer to the app delegate. Without
-//  this the 14:30 nudge would be a message the user cannot answer.
+//  Exists for one reason: when the user taps «Закрываем сейчас», «Переносим»
+//  or «Рассказать» on a notification, iOS delivers that answer to the app
+//  delegate. Without this the 14:30 nudge would be a message the user cannot
+//  answer, and the evening question could not open the check-in.
 //
 
 import SwiftUI
@@ -16,6 +17,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     /// Set by the app once the container exists.
     weak var intelligence: IntelligenceStore?
+    /// To open «Итог дня» from the evening notification.
+    weak var appState: AppState?
 
     func application(
         _ application: UIApplication,
@@ -42,6 +45,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             actionIdentifier: response.actionIdentifier,
             userInfo: response.notification.request.content.userInfo
         ) else { return }
+        if action == .tellDay {
+            await intelligence?.refresh(reason: .appeared)
+            appState?.openCheckIn()
+            return
+        }
         await intelligence?.handleNotification(action)
     }
 }

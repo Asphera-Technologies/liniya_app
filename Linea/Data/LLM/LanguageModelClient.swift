@@ -74,7 +74,9 @@ nonisolated struct LanguageModelClient: Sendable {
     }
 
     /// Один запрос: системная инструкция плюс вопрос пользователя.
-    func complete(system: String, user: String) async throws -> String {
+    /// `json` просит модель вернуть строго JSON-объект (режим JSON у
+    /// совместимых с OpenAI эндпоинтов; Grok его поддерживает — проверено).
+    func complete(system: String, user: String, json: Bool = false) async throws -> String {
         guard !configuration.apiKey.isEmpty else { throw LanguageModelError.notConfigured }
 
         var request = URLRequest(url: configuration.endpoint)
@@ -91,6 +93,13 @@ nonisolated struct LanguageModelClient: Sendable {
         body[configuration.usesResponsesAPI ? "input" : "messages"] = messages
         if let maxOutputTokens = configuration.maxOutputTokens {
             body[configuration.usesResponsesAPI ? "max_output_tokens" : "max_tokens"] = maxOutputTokens
+        }
+        if json {
+            if configuration.usesResponsesAPI {
+                body["text"] = ["format": ["type": "json_object"]]
+            } else {
+                body["response_format"] = ["type": "json_object"]
+            }
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

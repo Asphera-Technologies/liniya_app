@@ -16,6 +16,7 @@ struct ProfileView: View {
     @Environment(PlanStore.self) private var plan
     @Environment(HealthKitManager.self) private var healthKit
     @Environment(IntelligenceStore.self) private var intelligence
+    @Environment(MemoryStore.self) private var memory
 
     /// Used only to ask for calendar access from this screen. Authorization is
     /// app-wide, so this may be a different instance from the connector's.
@@ -24,6 +25,7 @@ struct ProfileView: View {
     @State private var isEditingProfile = false
     @State private var isShowingCalibration = false
     @State private var isShowingDiagnostics = false
+    @State private var isShowingMemory = false
     @State private var calendarDenied = false
 
     var body: some View {
@@ -36,6 +38,7 @@ struct ProfileView: View {
         }
         .task {
             await profile.load()
+            await memory.loadIfNeeded()
         }
         .sheet(isPresented: $isEditingProfile) {
             AboutMeEditor(profile: profile.profile) { updated in
@@ -44,6 +47,9 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $isShowingDiagnostics) {
             DiagnosticsView()
+        }
+        .sheet(isPresented: $isShowingMemory) {
+            MemoryView()
         }
         .sheet(isPresented: $isShowingCalibration) {
             CalibrationView(
@@ -157,6 +163,10 @@ struct ProfileView: View {
             LineaHairline()
             assistantRow
             LineaHairline()
+            checkInRow
+            LineaHairline()
+            LineaListRow(title: "Память", value: memoryText) { isShowingMemory = true }
+            LineaHairline()
             LineaListRow(title: "Тексты пишет", value: intelligence.explainerTitle, showsChevron: false)
             LineaHairline()
             LineaListRow(title: "Калибровка", value: calibrationText) { isShowingCalibration = true }
@@ -184,7 +194,7 @@ struct ProfileView: View {
                     Text("Свободный разговор")
                         .font(LineaFont.rowTitle)
                         .foregroundStyle(LineaColor.textPrimary)
-                    Text("Вопросы уходят модели вместе с кратким контекстом дня")
+                    Text("Вопросы уходят модели вместе с кратким контекстом дня и выжимкой из памяти")
                         .font(LineaFont.caption)
                         .foregroundStyle(LineaColor.textTertiary)
                 }
@@ -200,6 +210,43 @@ struct ProfileView: View {
                     .padding(.bottom, 8)
             }
         }
+    }
+
+    /// Итог дня в облаке — отдельное согласие: здесь уходит голос и личный
+    /// рассказ, а не только вопрос. Выключено — всё разбирается на телефоне.
+    private var checkInRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: Binding(
+                get: { profile.profile.isCloudCheckInEnabled },
+                set: { isOn in
+                    Task {
+                        var updated = profile.profile
+                        updated.isCloudCheckInEnabled = isOn
+                        await profile.save(updated)
+                    }
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Итог дня через Grok")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                    Text("Голос распознаёт и рассказ разбирает Grok — точнее, чем телефон. Запись и текст уходят в xAI.")
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(LineaColor.ink)
+            .disabled(!AISettings.isConfigured)
+            .padding(.vertical, 10)
+        }
+    }
+
+    private var memoryText: String {
+        let facts = memory.memory.facts.count
+        let days = memory.entries.count
+        if facts == 0 && days == 0 { return "Пусто" }
+        return "\(facts) \(RussianText.plural(facts, "факт", "факта", "фактов")), \(days) \(RussianText.plural(days, "день", "дня", "дней"))"
     }
 
     private var calibrationText: String {

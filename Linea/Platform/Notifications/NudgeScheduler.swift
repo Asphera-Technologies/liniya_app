@@ -25,6 +25,7 @@ final class NudgeScheduler {
         static let rateGreat = "RATE_GREAT"
         static let rateOK = "RATE_OK"
         static let rateHard = "RATE_HARD"
+        static let tellDay = "TELL_DAY"
     }
 
     enum UserInfoKey {
@@ -55,6 +56,8 @@ final class NudgeScheduler {
         let review = UNNotificationCategory(
             identifier: Category.review,
             actions: [
+                // Главный ответ — рассказать итог дня; три оценки — если некогда.
+                UNNotificationAction(identifier: ActionID.tellDay, title: "Рассказать", options: [.foreground]),
                 UNNotificationAction(identifier: ActionID.rateGreat, title: "Отлично", options: []),
                 UNNotificationAction(identifier: ActionID.rateOK, title: "Нормально", options: []),
                 UNNotificationAction(identifier: ActionID.rateHard, title: "Тяжело", options: []),
@@ -145,7 +148,10 @@ final class NudgeScheduler {
         case ActionID.rateGreat: return .rate(.great)
         case ActionID.rateOK: return .rate(.ok)
         case ActionID.rateHard: return .rate(.hard)
+        case ActionID.tellDay: return .tellDay
         default:
+            // Нажатие на само вечернее напоминание — тоже «рассказать».
+            if (userInfo[UserInfoKey.kind] as? String) == NudgeKind.eveningCheckIn.rawValue { return .tellDay }
             return nudgeID.map { .open(nudgeID: $0) }
         }
     }
@@ -155,5 +161,7 @@ final class NudgeScheduler {
         case deferTask(nudgeID: String, taskID: UUID)
         case rate(DayRating)
         case open(nudgeID: String)
+        /// Открыть «Итог дня».
+        case tellDay
     }
 }

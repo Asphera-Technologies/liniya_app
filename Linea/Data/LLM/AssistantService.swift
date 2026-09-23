@@ -27,6 +27,8 @@ nonisolated struct AssistantService: Sendable {
         var sleep: SleepInsight?
         var nutrition: NutritionProfile?
         var taskTitles: [String]
+        /// Блок памяти из `UserContextBuilder`: факты о человеке и выжимки дней.
+        var memory: String?
         var time: TimeContext
 
         init(
@@ -35,6 +37,7 @@ nonisolated struct AssistantService: Sendable {
             sleep: SleepInsight? = nil,
             nutrition: NutritionProfile? = nil,
             taskTitles: [String] = [],
+            memory: String? = nil,
             time: TimeContext
         ) {
             self.state = state
@@ -42,6 +45,7 @@ nonisolated struct AssistantService: Sendable {
             self.sleep = sleep
             self.nutrition = nutrition
             self.taskTitles = taskTitles
+            self.memory = memory
             self.time = time
         }
     }
@@ -49,7 +53,8 @@ nonisolated struct AssistantService: Sendable {
     static let systemPrompt = """
     Ты Linea — спокойный личный ассистент. Отвечай по-русски, на «ты», коротко: \
     два-четыре предложения, без списков, если их не просят. \
-    Опирайся только на факты из блока «Контекст». Не придумывай чисел, которых там нет. \
+    Опирайся только на факты из блоков «Контекст» и «Память». В «Памяти» — что человек рассказывал \
+    раньше: используй это, но не пересказывай без нужды. Не придумывай чисел, которых там нет. \
     Не ставь диагнозов и не давай медицинских рекомендаций: если вопрос про здоровье, \
     говори о самочувствии и режиме, а за медициной отправляй к врачу. \
     План дня и приоритеты задач считает само приложение — ты их объясняешь, а не меняешь.
@@ -101,9 +106,10 @@ nonisolated struct AssistantService: Sendable {
             lines.append("Питание — \(parts.joined(separator: "; ")).")
         }
 
+        let memoryBlock = context.memory.map { $0.isEmpty ? "" : "\n\nПамять:\n\($0)" } ?? ""
         return """
         Контекст:
-        \(lines.joined(separator: "\n"))
+        \(lines.joined(separator: "\n"))\(memoryBlock)
 
         Вопрос: \(question)
         """

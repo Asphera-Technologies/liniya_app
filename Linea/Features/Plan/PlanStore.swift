@@ -77,6 +77,25 @@ final class PlanStore {
         }
     }
 
+    /// Several changes at once (the evening check-in closes and moves tasks):
+    /// one reload and one replan instead of one per task.
+    func saveTasks(_ updated: [LineaTask]) async {
+        guard !updated.isEmpty else { return }
+        do {
+            for task in updated {
+                if tasks.contains(where: { $0.id == task.id }) {
+                    try await taskRepository.update(task)
+                } else {
+                    try await taskRepository.add(task)
+                }
+            }
+            await load()
+            await onPlanInputsChanged?()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Marks a task done/undone. `completedAt` is what lets the plan know the
     /// day is on track, so it is stamped here rather than in the UI.
     func toggleTask(_ task: LineaTask) async {
