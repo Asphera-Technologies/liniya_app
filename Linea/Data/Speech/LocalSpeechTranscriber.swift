@@ -3,10 +3,11 @@
 //  Linea
 //
 //  Распознавание итога дня моделью GigaAM-v3 прямо на телефоне, через
-//  sherpa-onnx. Запись режется детектором речи Silero на фразы до 20 секунд
-//  (модель берёт до 25 за раз), каждая распознаётся отдельно, текст
-//  склеивается. Настройки те же, что проверены на живой речи 23.09.2026:
-//  признаки 64, декодер transducer NeMo, жадный поиск, два потока.
+//  sherpa-onnx. Детектор речи Silero находит, где говорят, фразы склеиваются
+//  в куски до 20 секунд (модель берёт до 25 за раз), каждый кусок
+//  распознаётся, текст складывается. Настройки те же, что проверены на живой
+//  речи 23.09.2026: признаки 64, декодер transducer NeMo, жадный поиск, два
+//  потока — пять минут речи за 17 секунд на сервере.
 //
 
 import Foundation
@@ -36,8 +37,8 @@ nonisolated enum GigaAMRecognizer {
     static let sampleRate = 16_000
     /// Два производительных ядра есть у любого iPhone с iOS 18.
     static let threads = 2
-    /// Фраза длиннее режется детектором: модель надёжно берёт до 25 секунд.
-    static let maxSegmentSeconds: Float = 20
+    /// Самый длинный кусок для модели: GigaAM надёжно берёт до 25 секунд.
+    static let chunkLimit = 20 * sampleRate
 
     static func transcribe(fileAt url: URL, modelFolder: URL) throws -> String {
         let samples = try AudioSamples.load(url)
@@ -49,32 +50,49 @@ nonisolated enum GigaAMRecognizer {
         }
 
         return autoreleasepool {
+            let ranges = speechRanges(in: samples, detector: makeDetector(folder: modelFolder))
+            // Фразы склеиваются в куски до 20 секунд вместе с паузами: модели нужен
+            // контекст, иначе на стыках теряются точки и появляются лишние слова.
+            let chunks = SpeechChunker.chunks(speech: ranges, total: samples.count, limit: chunkLimit, padding: sampleRate / 5)
             let recognizer = makeRecognizer(folder: modelFolder)
-            let vad = makeDetector(folder: modelFolder)
-            var parts: [String] = []
-
-            func drain() {
-                while !vad.isEmpty() {
-                    let segment = vad.front()
-                    let text = recognizer.decode(samples: segment.samples, sampleRate: sampleRate).text
+            return chunks
+                .map { chunk in
+                    recognizer.decode(samples: Array(samples[chunk]), sampleRate: sampleRate).text
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !text.isEmpty { parts.append(text) }
-                    vad.pop()
                 }
-            }
-
-            let window = 512
-            var start = 0
-            while start < samples.count {
-                let end = min(start + window, samples.count)
-                vad.acceptWaveform(samples: Array(samples[start..<end]))
-                drain()
-                start = end
-            }
-            vad.flush()
-            drain()
-            return parts.joined(separator: " ")
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
         }
+    }
+
+    /// Где в записи говорят. Детектору сначала дают полсекунды тишины:
+    /// иначе речь с первой же секунды записи теряет первый слог.
+    private static func speechRanges(in samples: [Float], detector: SherpaOnnxVoiceActivityDetectorWrapper) -> [Range<Int>] {
+        let lead = sampleRate / 2
+        var ranges: [Range<Int>] = []
+
+        func drain() {
+            while !detector.isEmpty() {
+                let segment = detector.front()
+                let start = max(0, segment.start - lead)
+                let end = min(samples.count, start + segment.n)
+                if start < end { ranges.append(start..<end) }
+                detector.pop()
+            }
+        }
+
+        detector.acceptWaveform(samples: [Float](repeating: 0, count: lead))
+        let window = 512
+        var offset = 0
+        while offset < samples.count {
+            let end = min(offset + window, samples.count)
+            detector.acceptWaveform(samples: Array(samples[offset..<end]))
+            drain()
+            offset = end
+        }
+        detector.flush()
+        drain()
+        return ranges
     }
 
     /// Строки путей живут, пока создаётся распознаватель: sherpa-onnx берёт
@@ -108,10 +126,10 @@ nonisolated enum GigaAMRecognizer {
             let silero = sherpaOnnxSileroVadModelConfig(
                 model: model,
                 threshold: 0.5,
-                minSilenceDuration: 0.5,
+                minSilenceDuration: 0.3,
                 minSpeechDuration: 0.25,
                 windowSize: 512,
-                maxSpeechDuration: maxSegmentSeconds
+                maxSpeechDuration: 20
             )
             var config = sherpaOnnxVadModelConfig(sileroVad: silero, sampleRate: Int32(sampleRate), numThreads: 1, provider: "cpu")
             return SherpaOnnxVoiceActivityDetectorWrapper(config: &config, buffer_size_in_seconds: 120)

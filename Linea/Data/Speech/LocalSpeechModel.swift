@@ -3,18 +3,19 @@
 //  Linea
 //
 //  Модель распознавания русской речи, которая живёт на самом телефоне:
-//  GigaAM-v3 от Сбера (лицензия MIT) в варианте e2e — сразу со знаками
+//  GigaAM-v3 от Сбера (лицензия MIT) с пунктуацией — сразу со знаками
 //  препинания, заглавными буквами и числами цифрами. Работает через
 //  sherpa-onnx на процессоре любого iPhone, голос никуда не уходит.
 //
 //  Проверено 23.09.2026 на живой русской речи: 39 секунд сбивчивого рассказа
-//  распознаны без ошибок за две секунды на двух потоках процессора.
+//  распознаны без ошибок за две секунды, пять минут — за 17 секунд на двух
+//  потоках процессора сервера.
 //
-//  Модель не кладётся в приложение (330 МБ), а скачивается один раз по
-//  кнопке. Файлы берутся с зафиксированной версии репозитория и сверяются
-//  по SHA-256: подменить модель по дороге нельзя. Для публикации модель
-//  стоит пересобрать из официальных весов и держать на своём сервере —
-//  адреса ниже меняются в одном месте.
+//  Модель не кладётся в приложение (≈ 233 МБ), а скачивается один раз по
+//  кнопке. Это официальная конвертация автора sherpa-onnx; версия закреплена
+//  коммитом, каждый файл сверяется по SHA-256 — подменить модель по дороге
+//  нельзя. К публикации модель лучше держать на своём сервере — адреса ниже
+//  меняются в одном месте.
 //
 
 import Foundation
@@ -35,35 +36,35 @@ nonisolated struct ModelFile: Sendable, Equatable {
 nonisolated enum GigaAMModel {
     static let title = "GigaAM-v3"
 
-    /// Сообщество перевело официальные веса GigaAM-v3 в формат sherpa-onnx;
+    /// Официальная конвертация GigaAM-v3 с пунктуацией от автора sherpa-onnx;
     /// версия зафиксирована коммитом, чтобы файлы не поменялись под нами.
-    static let base = "https://huggingface.co/Smirnov75/GigaAM-v3-sherpa-onnx/resolve/6888903da215c7735f51101d939f3bfa679fb2b8/"
+    static let base = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16/resolve/a6039be7cee829a9044a69ac0ebaf1c191217c97/"
 
     nonisolated enum FileName {
-        static let encoder = "gigaam_v3_e2e_rnnt_encoder_int8.onnx"
-        static let decoder = "gigaam_v3_e2e_rnnt_decoder.onnx"
-        static let joiner = "gigaam_v3_e2e_rnnt_joint.onnx"
-        static let tokens = "gigaam_v3_e2e_rnnt_tokens.txt"
+        static let encoder = "encoder.int8.onnx"
+        static let decoder = "decoder.onnx"
+        static let joiner = "joiner.onnx"
+        static let tokens = "tokens.txt"
         static let vad = "silero_vad.onnx"
     }
 
     static let files: [ModelFile] = [
-        ModelFile(name: FileName.tokens, url: URL(string: base + FileName.tokens)!, bytes: 13_353,
-                  sha256: "7ddf22514c42c531358182c81446a8159771e9921019f09ae743ea622d40221d"),
-        ModelFile(name: FileName.decoder, url: URL(string: base + FileName.decoder)!, bytes: 4_600_058,
-                  sha256: "781971998e6a355d6a714f6932a30eab295e7ba0d14fd7e0f78c83b87e811860"),
+        ModelFile(name: FileName.tokens, url: URL(string: base + FileName.tokens)!, bytes: 13_354,
+                  sha256: "39abae20e692998290c574e606f11a9edef2902a1995463fcff63d1490cf22b7"),
+        ModelFile(name: FileName.decoder, url: URL(string: base + FileName.decoder)!, bytes: 4_600_132,
+                  sha256: "38fc7475443ea2a26f63211ca350f73ac50fff824ab7a3876ee2bd610c53bbc4"),
         ModelFile(name: FileName.joiner, url: URL(string: base + FileName.joiner)!, bytes: 2_712_896,
                   sha256: "602ff7017a93311aad34df1437c8d7f49911353c13d6eae7a6ee7b041339465c"),
-        // Детектор речи: режет пятиминутный рассказ на фразы, модель берёт до 25 секунд за раз.
+        // Детектор речи: находит, где в записи говорят, чтобы резать её по паузам.
         ModelFile(name: FileName.vad, url: URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx")!,
                   bytes: 643_854, sha256: "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"),
-        ModelFile(name: FileName.encoder, url: URL(string: base + FileName.encoder)!, bytes: 318_995_997,
-                  sha256: "2cac62d0c270bd128f898f2be1a2d34780d524a6e9483888ebac7b00f97410f1"),
+        ModelFile(name: FileName.encoder, url: URL(string: base + FileName.encoder)!, bytes: 224_570_820,
+                  sha256: "369f35a71bf288d3b8e0391fabd8dba5f2314088d440bca474056b7b4b6e66bf"),
     ]
 
     static var totalBytes: Int64 { files.reduce(0) { $0 + $1.bytes } }
 
-    /// «≈ 327 МБ».
+    /// «≈ 233 МБ».
     static var sizeText: String { "≈ \(Int((Double(totalBytes) / 1_000_000).rounded())) МБ" }
 }
 
@@ -91,7 +92,7 @@ final class LocalSpeechModel {
     nonisolated static func defaultFolder() -> URL {
         let base = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
             ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("Models/gigaam-v3-e2e", isDirectory: true)
+        return base.appendingPathComponent("Models/gigaam-v3-punct", isDirectory: true)
     }
 
     var isReady: Bool { state == .ready }
@@ -184,7 +185,7 @@ final class LocalSpeechModel {
 
     nonisolated private static func prepare(_ folder: URL) throws {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        // 330 МБ не место в резервной копии iCloud — модель всегда можно скачать снова.
+        // Сотни мегабайт не место в резервной копии iCloud — модель всегда можно скачать снова.
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         var folder = folder

@@ -98,3 +98,33 @@ struct CheckInTextTests {
         #expect(CheckInText.energy(words("сделал отчёт")) == nil)
     }
 }
+
+@Suite("Итог дня: нарезка записи для модели на телефоне")
+struct SpeechChunkerTests {
+    private let second = 16_000
+
+    @Test("Соседние фразы склеиваются в кусок не длиннее предела, с паузами")
+    func mergesWithinLimit() {
+        let ranges = [0..<(5 * second), (6 * second)..<(12 * second), (13 * second)..<(19 * second), (20 * second)..<(30 * second)]
+        let chunks = SpeechChunker.chunks(speech: ranges, total: 40 * second, limit: 20 * second, padding: 0)
+        #expect(chunks == [0..<(19 * second), (20 * second)..<(30 * second)])
+    }
+
+    @Test("Поля по краям не выходят за запись")
+    func padding() {
+        let chunks = SpeechChunker.chunks(speech: [100..<(3 * second)], total: 3 * second + 10, limit: 20 * second, padding: second / 5)
+        #expect(chunks == [0..<(3 * second + 10)])
+    }
+
+    @Test("Сплошная речь длиннее предела режется жёстко")
+    func hardSplit() {
+        let chunks = SpeechChunker.chunks(speech: [0..<(50 * second)], total: 50 * second, limit: 20 * second, padding: 0)
+        #expect(chunks == [0..<(20 * second), (20 * second)..<(40 * second), (40 * second)..<(50 * second)])
+        #expect(chunks.allSatisfy { $0.count <= 20 * second })
+    }
+
+    @Test("Тишина — пусто")
+    func empty() {
+        #expect(SpeechChunker.chunks(speech: [], total: 10 * second, limit: 20 * second, padding: 0).isEmpty)
+    }
+}
