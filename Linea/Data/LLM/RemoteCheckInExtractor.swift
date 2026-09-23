@@ -10,6 +10,7 @@
 //
 
 import Foundation
+import OSLog
 
 nonisolated struct RemoteCheckInExtractor: CheckInExtracting {
     let client: LanguageModelClient
@@ -22,7 +23,13 @@ nonisolated struct RemoteCheckInExtractor: CheckInExtracting {
 
     func extract(_ request: CheckInRequest) async throws -> CheckInExtraction {
         let prompt = CheckInPrompt(tasks: request.tasks)
-        let answer = try await client.complete(system: CheckInPrompt.systemPrompt, user: prompt.user(for: request), json: true)
-        return try prompt.decode(answer, extractorID: id)
+        do {
+            let answer = try await client.complete(system: CheckInPrompt.systemPrompt, user: prompt.user(for: request), json: true)
+            return try prompt.decode(answer, extractorID: id)
+        } catch {
+            // Разбор подхватят правила; здесь только причина — для «Диагностики».
+            LineaLog.checkIn.error("Модель не разобрала итог дня: \(String(describing: error), privacy: .public)")
+            throw error
+        }
     }
 }
