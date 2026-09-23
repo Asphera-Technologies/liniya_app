@@ -182,7 +182,8 @@ private nonisolated final class RecognitionState: @unchecked Sendable {
     }
 }
 
-/// Сначала облако, если человек его разрешил; не ответило — телефон.
+/// Основной распознаватель — модель на телефоне или облако; не справился —
+/// системная диктовка. Итог дня не теряется ни при каком отказе.
 nonisolated struct FallbackSpeechTranscriber: SpeechTranscribing {
     let primary: (any SpeechTranscribing)?
     let fallback: any SpeechTranscribing
@@ -194,7 +195,7 @@ nonisolated struct FallbackSpeechTranscriber: SpeechTranscribing {
             do {
                 return try await primary.transcribe(audioAt: url, localeIdentifier: localeIdentifier)
             } catch {
-                LineaLog.checkIn.error("Облачное распознавание не удалось, пробую телефон: \(error.localizedDescription, privacy: .public)")
+                LineaLog.checkIn.error("Распознавание \(primary.id, privacy: .public) не удалось, пробую диктовку: \(error.localizedDescription, privacy: .public)")
                 var transcript = try await fallback.transcribe(audioAt: url, localeIdentifier: localeIdentifier)
                 transcript.fallbackReason = error.localizedDescription
                 return transcript

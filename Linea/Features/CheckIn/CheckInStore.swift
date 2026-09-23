@@ -179,7 +179,7 @@ final class CheckInStore {
             transcriberID = transcript.transcriberID
             text = transcript.text
             if let reason = transcript.fallbackReason {
-                notice = "Облако не ответило (\(reason)) — распознал телефон, точность ниже."
+                notice = "Основной способ распознавания не сработал (\(reason)) — распознала системная диктовка, точность ниже."
             }
             LineaLog.checkIn.notice("Распознано: \(transcript.transcriberID, privacy: .public), секунд \(audio.seconds, privacy: .public), символов \(transcript.text.count, privacy: .public)")
             await analyze()

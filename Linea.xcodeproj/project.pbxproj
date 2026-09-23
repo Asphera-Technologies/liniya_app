@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DEAA30CD214599692591FE4C /* sherpa-onnx in Frameworks */ = {isa = PBXBuildFile; productRef = 8A73C6CF63A05E57C4EB702D /* sherpa-onnx */; };
 		9F4BBA4B3041A101009126E3 /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F4BBA4A3041A100009126E3 /* HealthKitManager.swift */; };
 /* End PBXBuildFile section */
 
@@ -28,6 +29,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DEAA30CD214599692591FE4C /* sherpa-onnx in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,6 +73,7 @@
 			);
 			name = Linea;
 			packageProductDependencies = (
+				8A73C6CF63A05E57C4EB702D /* sherpa-onnx */,
 			);
 			productName = Linea;
 			productReference = 9F4BBA3B30418A24009126E3 /* Linea.app */;
@@ -101,6 +104,9 @@
 			mainGroup = 9F4BBA3230418A23009126E3;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			packageReferences = (
+				3373831165BA522E05D0416C /* XCRemoteSwiftPackageReference "sherpa-onnx" */,
+			);
 			productRefGroup = 9F4BBA3C30418A24009126E3 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -349,6 +355,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		3373831165BA522E05D0416C /* XCRemoteSwiftPackageReference "sherpa-onnx" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/k2-fsa/sherpa-onnx";
+			requirement = {
+				kind = exactVersion;
+				version = 1.13.8;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8A73C6CF63A05E57C4EB702D /* sherpa-onnx */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3373831165BA522E05D0416C /* XCRemoteSwiftPackageReference "sherpa-onnx" */;
+			productName = "sherpa-onnx";
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 9F4BBA3330418A23009126E3 /* Project object */;
 }

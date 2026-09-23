@@ -33,6 +33,7 @@ struct ProfileView: View {
             LineaScaffold(title: "Профиль") {
                 aboutSection
                 connectionsSection
+                speechSection
                 intelligenceSection
             }
         }
@@ -154,6 +155,16 @@ struct ProfileView: View {
         }
     }
 
+    // MARK: Распознавание речи
+
+    /// Модель на телефоне: итог дня распознаётся без сети и без облака.
+    private var speechSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel(text: "Распознавание речи", trailing: "итог дня")
+            LocalModelRow()
+        }
+    }
+
     // MARK: Intelligence
 
     private var intelligenceSection: some View {
@@ -230,7 +241,7 @@ struct ProfileView: View {
                     Text("Итог дня через Grok")
                         .font(LineaFont.rowTitle)
                         .foregroundStyle(LineaColor.textPrimary)
-                    Text("Голос распознаёт и рассказ разбирает Grok — точнее, чем телефон. Запись и текст уходят в xAI.")
+                    Text("Рассказ разбирает Grok — точнее правил на телефоне. Текст уходит в xAI; запись — только если модель распознавания не скачана.")
                         .font(LineaFont.caption)
                         .foregroundStyle(LineaColor.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)

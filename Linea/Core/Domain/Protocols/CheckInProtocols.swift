@@ -12,7 +12,7 @@ import Foundation
 /// Распознанный рассказ и кто его распознал.
 nonisolated struct Transcript: Sendable, Equatable {
     let text: String
-    /// `apple` или `cloud:<модель>`.
+    /// `local:<модель>`, `apple` или `cloud:<модель>`.
     let transcriberID: String
     /// Почему не сработал основной распознаватель, если текст дал запасной.
     var fallbackReason: String?
@@ -23,7 +23,7 @@ nonisolated struct Transcript: Sendable, Equatable {
         self.fallbackReason = fallbackReason
     }
 
-    var isOnDevice: Bool { transcriberID == "apple" }
+    var isOnDevice: Bool { !transcriberID.hasPrefix("cloud") }
 }
 
 /// Голос → текст. Реализации: распознаватель Apple на устройстве и облачный

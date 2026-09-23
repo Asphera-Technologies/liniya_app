@@ -41,6 +41,8 @@ final class AppContainer {
     let memoryStore: MemoryStore
     /// «Итог дня»: запись, распознавание, разбор, сохранение.
     let checkInStore: CheckInStore
+    /// Модель распознавания русской речи на телефоне; скачивается по кнопке.
+    let localSpeechModel: LocalSpeechModel
 
     /// Local notifications for nudges.
     let nudgeScheduler: NudgeScheduler
@@ -148,11 +150,13 @@ final class AppContainer {
         )
         intelligenceStore = intelligence
 
-        // Итог дня. Облако — только с согласия человека в «Профиле»: тогда
-        // голос распознаёт xAI, а рассказ разбирает Grok. Иначе — телефон и
-        // правила. Облако не ответило — работу подхватывает телефон.
+        // Итог дня. Голос: модель на телефоне, если скачана; иначе облако,
+        // если человек разрешил; иначе системная диктовка. Рассказ разбирает
+        // Grok с согласия, иначе правила. Любой отказ подхватывает телефон.
         let checkInClient = AISettings.checkInConfiguration.map { LanguageModelClient(configuration: $0) }
         let speech = AISettings.speechConfiguration
+        let localModel = LocalSpeechModel()
+        localSpeechModel = localModel
         checkInStore = CheckInStore(
             recorder: VoiceRecorder(),
             planStore: plan,
@@ -161,11 +165,15 @@ final class AppContainer {
             isCloudAvailable: checkInClient != nil && speech != nil,
             loadProfile: { (try? await profile.load()) ?? .default },
             makeTranscriber: { useCloud, keyterms in
-                let onDevice = AppleSpeechTranscriber()
-                guard useCloud, let speech else { return onDevice }
+                let dictation = AppleSpeechTranscriber()
+                if localModel.isReady {
+                    // Скачанная модель главнее облака: голос не покидает телефон.
+                    return FallbackSpeechTranscriber(primary: LocalSpeechTranscriber(modelFolder: localModel.folder), fallback: dictation)
+                }
+                guard useCloud, let speech else { return dictation }
                 return FallbackSpeechTranscriber(
                     primary: CloudSpeechTranscriber(configuration: speech, keyterms: keyterms),
-                    fallback: onDevice
+                    fallback: dictation
                 )
             },
             makeExtractor: { useCloud in

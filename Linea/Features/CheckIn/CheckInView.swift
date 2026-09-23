@@ -11,6 +11,7 @@ import SwiftUI
 
 struct CheckInView: View {
     @Environment(CheckInStore.self) private var store
+    @Environment(LocalSpeechModel.self) private var localModel
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isEditorFocused: Bool
 
@@ -66,7 +67,7 @@ struct CheckInView: View {
         case .recording:
             recordingSection
         case .transcribing:
-            waiting("Распознаю рассказ…", detail: store.usesCloud ? "Обычно несколько секунд." : "На телефоне, без сети. Первый раз загружается модель распознавания.")
+            waiting("Распознаю рассказ…", detail: transcribingDetail)
         case .writing:
             writingSection
         case .analyzing:
@@ -116,13 +117,27 @@ struct CheckInView: View {
                 caption("Итог за этот день уже есть — новый рассказ его заменит.")
             }
             caption(privacyText)
+            if !localModel.isReady {
+                LocalModelRow()
+            }
         }
     }
 
     private var privacyText: String {
-        store.usesCloud
-            ? "Запись распознаёт и рассказ разбирает Grok. Голос после распознавания удаляется, на телефоне остаётся только текст."
-            : "Всё остаётся на телефоне: голос распознаёт iPhone, рассказ разбирают правила. Точнее — с Grok, включается в «Профиле»."
+        let parsing = store.usesCloud ? "Рассказ разбирает Grok." : "Рассказ разбирают правила на телефоне."
+        if localModel.isReady {
+            return "Голос распознаёт модель на телефоне — запись никуда не уходит. \(parsing)"
+        }
+        if store.usesCloud {
+            return "Запись распознаёт и рассказ разбирает Grok. Голос после распознавания удаляется, на телефоне остаётся только текст."
+        }
+        return "Голос распознаёт системная диктовка iPhone — точность невысокая. \(parsing) Точнее — с моделью на телефоне."
+    }
+
+    private var transcribingDetail: String {
+        if localModel.isReady { return "Модель на телефоне, без сети. Обычно меньше минуты." }
+        if store.usesCloud { return "Обычно несколько секунд." }
+        return "Системная диктовка, без сети. Первый раз iOS загружает свою модель распознавания."
     }
 
     private var recordingSection: some View {
