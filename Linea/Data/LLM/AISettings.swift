@@ -25,24 +25,12 @@ nonisolated enum AISettings {
         static let baseURL = "LINEA_AI_BASE_URL"
         static let model = "LINEA_AI_MODEL"
         static let path = "LINEA_AI_PATH"
-        static let checkInModel = "LINEA_AI_CHECKIN_MODEL"
-        static let speechModel = "LINEA_STT_MODEL"
-        static let speechPath = "LINEA_STT_PATH"
     }
 
     /// Значения по умолчанию — Grok от xAI. Меняются без пересборки кода.
     static let defaultBaseURL = "https://api.x.ai/v1"
     static let defaultModel = "grok-4.6"
     static let defaultPath = "chat/completions"
-
-    /// Разбор итога дня. grok-4.3 — проверено на живых рассказах: разбирает
-    /// так же точно, как grok-4.6, но за 8–12 секунд вместо 30. Модель без
-    /// рассуждения отвечает за полторы секунды, но путает «сделал с трудом»
-    /// с «частично» и придумывает факты для памяти.
-    static let defaultCheckInModel = "grok-4.3"
-    /// Распознавание речи xAI: русский поддерживается, $0.10 за час записи.
-    static let defaultSpeechModel = "grok-voice-transcribe-2.0"
-    static let defaultSpeechPath = "stt"
 
     /// Имя файла с секретами внутри бандла.
     private static let secretsResource = "AISecrets"
@@ -61,29 +49,6 @@ nonisolated enum AISettings {
             baseURL: url,
             path: value(PlistKey.path) ?? defaultPath,
             model: value(PlistKey.model) ?? defaultModel,
-            apiKey: key
-        )
-    }
-
-    /// Модель для разбора итога дня. Отвечает дольше чата, поэтому и
-    /// ждём её дольше; рассуждение модели тоже тратит выходные токены.
-    static var checkInConfiguration: LanguageModelConfiguration? {
-        guard var configuration = configuration else { return nil }
-        configuration.model = value(PlistKey.checkInModel) ?? defaultCheckInModel
-        configuration.timeout = 60
-        configuration.maxOutputTokens = 2_000
-        return configuration
-    }
-
-    /// Облачное распознавание речи на том же ключе. Путь `stt` — у xAI,
-    /// `audio/transcriptions` — у OpenAI-совместимых (Groq, OpenAI).
-    static var speechConfiguration: SpeechServiceConfiguration? {
-        let key = apiKey
-        guard !key.isEmpty, let url = URL(string: value(PlistKey.baseURL) ?? defaultBaseURL) else { return nil }
-        return SpeechServiceConfiguration(
-            baseURL: url,
-            path: value(PlistKey.speechPath) ?? defaultSpeechPath,
-            model: value(PlistKey.speechModel) ?? defaultSpeechModel,
             apiKey: key
         )
     }

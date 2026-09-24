@@ -150,38 +150,24 @@ final class AppContainer {
         )
         intelligenceStore = intelligence
 
-        // Итог дня. Голос: модель на телефоне, если скачана; иначе облако,
-        // если человек разрешил и есть сеть; иначе системная диктовка. Рассказ
-        // разбирает Grok с согласия, иначе правила. Любой отказ подхватывает телефон.
-        let checkInClient = AISettings.checkInConfiguration.map { LanguageModelClient(configuration: $0) }
-        let speech = AISettings.speechConfiguration
+        // Итог дня — целиком на телефоне, наружу не уходит ничего (ADR-021).
+        // Голос распознаёт модель GigaAM, если скачана, иначе системная
+        // диктовка; модель не справилась — тоже диктовка. Рассказ разбирают
+        // правила; языковая модель на телефоне, если появится, встанет в
+        // `primary` — экрану ничего менять не придётся.
         let localModel = LocalSpeechModel()
         localSpeechModel = localModel
-        // Живёт, пока жив стор итога дня: замыкание ниже держит его.
-        let network = NetworkMonitor()
         checkInStore = CheckInStore(
             recorder: VoiceRecorder(),
             planStore: plan,
             intelligence: intelligence,
             memory: memory,
-            isCloudAvailable: checkInClient != nil && speech != nil,
-            loadProfile: { (try? await profile.load()) ?? .default },
-            isOnline: { network.isOnline },
-            makeTranscriber: { useCloud, keyterms in
+            makeTranscriber: {
                 let dictation = AppleSpeechTranscriber()
-                if localModel.isReady {
-                    // Скачанная модель главнее облака: голос не покидает телефон.
-                    return FallbackSpeechTranscriber(primary: LocalSpeechTranscriber(modelFolder: localModel.folder), fallback: dictation)
-                }
-                guard useCloud, let speech else { return dictation }
-                return FallbackSpeechTranscriber(
-                    primary: CloudSpeechTranscriber(configuration: speech, keyterms: keyterms),
-                    fallback: dictation
-                )
+                guard localModel.isReady else { return dictation }
+                return FallbackSpeechTranscriber(primary: LocalSpeechTranscriber(modelFolder: localModel.folder), fallback: dictation)
             },
-            makeExtractor: { useCloud in
-                FallbackCheckInExtractor(primary: useCloud ? checkInClient.map { RemoteCheckInExtractor(client: $0) } : nil)
-            }
+            extractor: FallbackCheckInExtractor(primary: nil)
         )
 
         // Any change to tasks, goals, the profile or nutrition rebuilds the day.

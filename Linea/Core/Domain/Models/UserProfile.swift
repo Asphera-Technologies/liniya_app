@@ -31,10 +31,6 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
     /// Разрешил ли пользователь облачного ассистента. Пока выключен, наружу
     /// не уходит ничего: тексты собираются шаблонами на устройстве.
     var isCloudAssistantEnabled: Bool
-    /// Разрешил ли пользователь отдавать итог дня облачной модели: запись
-    /// распознаёт и текст разбирает Grok. Выключено — голос распознаёт
-    /// телефон, рассказ разбирают правила, наружу не уходит ничего.
-    var isCloudCheckInEnabled: Bool
 
     init(
         name: String? = nil,
@@ -46,8 +42,7 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
         sleepNeedSeconds: TimeInterval = 7.5 * 3600,
         onboardingCompleted: Bool = false,
         isCalendarEnabled: Bool = false,
-        isCloudAssistantEnabled: Bool = false,
-        isCloudCheckInEnabled: Bool = false
+        isCloudAssistantEnabled: Bool = false
     ) {
         self.name = name
         self.workdayStart = workdayStart
@@ -59,7 +54,6 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
         self.onboardingCompleted = onboardingCompleted
         self.isCalendarEnabled = isCalendarEnabled
         self.isCloudAssistantEnabled = isCloudAssistantEnabled
-        self.isCloudCheckInEnabled = isCloudCheckInEnabled
     }
 
     /// Decoded leniently: this profile is stored as a JSON document, and a
@@ -79,7 +73,6 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
         onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? fallback.onboardingCompleted
         isCalendarEnabled = try container.decodeIfPresent(Bool.self, forKey: .isCalendarEnabled) ?? fallback.isCalendarEnabled
         isCloudAssistantEnabled = try container.decodeIfPresent(Bool.self, forKey: .isCloudAssistantEnabled) ?? fallback.isCloudAssistantEnabled
-        isCloudCheckInEnabled = try container.decodeIfPresent(Bool.self, forKey: .isCloudCheckInEnabled) ?? fallback.isCloudCheckInEnabled
     }
 
     static let `default` = UserProfile()

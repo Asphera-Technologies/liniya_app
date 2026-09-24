@@ -5,11 +5,10 @@
 //  «Итог дня» от первого нажатия до сохранения:
 //    рассказ голосом или текстом → распознавание → разбор → проверка → сохранение.
 //
-//  Решает, кто распознаёт и кто разбирает: если человек разрешил облако в
-//  «Профиле» и есть сеть, это Grok, иначе телефон и правила. Облако не
-//  ответило — работу молча подхватывает телефон, а экран честно говорит,
-//  что случилось. Сохраняет через `SubmitCheckInUseCase`: сама ничего не
-//  решает о задачах и калибровке.
+//  Всё происходит на телефоне, наружу итог дня не уходит (ADR-021): голос
+//  распознаёт модель GigaAM, а пока она не скачана — системная диктовка;
+//  рассказ разбирают правила. Сохраняет через `SubmitCheckInUseCase`: сама
+//  ничего не решает о задачах и калибровке.
 //
 //  Запись, распознавание и разбор идут одной отменяемой задачей. Закрыли
 //  экран — задача отменяется, запись стирается, и поздний ответ прежнего
@@ -46,7 +45,7 @@ final class CheckInStore {
     private(set) var savedEntry: CheckInEntry?
     /// Что пошло не так и почему экран вернулся назад.
     private(set) var errorMessage: String?
-    /// Не ошибка, а пояснение: «облако не ответило, распознал телефон».
+    /// Не ошибка, а пояснение: «запись прервалась», «распознала диктовка».
     private(set) var notice: String?
     /// Кто распознал последнюю запись.
     private(set) var transcriberID: String?
@@ -54,8 +53,6 @@ final class CheckInStore {
     private(set) var day: Date
 
     let recorder: VoiceRecorder
-    /// Облачная модель настроена (ключ на месте).
-    let isCloudAvailable: Bool
 
     private var source: CheckInSource = .text
     /// Что сейчас идёт: запуск записи, распознавание или разбор.
@@ -67,10 +64,10 @@ final class CheckInStore {
     private let planStore: PlanStore
     private let intelligence: IntelligenceStore
     private let memory: MemoryStore
-    private let loadProfile: @MainActor () async -> UserProfile
-    private let isOnline: @MainActor () -> Bool
-    private let makeTranscriber: @MainActor (_ useCloud: Bool, _ keyterms: [String]) -> any SpeechTranscribing
-    private let makeExtractor: @MainActor (_ useCloud: Bool) -> any CheckInExtracting
+    /// Распознаватель выбирается к каждой записи: модель могли скачать или
+    /// удалить, пока экран был закрыт.
+    private let makeTranscriber: @MainActor () -> any SpeechTranscribing
+    private let extractor: any CheckInExtracting
     private let submitUseCase: SubmitCheckInUseCase
     private let timeProvider: @MainActor () -> TimeContext
 
@@ -81,11 +78,8 @@ final class CheckInStore {
         planStore: PlanStore,
         intelligence: IntelligenceStore,
         memory: MemoryStore,
-        isCloudAvailable: Bool,
-        loadProfile: @escaping @MainActor () async -> UserProfile,
-        isOnline: @escaping @MainActor () -> Bool = { true },
-        makeTranscriber: @escaping @MainActor (_ useCloud: Bool, _ keyterms: [String]) -> any SpeechTranscribing,
-        makeExtractor: @escaping @MainActor (_ useCloud: Bool) -> any CheckInExtracting,
+        makeTranscriber: @escaping @MainActor () -> any SpeechTranscribing,
+        extractor: any CheckInExtracting = FallbackCheckInExtractor(primary: nil),
         submitUseCase: SubmitCheckInUseCase = SubmitCheckInUseCase(),
         time: @escaping @MainActor () -> TimeContext = { .live }
     ) {
@@ -93,11 +87,8 @@ final class CheckInStore {
         self.planStore = planStore
         self.intelligence = intelligence
         self.memory = memory
-        self.isCloudAvailable = isCloudAvailable
-        self.loadProfile = loadProfile
-        self.isOnline = isOnline
         self.makeTranscriber = makeTranscriber
-        self.makeExtractor = makeExtractor
+        self.extractor = extractor
         self.submitUseCase = submitUseCase
         self.timeProvider = time
         self.day = time().today
@@ -107,10 +98,6 @@ final class CheckInStore {
     }
 
     var time: TimeContext { timeProvider() }
-
-    /// Уходит ли итог дня в облако — по согласию человека. Читается из
-    /// сохранённого профиля при каждом открытии экрана.
-    private(set) var usesCloud = false
 
     /// День, о котором рассказывают: до четырёх утра — ещё вчерашний.
     static func checkInDay(at time: TimeContext) -> Date {
@@ -125,11 +112,9 @@ final class CheckInStore {
     /// Открыть экран: новый рассказ или правка сохранённого.
     func begin() async {
         end()
-        let profile = await loadProfile()
         await memory.loadIfNeeded()
-        // Экран успели закрыть, пока читался профиль.
+        // Экран успели закрыть, пока читалась память.
         guard !Task.isCancelled else { return }
-        usesCloud = isCloudAvailable && profile.isCloudCheckInEnabled
         // Человек уже начал рассказывать — сохранённым текстом не перебиваем.
         guard phase == .start, text.isEmpty else { return }
         if let existing = memory.entry(for: day), let previous = existing.transcript, !previous.isEmpty {
@@ -236,7 +221,7 @@ final class CheckInStore {
     }
 
     private func runTranscription(_ audio: RecordedAudio) async {
-        let transcriber = makeTranscriber(cloudIsReachable(), keyterms())
+        let transcriber = makeTranscriber()
         let started = ContinuousClock.now
         let result: Result<Transcript, any Error>
         do {
@@ -265,17 +250,6 @@ final class CheckInStore {
         }
     }
 
-    /// Подсказки распознавателю: названия задач дня и латинские слова из них.
-    private func keyterms() -> [String] {
-        let titles = CheckInRequest.relevantTasks(from: planStore.tasks, day: day, time: time).map(\.title)
-        let latin = titles.flatMap { title in
-            RussianWords.tokens(title).map(\.original).filter { word in
-                word.count >= 3 && word.unicodeScalars.allSatisfy(\.isASCII)
-            }
-        }
-        return ["Linea"] + latin + titles
-    }
-
     // MARK: Текст
 
     func switchToText() {
@@ -284,7 +258,7 @@ final class CheckInStore {
         phase = .writing
     }
 
-    /// «Разобрать»: моделью, если разрешено и есть сеть, иначе правилами.
+    /// «Разобрать»: рассказ разбирают правила на телефоне.
     func analyze() {
         guard phase == .writing else { return }
         phase = .analyzing
@@ -302,21 +276,17 @@ final class CheckInStore {
         errorMessage = nil
 
         let time = self.time
-        let cloud = cloudIsReachable()
         let request = CheckInRequest(
             transcript: story,
             day: day,
             tasks: CheckInRequest.relevantTasks(from: planStore.tasks, day: day, time: time),
-            knownFacts: cloud ? memory.knownFacts() : [],
+            knownFacts: memory.knownFacts(),
             time: time
         )
         let started = ContinuousClock.now
         do {
-            let extraction = try await makeExtractor(cloud).extract(request)
+            let extraction = try await extractor.extract(request)
             guard !Task.isCancelled else { return }
-            if cloud && extraction.extractorID == RuleBasedCheckInExtractor().id {
-                addNotice("Модель не ответила — разобрал телефон, проверь внимательнее.")
-            }
             LineaLog.checkIn.notice("Разобрано: \(extraction.extractorID, privacy: .public) за \(Self.seconds(since: started), privacy: .public) с, задач \(extraction.outcomes.count, privacy: .public), фактов \(extraction.memory.count, privacy: .public)")
             draft = CheckInDraft.make(from: extraction, request: request, source: source)
             phase = .review
@@ -380,17 +350,6 @@ final class CheckInStore {
     private func perform(_ operation: @escaping @MainActor () async -> Void) {
         work?.cancel()
         work = Task { await operation() }
-    }
-
-    /// Облако разрешено и доступно. Без сети его не зовём: запрос не дойдёт,
-    /// а ждать отказа — лишние секунды на экране.
-    private func cloudIsReachable() -> Bool {
-        guard usesCloud else { return false }
-        guard isOnline() else {
-            addNotice("Нет сети — всё делает телефон, без Grok.")
-            return false
-        }
-        return true
     }
 
     private func addNotice(_ message: String) {

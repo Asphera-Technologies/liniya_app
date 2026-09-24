@@ -28,10 +28,7 @@ extension CheckInStore {
             planStore: .preview,
             intelligence: .preview,
             memory: .preview,
-            isCloudAvailable: false,
-            loadProfile: { .default },
-            makeTranscriber: { _, _ in AppleSpeechTranscriber() },
-            makeExtractor: { _ in FallbackCheckInExtractor(primary: nil) }
+            makeTranscriber: { AppleSpeechTranscriber() }
         )
     }
 }

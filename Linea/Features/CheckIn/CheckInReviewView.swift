@@ -13,7 +13,6 @@ struct CheckInReviewView: View {
     @Binding var draft: CheckInDraft
     /// Названия задач, которые уедут на завтра при включённом переносе.
     let moving: [String]
-    let analyzedBy: String
     let onEditStory: () -> Void
 
     var body: some View {
@@ -25,9 +24,6 @@ struct CheckInReviewView: View {
             ratingSection
             if !draft.memory.isEmpty { memorySection }
             moveSection
-            Text(analyzedBy)
-                .font(LineaFont.caption)
-                .foregroundStyle(LineaColor.textTertiary)
         }
     }
 

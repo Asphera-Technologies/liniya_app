@@ -4,7 +4,8 @@
 //
 //  Границы итога дня: кто превращает голос в текст, кто разбирает текст и
 //  где хранятся дневник и память. Ядро знает только эти протоколы — какой
-//  распознаватель и какая модель стоят за ними, решает `AppContainer`.
+//  распознаватель и какой разбор стоят за ними, решает `AppContainer`.
+//  Всё работает на телефоне: наружу итог дня не уходит (ADR-021).
 //
 
 import Foundation
@@ -12,7 +13,7 @@ import Foundation
 /// Распознанный рассказ и кто его распознал.
 nonisolated struct Transcript: Sendable, Equatable {
     let text: String
-    /// `local:<модель>`, `apple` или `cloud:<модель>`.
+    /// `local:<модель>` или `apple`.
     let transcriberID: String
     /// Почему не сработал основной распознаватель, если текст дал запасной.
     var fallbackReason: String?
@@ -22,14 +23,12 @@ nonisolated struct Transcript: Sendable, Equatable {
         self.transcriberID = transcriberID
         self.fallbackReason = fallbackReason
     }
-
-    var isOnDevice: Bool { !transcriberID.hasPrefix("cloud") }
 }
 
-/// Голос → текст. Реализации: распознаватель Apple на устройстве и облачный
-/// распознаватель (`Linea/Data/Speech`).
+/// Голос → текст. Реализации: модель GigaAM и системная диктовка — обе на
+/// телефоне (`Linea/Data/Speech`).
 nonisolated protocol SpeechTranscribing: Sendable {
-    /// Для журнала и экрана проверки: `apple`, `cloud:<модель>`.
+    /// Для журнала: `local:<модель>` или `apple`.
     var id: String { get }
     /// Распознаёт записанный файл целиком. `localeIdentifier` — `ru_RU`.
     func transcribe(audioAt url: URL, localeIdentifier: String) async throws -> Transcript

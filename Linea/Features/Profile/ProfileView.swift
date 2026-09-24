@@ -157,7 +157,7 @@ struct ProfileView: View {
 
     // MARK: Распознавание речи
 
-    /// Модель на телефоне: итог дня распознаётся без сети и без облака.
+    /// Модель на телефоне: итог дня распознаётся без сети, наружу не уходит ничего.
     private var speechSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel(text: "Распознавание речи", trailing: "итог дня")
@@ -173,8 +173,6 @@ struct ProfileView: View {
             LineaListRow(title: "Модель", value: AISettings.statusText, showsChevron: false)
             LineaHairline()
             assistantRow
-            LineaHairline()
-            checkInRow
             LineaHairline()
             LineaListRow(title: "Память", value: memoryText) { isShowingMemory = true }
             LineaHairline()
@@ -220,36 +218,6 @@ struct ProfileView: View {
                     .foregroundStyle(LineaColor.textSecondary)
                     .padding(.bottom, 8)
             }
-        }
-    }
-
-    /// Итог дня в облаке — отдельное согласие: здесь уходит голос и личный
-    /// рассказ, а не только вопрос. Выключено — всё разбирается на телефоне.
-    private var checkInRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle(isOn: Binding(
-                get: { profile.profile.isCloudCheckInEnabled },
-                set: { isOn in
-                    Task {
-                        var updated = profile.profile
-                        updated.isCloudCheckInEnabled = isOn
-                        await profile.save(updated)
-                    }
-                }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Итог дня через Grok")
-                        .font(LineaFont.rowTitle)
-                        .foregroundStyle(LineaColor.textPrimary)
-                    Text("Рассказ разбирает Grok — точнее правил на телефоне. Текст уходит в xAI; запись — только если модель распознавания не скачана.")
-                        .font(LineaFont.caption)
-                        .foregroundStyle(LineaColor.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .tint(LineaColor.ink)
-            .disabled(!AISettings.isConfigured)
-            .padding(.vertical, 10)
         }
     }
 

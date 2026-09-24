@@ -50,7 +50,7 @@ struct LocalModelRow: View {
             Button("Удалить", role: .destructive) { model.delete() }
             Button("Отмена", role: .cancel) {}
         } message: {
-            Text("Освободится \(GigaAMModel.sizeText). Голос будет распознавать системная диктовка или Grok, если он включён.")
+            Text("Освободится \(GigaAMModel.sizeText). Голос будет распознавать системная диктовка iPhone — она заметно менее точна.")
         }
     }
 

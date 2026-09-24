@@ -72,7 +72,7 @@ struct CheckInView: View {
         case .writing:
             writingSection
         case .analyzing:
-            waiting("Разбираю, что сделано…", detail: store.usesCloud ? "Модель читает рассказ — обычно 5–15 секунд." : nil)
+            waiting("Разбираю, что сделано…", detail: nil)
         case .review:
             reviewSection
         case .saving:
@@ -125,19 +125,14 @@ struct CheckInView: View {
     }
 
     private var privacyText: String {
-        let parsing = store.usesCloud ? "Рассказ разбирает Grok." : "Рассказ разбирают правила на телефоне."
         if localModel.isReady {
-            return "Голос распознаёт модель на телефоне — запись никуда не уходит. \(parsing)"
+            return "Всё происходит на телефоне: голос распознаёт модель, рассказ разбирают правила. Запись и текст никуда не уходят."
         }
-        if store.usesCloud {
-            return "Запись распознаёт и рассказ разбирает Grok. Голос после распознавания удаляется, на телефоне остаётся только текст."
-        }
-        return "Голос распознаёт системная диктовка iPhone — точность невысокая. \(parsing) Точнее — с моделью на телефоне."
+        return "Голос распознаёт системная диктовка iPhone — точность невысокая. Точнее — с моделью на телефоне. Запись и текст никуда не уходят."
     }
 
     private var transcribingDetail: String {
         if localModel.isReady { return "Модель на телефоне, без сети. Обычно меньше минуты." }
-        if store.usesCloud { return "Обычно несколько секунд." }
         return "Системная диктовка, без сети. Первый раз iOS загружает свою модель распознавания."
     }
 
@@ -220,7 +215,6 @@ struct CheckInView: View {
             CheckInReviewView(
                 draft: draftBinding(fallback: current),
                 moving: store.movingTitles,
-                analyzedBy: CheckInView.analyzerTitle(current.extractorID),
                 onEditStory: { store.editStory() }
             )
         }
@@ -328,10 +322,6 @@ struct CheckInView: View {
     private func clock(_ seconds: TimeInterval) -> String {
         let total = Int(seconds)
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-
-    nonisolated static func analyzerTitle(_ extractorID: String) -> String {
-        extractorID.hasPrefix("cloud") ? "Разобрал Grok" : "Разобрано на телефоне"
     }
 }
 
