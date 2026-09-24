@@ -157,7 +157,8 @@ nonisolated struct CheckInPrompt: Sendable {
     static func integer(_ value: Any?) -> Int? {
         switch value {
         case let number as Int: return number
-        case let number as Double where number.isFinite: return Int(number.rounded())
+        // `Int(exactly:)`: число больше `Int.max` из ответа модели — не повод падать.
+        case let number as Double: return Int(exactly: number.rounded())
         case let text as String:
             let digits = text.filter(\.isNumber)
             return digits.isEmpty ? nil : Int(digits)

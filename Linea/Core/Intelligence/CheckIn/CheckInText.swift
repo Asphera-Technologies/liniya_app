@@ -180,13 +180,21 @@ nonisolated enum CheckInText {
         "полторы": 1.5, "пару": 2, "пара": 2, "пары": 2,
     ]
 
+    /// Числа цифрами больше этого в рассказе о дне — не часы и не минуты.
+    static let maxSpokenNumber: Double = 10_000
+
     static func isUnit(_ word: String) -> Bool { hourWords.contains(word) || minuteWords.contains(word) }
 
     /// Число, начинающееся с этого слова: «3», «2.5», «три», «двадцать пять».
     static func number(at index: Int, in words: [String]) -> (value: Double, range: ClosedRange<Int>)? {
         guard words.indices.contains(index) else { return nil }
         let word = words[index]
-        if word.first?.isNumber == true, let value = Double(word) { return (value, index...index) }
+        if word.first?.isNumber == true {
+            // Номер телефона или год — не длительность, а огромное число
+            // переполнило бы минуты и уронило разбор.
+            guard let value = Double(word), value.isFinite, value < maxSpokenNumber else { return nil }
+            return (value, index...index)
+        }
         guard let value = numberWords[word] else { return nil }
         if value >= 20, value.truncatingRemainder(dividingBy: 10) == 0,
            words.indices.contains(index + 1), let unit = numberWords[words[index + 1]], unit < 10 {

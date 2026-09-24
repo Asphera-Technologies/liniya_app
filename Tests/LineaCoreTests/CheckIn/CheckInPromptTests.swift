@@ -61,6 +61,15 @@ struct CheckInPromptTests {
         #expect(extraction.outcomes.count == 3)
     }
 
+    @Test("Огромные числа в ответе модели отбрасываются, а не роняют приложение")
+    func hugeNumbers() throws {
+        let answer = #"{"done":[1e30, 2],"work_minutes":1e300,"extra":[{"title":"созвон","minutes":9.3e18}]}"#
+        let extraction = try prompt.decode(answer, extractorID: "cloud")
+        #expect(extraction.outcomes.map(\.taskID) == [WowFixture.taskB])
+        #expect(extraction.statedWorkMinutes == nil)
+        #expect(extraction.extra == [ExtraWork(title: "созвон", minutes: nil)])
+    }
+
     @Test("Не JSON — ошибка, а не пустой разбор")
     func malformed() {
         #expect(throws: CheckInPrompt.DecodingError.noJSON) { try prompt.decode("Извини, не понял.", extractorID: "cloud") }

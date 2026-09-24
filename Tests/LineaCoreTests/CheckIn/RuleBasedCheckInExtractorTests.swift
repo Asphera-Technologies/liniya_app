@@ -166,6 +166,13 @@ struct RuleBasedCheckInExtractorTests {
         #expect(really.outcomes.count == WowFixture.tasks.count)
     }
 
+    @Test("Номер телефона и длинные числа в рассказе не ломают разбор")
+    func hugeNumbers() {
+        let extraction = CheckInFixture.parse("Звонил по номеру 89161234567 минут пять. Работал 99999999999999999999 часов. Сделал презентацию КП.")
+        #expect(CheckInFixture.status(of: WowFixture.taskA, in: extraction) == .done)
+        #expect(extraction.statedWorkMinutes == nil)
+    }
+
     @Test("Какие задачи спрашивать вечером: день, закрытые сегодня, просроченные, немного без дня")
     func relevantTasks() {
         let time = WowFixture.evening

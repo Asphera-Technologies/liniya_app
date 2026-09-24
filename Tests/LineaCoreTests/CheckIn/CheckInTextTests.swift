@@ -71,6 +71,14 @@ struct CheckInTextTests {
         #expect(minutes("2.5 часа") == [150])
     }
 
+    @Test("Длинные числа — не длительность и не повод падать")
+    func hugeNumbers() {
+        #expect(CheckInText.durations(in: words("работал 99999999999999999999 часов")).isEmpty)
+        #expect(CheckInText.durations(in: words("минут 123456789012345678901234567890")).isEmpty)
+        #expect(CheckInText.durations(in: words("час 99999999999999999999")).map(\.minutes) == [60])
+        #expect(CheckInText.durations(in: words("звонил по номеру 89161234567 минут")).isEmpty)
+    }
+
     @Test("Время на часах — не длительность")
     func clockTime() {
         #expect(CheckInText.durations(in: words("созвон в два часа")).isEmpty)
