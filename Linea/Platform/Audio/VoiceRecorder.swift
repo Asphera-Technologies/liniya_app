@@ -7,7 +7,8 @@
 //  папке и удаляется сразу после распознавания: хранится текст, не голос.
 //
 //  Запись останавливается сама на пятой минуте и при звонке — тогда
-//  распознаётся то, что успели сказать.
+//  распознаётся то, что успели сказать. В фоне записи нет: свернули
+//  приложение — `CheckInStore` останавливает её так же, как кнопка «Стоп».
 //
 
 import Foundation
@@ -35,15 +36,25 @@ final class VoiceRecorder: NSObject {
         }
     }
 
+    /// Почему запись закончилась без кнопки «Стоп».
+    enum AutomaticStop: Equatable {
+        /// Истекли пять минут.
+        case timeLimit
+        /// Звонок, будильник, сбой записи.
+        case interrupted
+    }
+
     /// Пять минут — столько, сколько просил заказчик.
     static let maxDuration: TimeInterval = 5 * 60
 
     private(set) var isRecording = false
+    /// Сколько записано, не больше пяти минут.
     private(set) var elapsed: TimeInterval = 0
     /// Громкость 0…1 для индикатора.
     private(set) var level: Double = 0
-    /// Запись закончилась сама: истекли пять минут или прервал звонок.
-    private(set) var finishedAutomatically: RecordedAudio?
+
+    /// Запись закончилась сама — сюда приходит то, что успели сказать.
+    @ObservationIgnored var onAutomaticStop: (@MainActor (RecordedAudio, AutomaticStop) -> Void)?
 
     private var recorder: AVAudioRecorder?
     private var meterTask: Task<Void, Never>?
@@ -53,6 +64,8 @@ final class VoiceRecorder: NSObject {
 
     func start() async throws {
         guard await AVAudioApplication.requestRecordPermission() else { throw RecorderError.permissionDenied }
+        // Пока спрашивали разрешение, экран могли закрыть.
+        try Task.checkCancellation()
         cancel()
 
         let session = AVAudioSession.sharedInstance()
@@ -78,7 +91,6 @@ final class VoiceRecorder: NSObject {
         self.recorder = recorder
         elapsed = 0
         level = 0
-        finishedAutomatically = nil
         isRecording = true
         observeInterruptions()
         startMetering()
@@ -87,7 +99,8 @@ final class VoiceRecorder: NSObject {
     /// Остановить и отдать запись.
     func stop() -> RecordedAudio? {
         guard let recorder, isRecording else { return nil }
-        let seconds = Int(max(elapsed, recorder.currentTime).rounded())
+        let recorded = max(elapsed, recorder.currentTime.isFinite ? recorder.currentTime : 0)
+        let seconds = Int(min(recorded, Self.maxDuration).rounded())
         recorder.stop()
         let audio = RecordedAudio(url: recorder.url, seconds: seconds)
         tearDown()
@@ -121,11 +134,16 @@ final class VoiceRecorder: NSObject {
     }
 
     private func tick() {
-        guard let recorder else { return }
+        guard let recorder, isRecording else { return }
         recorder.updateMeters()
         let power = Double(recorder.averagePower(forChannel: 0))   // −160…0 дБ
-        level = min(max((power + 50) / 50, 0), 1)
-        elapsed = recorder.currentTime
+        level = power.isFinite ? min(max((power + 50) / 50, 0), 1) : 0
+        let time = recorder.currentTime
+        guard time.isFinite else { return }
+        elapsed = min(time, Self.maxDuration)
+        // Таймер самой записи может отстать от часов на экране — на
+        // тестовом iPhone они дошли до «5:01». Пять минут отсчитываем сами.
+        if time >= Self.maxDuration { finishAutomatically(.timeLimit) }
     }
 
     private func observeInterruptions() {
@@ -134,14 +152,21 @@ final class VoiceRecorder: NSObject {
         ) { [weak self] notification in
             let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
             guard raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .began else { return }
-            MainActor.assumeIsolated { self?.finishAutomatically() }
+            MainActor.assumeIsolated { self?.finishAutomatically(.interrupted) }
         }
     }
 
-    /// Звонок, будильник или пятая минута: сохранить то, что успели сказать.
-    private func finishAutomatically() {
-        guard isRecording else { return }
-        finishedAutomatically = stop()
+    /// Звонок, будильник или пятая минута: отдать то, что успели сказать.
+    private func finishAutomatically(_ reason: AutomaticStop) {
+        guard isRecording, let audio = stop() else { return }
+        onAutomaticStop?(audio, reason)
+    }
+
+    /// Система остановила запись сама. Ответ прежней записи, пришедший,
+    /// когда уже идёт новая, не в счёт: иначе он оборвал бы новую.
+    fileprivate func recorderDidStop(recordingAt url: URL) {
+        guard let recorder, recorder.url == url else { return }
+        finishAutomatically(elapsed >= Self.maxDuration - 1 ? .timeLimit : .interrupted)
     }
 
     private func tearDown() {
@@ -157,12 +182,15 @@ final class VoiceRecorder: NSObject {
 }
 
 extension VoiceRecorder: AVAudioRecorderDelegate {
-    /// Приходит и после нашего `stop()`, и когда истекли пять минут.
+    /// Приходит и после нашего `stop()` — тогда запись уже снята и ответ
+    /// ничего не делает, — и когда запись остановила система.
     nonisolated func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
-        Task { @MainActor in self.finishAutomatically() }
+        let url = recorder.url
+        Task { @MainActor in self.recorderDidStop(recordingAt: url) }
     }
 
     nonisolated func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: (any Error)?) {
-        Task { @MainActor in self.finishAutomatically() }
+        let url = recorder.url
+        Task { @MainActor in self.recorderDidStop(recordingAt: url) }
     }
 }

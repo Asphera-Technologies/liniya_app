@@ -40,20 +40,21 @@ struct CheckInView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(store.phase == .saved ? "Готово" : "Закрыть") { close() }
                         .tint(LineaColor.ink)
+                        .disabled(store.phase == .saving)
                 }
             }
         }
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(store.phase == .recording || store.phase == .saving)
         .task { await store.begin() }
-        .onChange(of: store.recorder.finishedAutomatically) { _, audio in
-            guard audio != nil else { return }
-            Task { await store.finishAutomaticRecording() }
-        }
+        // Лист уехал — экран сбрасывается. Не раньше: иначе во время анимации
+        // закрытия мелькнул бы начальный экран.
+        .onDisappear { store.end() }
     }
 
     private func close() {
-        if store.phase == .recording { store.cancelRecording() }
+        // Микрофон и начатая работа гаснут сразу, не дожидаясь анимации.
+        store.stopWork()
         dismiss()
     }
 
@@ -90,7 +91,7 @@ struct CheckInView: View {
 
             VStack(spacing: 14) {
                 Button {
-                    Task { await store.startRecording() }
+                    store.startRecording()
                 } label: {
                     Image(systemName: "mic.fill")
                         .font(.system(size: 34, weight: .medium))
@@ -151,7 +152,7 @@ struct CheckInView: View {
                 .frame(height: 40)
 
             Button {
-                Task { await store.stopRecording() }
+                store.stopRecording()
             } label: {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 30, weight: .medium))
@@ -206,7 +207,7 @@ struct CheckInView: View {
             caption("Можно диктовать с клавиатуры — кнопка микрофона внизу.")
             Button("Рассказать голосом") {
                 isEditorFocused = false
-                Task { await store.startRecording() }
+                store.startRecording()
             }
             .font(LineaFont.control)
             .tint(LineaColor.textSecondary)
@@ -215,15 +216,27 @@ struct CheckInView: View {
 
     @ViewBuilder
     private var reviewSection: some View {
-        @Bindable var store = store
-        if let draft = Binding($store.draft) {
+        if let current = store.draft {
             CheckInReviewView(
-                draft: draft,
+                draft: draftBinding(fallback: current),
                 moving: store.movingTitles,
-                analyzedBy: store.draft.map(\.extractorID).map(CheckInView.analyzerTitle) ?? "",
+                analyzedBy: CheckInView.analyzerTitle(current.extractorID),
                 onEditStory: { store.editStory() }
             )
         }
+    }
+
+    /// Не `Binding($store.draft)`: такая привязка падает, если черновик
+    /// обнулился, пока экран проверки ещё на экране, — так вылетало повторное
+    /// открытие итога дня. Здесь до ухода экрана он видит последний черновик.
+    private func draftBinding(fallback: CheckInDraft) -> Binding<CheckInDraft> {
+        Binding(
+            get: { store.draft ?? fallback },
+            set: { value in
+                guard store.draft != nil else { return }
+                store.draft = value
+            }
+        )
     }
 
     private var savedSection: some View {
@@ -249,11 +262,11 @@ struct CheckInView: View {
         case .writing:
             primaryButton("Разобрать", disabled: store.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
                 isEditorFocused = false
-                Task { await store.analyze() }
+                store.analyze()
             }
         case .review:
             primaryButton("Сохранить итог", disabled: false) {
-                Task { await store.submit() }
+                store.save()
             }
         default:
             EmptyView()

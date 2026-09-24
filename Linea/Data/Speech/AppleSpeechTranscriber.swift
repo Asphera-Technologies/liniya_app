@@ -195,6 +195,8 @@ nonisolated struct FallbackSpeechTranscriber: SpeechTranscribing {
             do {
                 return try await primary.transcribe(audioAt: url, localeIdentifier: localeIdentifier)
             } catch {
+                // Экран закрыли — это не отказ распознавателя, диктовку не запускаем.
+                try Task.checkCancellation()
                 LineaLog.checkIn.error("Распознавание \(primary.id, privacy: .public) не удалось, пробую диктовку: \(error.localizedDescription, privacy: .public)")
                 var transcript = try await fallback.transcribe(audioAt: url, localeIdentifier: localeIdentifier)
                 transcript.fallbackReason = error.localizedDescription

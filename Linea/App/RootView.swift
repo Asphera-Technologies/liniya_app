@@ -13,6 +13,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppState.self) private var appState
     @Environment(IntelligenceStore.self) private var intelligence
+    @Environment(CheckInStore.self) private var checkIn
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection: AppTab = .today
 
@@ -47,9 +48,18 @@ struct RootView: View {
         .tint(LineaColor.ink)
         // Coming back to the app is the moment to re-check the day: iOS runs
         // no code of ours at 14:30, so this is when a slipping plan is noticed.
+        // The check-in never records in the background: leaving the app stops
+        // the recording, and it is transcribed once the user is back.
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
-            Task { await intelligence.refresh(reason: .appeared) }
+            switch phase {
+            case .active:
+                checkIn.appBecameActive()
+                Task { await intelligence.refresh(reason: .appeared) }
+            case .background:
+                checkIn.appMovedToBackground()
+            default:
+                break
+            }
         }
         .sheet(isPresented: $appState.isPresentingAI) {
             LineaAIView()

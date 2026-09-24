@@ -24,10 +24,20 @@ nonisolated struct LocalSpeechTranscriber: SpeechTranscribing {
 
     func transcribe(audioAt url: URL, localeIdentifier: String) async throws -> Transcript {
         let folder = modelFolder
-        // Распознавание — работа процессора на десятки секунд: не на главном потоке.
-        let text = try await Task.detached(priority: .userInitiated) {
-            try GigaAMRecognizer.transcribe(fileAt: url, modelFolder: folder)
-        }.value
+        let cancellation = CancellationFlag()
+        // Распознавание — работа процессора на десятки секунд: своя очередь,
+        // не главный поток. Экран закрыли — работа бросается на ближайшем куске.
+        let text = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, any Error>) in
+                GigaAMRecognizer.queue.async {
+                    continuation.resume(with: Result {
+                        try GigaAMRecognizer.transcribe(fileAt: url, modelFolder: folder, cancellation: cancellation)
+                    })
+                }
+            }
+        } onCancel: {
+            cancellation.raise()
+        }
         guard !text.isEmpty else { throw OnDeviceSpeechError.noSpeech }
         return Transcript(text: text, transcriberID: id)
     }
@@ -39,8 +49,12 @@ nonisolated enum GigaAMRecognizer {
     static let threads = 2
     /// Самый длинный кусок для модели: GigaAM надёжно берёт до 25 секунд.
     static let chunkLimit = 20 * sampleRate
+    /// Записи распознаются по одной: модель занимает в памяти около 300 МБ,
+    /// и вторая такая же рядом — прямой путь к тому, что iOS закроет приложение.
+    static let queue = DispatchQueue(label: "linea.speech.gigaam", qos: .userInitiated)
 
-    static func transcribe(fileAt url: URL, modelFolder: URL) throws -> String {
+    static func transcribe(fileAt url: URL, modelFolder: URL, cancellation: CancellationFlag) throws -> String {
+        try cancellation.check()
         let samples = try AudioSamples.load(url)
         guard !samples.isEmpty else { return "" }
         for file in GigaAMModel.files {
@@ -49,19 +63,21 @@ nonisolated enum GigaAMRecognizer {
             guard FileManager.default.fileExists(atPath: path) else { throw OnDeviceSpeechError.unavailable }
         }
 
-        return autoreleasepool {
+        return try autoreleasepool {
             let ranges = speechRanges(in: samples, detector: makeDetector(folder: modelFolder))
             // Фразы склеиваются в куски до 20 секунд вместе с паузами: модели нужен
             // контекст, иначе на стыках теряются точки и появляются лишние слова.
             let chunks = SpeechChunker.chunks(speech: ranges, total: samples.count, limit: chunkLimit, padding: sampleRate / 5)
+            try cancellation.check()
             let recognizer = makeRecognizer(folder: modelFolder)
-            return chunks
-                .map { chunk in
-                    recognizer.decode(samples: Array(samples[chunk]), sampleRate: sampleRate).text
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
+            var parts: [String] = []
+            for chunk in chunks {
+                try cancellation.check()
+                let text = recognizer.decode(samples: Array(samples[chunk]), sampleRate: sampleRate).text
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty { parts.append(text) }
+            }
+            return parts.joined(separator: " ")
         }
     }
 
@@ -134,5 +150,20 @@ nonisolated enum GigaAMRecognizer {
             var config = sherpaOnnxVadModelConfig(sileroVad: silero, sampleRate: Int32(sampleRate), numThreads: 1, provider: "cpu")
             return SherpaOnnxVoiceActivityDetectorWrapper(config: &config, buffer_size_in_seconds: 120)
         }
+    }
+}
+
+/// Отмена для кода вне Swift-задач: задачу отменяют на главном потоке, а
+/// очередь распознавания смотрит на флаг между кусками записи.
+nonisolated final class CancellationFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isRaised = false
+
+    func raise() {
+        lock.withLock { isRaised = true }
+    }
+
+    func check() throws {
+        if lock.withLock({ isRaised }) { throw CancellationError() }
     }
 }

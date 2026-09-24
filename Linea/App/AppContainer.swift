@@ -151,12 +151,14 @@ final class AppContainer {
         intelligenceStore = intelligence
 
         // Итог дня. Голос: модель на телефоне, если скачана; иначе облако,
-        // если человек разрешил; иначе системная диктовка. Рассказ разбирает
-        // Grok с согласия, иначе правила. Любой отказ подхватывает телефон.
+        // если человек разрешил и есть сеть; иначе системная диктовка. Рассказ
+        // разбирает Grok с согласия, иначе правила. Любой отказ подхватывает телефон.
         let checkInClient = AISettings.checkInConfiguration.map { LanguageModelClient(configuration: $0) }
         let speech = AISettings.speechConfiguration
         let localModel = LocalSpeechModel()
         localSpeechModel = localModel
+        // Живёт, пока жив стор итога дня: замыкание ниже держит его.
+        let network = NetworkMonitor()
         checkInStore = CheckInStore(
             recorder: VoiceRecorder(),
             planStore: plan,
@@ -164,6 +166,7 @@ final class AppContainer {
             memory: memory,
             isCloudAvailable: checkInClient != nil && speech != nil,
             loadProfile: { (try? await profile.load()) ?? .default },
+            isOnline: { network.isOnline },
             makeTranscriber: { useCloud, keyterms in
                 let dictation = AppleSpeechTranscriber()
                 if localModel.isReady {
