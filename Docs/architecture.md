@@ -18,7 +18,7 @@ Linea/
 │   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,FeedbackEngine,LLM,CheckIn,Memory}
 │   └── Connectors/   Foundation-only parts of connectors (Nutrition, Calendar)
 ├── Data/         Apple frameworks allowed: SwiftData entities and Local* repositories,
-│                 HealthKit reader, EventKit provider, LLM and speech clients (xAI, Apple Speech)
+│                 HealthKit reader, EventKit provider, LLM client (chat), on-device speech (GigaAM, Apple)
 ├── Platform/     iOS adapters: notifications (nudges), voice recording, diagnostics (OSLog)
 ├── Features/     SwiftUI screens and view-facing stores (Today, Plan, Health, Nutrition,
 │                 Profile, AI, CheckIn, Memory)
@@ -90,18 +90,20 @@ Today / notifications → UserFeedback → FeedbackEngine → Calibration
 ### Evening check-in and memory
 
 ```text
-Голос (VoiceRecorder) → SpeechTranscribing (xAI с согласия / iPhone)
-Текст рассказа        → CheckInExtracting (Grok с согласия / правила)
+Голос (VoiceRecorder) → SpeechTranscribing (GigaAM на телефоне / диктовка iPhone)
+Текст рассказа        → CheckInExtracting (правила на телефоне)
         ↓  CheckInExtraction → CheckInExtractionValidator
 CheckInDraft — экран «Проверь», галочки правит человек
         ↓  SubmitCheckInUseCase
 задачи (закрыть, перенести) · дневник CheckInEntry · память UserMemory
 DayRecord.feedback += dayReport, dayRating → FeedbackEngine (ёмкость дня)
 
-Память + дневник → UserContextBuilder (≤ 900 токенов) → чат, разбор итога
+Память + дневник → UserContextBuilder (≤ 900 токенов) → чат
 ```
 
-The model reads, the code decides, the user confirms (ADR-016). Memory
+The check-in never leaves the phone (ADR-021): GigaAM transcribes, rules parse,
+the user confirms (ADR-016). A language model can take the parsing seam
+(`FallbackCheckInExtractor.primary`) without touching the screens. Memory
 follows OpenClaw's layout — curated facts, a daily journal, search with
 recency decay, consolidation — but lives on the device (ADR-018). Details:
 `Docs/check-in.md`.

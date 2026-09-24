@@ -476,9 +476,11 @@ AI-мэтчинг задача↔цель (в v1 — явная связь + п�
 
 ## 13. Итог дня и ядро контекста
 
-Подробно для людей — `Docs/check-in.md`; решения — ADR-016…019.
+Подробно для людей — `Docs/check-in.md`; решения — ADR-016…021. Итог дня
+целиком на телефоне (ADR-021): распознаёт GigaAM или диктовка iPhone,
+разбирают правила.
 
-**Поток.** `SpeechTranscribing` (xAI или iPhone) → `CheckInRequest` (рассказ,
+**Поток.** `SpeechTranscribing` (GigaAM или диктовка iPhone) → `CheckInRequest` (рассказ,
 `relevantTasks`: задачи дня, закрытые в этот день, просроченные, до 10 без
 дня, всего ≤ 30; известные факты) → `CheckInExtracting` →
 `CheckInExtractionValidator` → `CheckInDraft` (правит человек) →
