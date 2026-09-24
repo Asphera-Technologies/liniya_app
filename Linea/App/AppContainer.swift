@@ -41,8 +41,6 @@ final class AppContainer {
     let memoryStore: MemoryStore
     /// «Итог дня»: запись, распознавание, разбор, сохранение.
     let checkInStore: CheckInStore
-    /// Модель распознавания русской речи на телефоне; скачивается по кнопке.
-    let localSpeechModel: LocalSpeechModel
 
     /// Local notifications for nudges.
     let nudgeScheduler: NudgeScheduler
@@ -151,24 +149,26 @@ final class AppContainer {
         intelligenceStore = intelligence
 
         // Итог дня — целиком на телефоне, наружу не уходит ничего (ADR-021).
-        // Голос распознаёт модель GigaAM, если скачана, иначе системная
-        // диктовка; модель не справилась — тоже диктовка. Рассказ разбирают
+        // Голос распознаёт модель GigaAM, встроенная в приложение (ADR-022);
+        // модель не справилась — системная диктовка. Рассказ разбирают
         // правила; языковая модель на телефоне, если появится, встанет в
         // `primary` — экрану ничего менять не придётся.
-        let localModel = LocalSpeechModel()
-        localSpeechModel = localModel
+        let speechModel = GigaAMModel.bundledFolder
         checkInStore = CheckInStore(
             recorder: VoiceRecorder(),
             planStore: plan,
             intelligence: intelligence,
             memory: memory,
+            hasSpeechModel: speechModel != nil,
             makeTranscriber: {
                 let dictation = AppleSpeechTranscriber()
-                guard localModel.isReady else { return dictation }
-                return FallbackSpeechTranscriber(primary: LocalSpeechTranscriber(modelFolder: localModel.folder), fallback: dictation)
+                guard let speechModel else { return dictation }
+                return FallbackSpeechTranscriber(primary: LocalSpeechTranscriber(modelFolder: speechModel), fallback: dictation)
             },
             extractor: FallbackCheckInExtractor(primary: nil)
         )
+        // Скачанная раньше по кнопке копия модели больше не нужна.
+        Task.detached(priority: .background) { GigaAMModel.removeLegacyDownload() }
 
         // Any change to tasks, goals, the profile or nutrition rebuilds the day.
         let store = intelligence

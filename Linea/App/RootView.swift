@@ -82,5 +82,4 @@ struct RootView: View {
         .environment(IntelligenceStore.preview)
         .environment(MemoryStore.preview)
         .environment(CheckInStore.preview)
-        .environment(LocalSpeechModel())
 }

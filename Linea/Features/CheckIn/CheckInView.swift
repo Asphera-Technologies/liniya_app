@@ -11,7 +11,6 @@ import SwiftUI
 
 struct CheckInView: View {
     @Environment(CheckInStore.self) private var store
-    @Environment(LocalSpeechModel.self) private var localModel
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isEditorFocused: Bool
 
@@ -118,21 +117,19 @@ struct CheckInView: View {
                 caption("Итог за этот день уже есть — новый рассказ его заменит.")
             }
             caption(privacyText)
-            if !localModel.isReady {
-                LocalModelRow()
-            }
         }
     }
 
     private var privacyText: String {
-        if localModel.isReady {
+        if store.hasSpeechModel {
             return "Всё происходит на телефоне: голос распознаёт модель, рассказ разбирают правила. Запись и текст никуда не уходят."
         }
-        return "Голос распознаёт системная диктовка iPhone — точность невысокая. Точнее — с моделью на телефоне. Запись и текст никуда не уходят."
+        // Только в сборке без фазы «Speech model» — у людей модель всегда есть.
+        return "В этой сборке нет модели распознавания — голос распознаёт системная диктовка iPhone, точность невысокая. Запись и текст никуда не уходят."
     }
 
     private var transcribingDetail: String {
-        if localModel.isReady { return "Модель на телефоне, без сети. Обычно меньше минуты." }
+        if store.hasSpeechModel { return "Модель на телефоне, без сети. Обычно меньше минуты." }
         return "Системная диктовка, без сети. Первый раз iOS загружает свою модель распознавания."
     }
 

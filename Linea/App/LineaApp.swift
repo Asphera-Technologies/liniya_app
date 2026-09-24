@@ -50,7 +50,6 @@ struct LineaApp: App {
                 .environment(container.intelligenceStore)
                 .environment(container.memoryStore)
                 .environment(container.checkInStore)
-                .environment(container.localSpeechModel)
                 .tint(LineaColor.ink)
                 .onAppear {
                     appDelegate.intelligence = container.intelligenceStore

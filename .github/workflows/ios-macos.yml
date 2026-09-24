@@ -52,6 +52,15 @@ jobs:
       - name: Core tests on the Apple toolchain
         run: swift test
 
+      # The speech model (~233 MB) is not in git: the "Speech model" build phase
+      # downloads it into ~/Library/Caches/Linea and copies it into the app.
+      # Caching that folder saves the download on every run.
+      - name: Speech model cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Linea
+          key: speech-model-${{ hashFiles('Scripts/fetch-speech-model.sh') }}
+
       # The build never fails this step: the next one prints a readable list of
       # errors first and only then fails the job. Otherwise the useful lines are
       # buried in ~900 lines of xcodebuild output.

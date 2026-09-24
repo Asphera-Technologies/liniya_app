@@ -17,6 +17,7 @@ struct ProfileView: View {
     @Environment(HealthKitManager.self) private var healthKit
     @Environment(IntelligenceStore.self) private var intelligence
     @Environment(MemoryStore.self) private var memory
+    @Environment(CheckInStore.self) private var checkIn
 
     /// Used only to ask for calendar access from this screen. Authorization is
     /// app-wide, so this may be a different instance from the connector's.
@@ -157,11 +158,23 @@ struct ProfileView: View {
 
     // MARK: Распознавание речи
 
-    /// Модель на телефоне: итог дня распознаётся без сети, наружу не уходит ничего.
+    /// Модель в приложении: итог дня распознаётся без сети, наружу не уходит
+    /// ничего. Скачивать и удалять нечего — она приходит вместе с приложением.
     private var speechSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel(text: "Распознавание речи", trailing: "итог дня")
-            LocalModelRow()
+            LineaListRow(
+                title: "Модель на телефоне",
+                value: checkIn.hasSpeechModel ? GigaAMModel.title : "Системная диктовка",
+                showsChevron: false
+            )
+            Text(checkIn.hasSpeechModel
+                 ? "Русская речь распознаётся прямо на телефоне, со знаками препинания. Голос никуда не уходит."
+                 : "В этой сборке нет модели распознавания — голос распознаёт системная диктовка iPhone.")
+                .font(LineaFont.caption)
+                .foregroundStyle(LineaColor.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 8)
         }
     }
 

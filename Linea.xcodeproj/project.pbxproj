@@ -63,6 +63,7 @@
 				9F4BBA3730418A24009126E3 /* Sources */,
 				9F4BBA3830418A24009126E3 /* Frameworks */,
 				9F4BBA3930418A24009126E3 /* Resources */,
+				D448CD04BD50BB6D75FF3E64 /* Speech model */,
 			);
 			buildRules = (
 			);
@@ -125,6 +126,33 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		D448CD04BD50BB6D75FF3E64 /* Speech model */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Scripts/fetch-speech-model.sh",
+			);
+			name = "Speech model";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GigaAM/tokens.txt",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GigaAM/decoder.onnx",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GigaAM/joiner.onnx",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GigaAM/silero_vad.onnx",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GigaAM/encoder.int8.onnx",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/Scripts/fetch-speech-model.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		9F4BBA3730418A24009126E3 /* Sources */ = {
@@ -269,6 +297,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WYML7G6KQP;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Linea reads your calendar to see when you are busy and plan the day around it.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Linea uses your Apple Health data to provide personalized health insights.";
@@ -306,6 +335,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WYML7G6KQP;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Linea reads your calendar to see when you are busy and plan the day around it.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Linea uses your Apple Health data to provide personalized health insights.";

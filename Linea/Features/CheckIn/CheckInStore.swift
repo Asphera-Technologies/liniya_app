@@ -6,8 +6,7 @@
 //    рассказ голосом или текстом → распознавание → разбор → проверка → сохранение.
 //
 //  Всё происходит на телефоне, наружу итог дня не уходит (ADR-021): голос
-//  распознаёт модель GigaAM, а пока она не скачана — системная диктовка;
-//  рассказ разбирают правила. Сохраняет через `SubmitCheckInUseCase`: сама
+//  распознаёт встроенная модель GigaAM (ADR-022), рассказ разбирают правила. Сохраняет через `SubmitCheckInUseCase`: сама
 //  ничего не решает о задачах и калибровке.
 //
 //  Запись, распознавание и разбор идут одной отменяемой задачей. Закрыли
@@ -53,6 +52,8 @@ final class CheckInStore {
     private(set) var day: Date
 
     let recorder: VoiceRecorder
+    /// Модель GigaAM в этой сборке есть. Без неё голос распознаёт диктовка.
+    let hasSpeechModel: Bool
 
     private var source: CheckInSource = .text
     /// Что сейчас идёт: запуск записи, распознавание или разбор.
@@ -64,8 +65,6 @@ final class CheckInStore {
     private let planStore: PlanStore
     private let intelligence: IntelligenceStore
     private let memory: MemoryStore
-    /// Распознаватель выбирается к каждой записи: модель могли скачать или
-    /// удалить, пока экран был закрыт.
     private let makeTranscriber: @MainActor () -> any SpeechTranscribing
     private let extractor: any CheckInExtracting
     private let submitUseCase: SubmitCheckInUseCase
@@ -78,6 +77,7 @@ final class CheckInStore {
         planStore: PlanStore,
         intelligence: IntelligenceStore,
         memory: MemoryStore,
+        hasSpeechModel: Bool = false,
         makeTranscriber: @escaping @MainActor () -> any SpeechTranscribing,
         extractor: any CheckInExtracting = FallbackCheckInExtractor(primary: nil),
         submitUseCase: SubmitCheckInUseCase = SubmitCheckInUseCase(),
@@ -87,6 +87,7 @@ final class CheckInStore {
         self.planStore = planStore
         self.intelligence = intelligence
         self.memory = memory
+        self.hasSpeechModel = hasSpeechModel
         self.makeTranscriber = makeTranscriber
         self.extractor = extractor
         self.submitUseCase = submitUseCase

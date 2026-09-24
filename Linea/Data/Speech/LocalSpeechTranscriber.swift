@@ -57,8 +57,8 @@ nonisolated enum GigaAMRecognizer {
         try cancellation.check()
         let samples = try AudioSamples.load(url)
         guard !samples.isEmpty else { return "" }
-        for file in GigaAMModel.files {
-            let path = modelFolder.appendingPathComponent(file.name).path(percentEncoded: false)
+        for name in GigaAMModel.fileNames {
+            let path = modelFolder.appendingPathComponent(name).path(percentEncoded: false)
             // Обёртка sherpa-onnx падает, если модель не открылась, — проверяем заранее.
             guard FileManager.default.fileExists(atPath: path) else { throw OnDeviceSpeechError.unavailable }
         }
