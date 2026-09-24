@@ -28,6 +28,11 @@ struct GoalEditorView: View {
     @State private var hasDueDate: Bool
     @State private var dueDate: Date
     @State private var isActive: Bool
+    /// Chosen once per editor: a second «Готово» updates the same goal
+    /// instead of creating a duplicate.
+    @State private var newGoalID = UUID()
+    /// «Готово» and «Удалить» fire once; a double tap used to create two goals.
+    @State private var isSaving = false
     @FocusState private var titleFocused: Bool
 
     init(existing: LineaGoal? = nil) {
@@ -79,6 +84,8 @@ struct GoalEditorView: View {
 
                     if isEditing {
                         Button(role: .destructive) {
+                            guard !isSaving else { return }
+                            isSaving = true
                             Task {
                                 if let existing { await plan.deleteGoal(existing) }
                                 dismiss()
@@ -105,7 +112,7 @@ struct GoalEditorView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Готово") { save() }
                         .tint(LineaColor.ink)
-                        .disabled(trimmedTitle.isEmpty)
+                        .disabled(trimmedTitle.isEmpty || isSaving)
                 }
             }
         }
@@ -201,8 +208,10 @@ struct GoalEditorView: View {
     }
 
     private func save() {
+        guard !isSaving else { return }
+        isSaving = true
         let result = LineaGoal(
-            id: existing?.id ?? UUID(),
+            id: existing?.id ?? newGoalID,
             title: trimmedTitle,
             progress: isCompleted ? 1 : progress,
             isCompleted: isCompleted,

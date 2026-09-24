@@ -37,6 +37,11 @@ struct TaskEditorView: View {
     @State private var hasStart: Bool
     @State private var start: Date
     @State private var goalID: UUID?
+    /// Chosen once per editor: a second «Готово» updates the same task
+    /// instead of creating a duplicate.
+    @State private var newTaskID = UUID()
+    /// «Готово» and «Удалить» fire once; a double tap used to create two tasks.
+    @State private var isSaving = false
     @FocusState private var titleFocused: Bool
     @Namespace private var prioritySegments
     @Namespace private var demandSegments
@@ -91,7 +96,7 @@ struct TaskEditorView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Готово") { save() }
                         .tint(LineaColor.ink)
-                        .disabled(trimmedTitle.isEmpty)
+                        .disabled(trimmedTitle.isEmpty || isSaving)
                 }
             }
         }
@@ -269,6 +274,8 @@ struct TaskEditorView: View {
 
     private var deleteButton: some View {
         Button(role: .destructive) {
+            guard !isSaving else { return }
+            isSaving = true
             Task {
                 if let existing { await plan.deleteTask(existing) }
                 dismiss()
@@ -323,9 +330,11 @@ struct TaskEditorView: View {
     }
 
     private func save() {
+        guard !isSaving else { return }
+        isSaving = true
         let day = hasDate ? Calendar.current.startOfDay(for: date) : nil
         let result = LineaTask(
-            id: existing?.id ?? UUID(),
+            id: existing?.id ?? newTaskID,
             title: trimmedTitle,
             notes: existing?.notes,
             date: day,
