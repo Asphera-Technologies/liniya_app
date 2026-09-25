@@ -103,7 +103,10 @@ DayRecord.feedback += dayReport, dayRating → FeedbackEngine (ёмкость д
 
 The check-in never leaves the phone (ADR-021): GigaAM transcribes, rules parse,
 the user confirms (ADR-016). A language model can take the parsing seam
-(`FallbackCheckInExtractor.primary`) without touching the screens. Memory
+(`FallbackCheckInExtractor.primary`) without touching the screens. The GigaAM
+model ships inside the app: the `Speech model` build phase runs
+`Scripts/fetch-speech-model.sh`, which puts the pinned, SHA-256-checked files
+into `Linea.app/GigaAM` (ADR-022). Memory
 follows OpenClaw's layout — curated facts, a daily journal, search with
 recency decay, consolidation — but lives on the device (ADR-018). Details:
 `Docs/check-in.md`.

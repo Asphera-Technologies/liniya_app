@@ -37,6 +37,11 @@
 - `HealthKitManager.swift` stays at the repository root (explicitly referenced in project.pbxproj).
   Extend it with extension files under `Linea/Data/HealthKit`; do not move it without Xcode.
 - Xcode uses a synchronized root group for `Linea/`: any file under `Linea/` is compiled into the app.
+- The GigaAM speech model (~233 MB) is not in git (GitHub rejects files over 100 MB). The `Speech model`
+  build phase runs `Scripts/fetch-speech-model.sh`: pinned files are downloaded once per machine into
+  `~/Library/Caches/Linea`, checked by SHA-256 and copied into `Linea.app/GigaAM`. The first build on a
+  machine needs internet; the Linea target has `ENABLE_USER_SCRIPT_SANDBOXING = NO` for that cache.
+  To change the model, change `REV`, sizes and hashes in the script (ADR-022).
   Therefore tests live in `Tests/` at the repository root, never inside `Linea/`.
 - Deployment target: iOS 26.5. Xcode 26.6 / Swift 6.3.
 
