@@ -59,4 +59,20 @@ nonisolated enum RussianText {
     /// Task titles are always quoted, so a title with its own punctuation
     /// cannot be mistaken for Linea's own words.
     static func quoted(_ title: String) -> String { "«\(title)»" }
+
+    /// Календарный день недели (1 — воскресенье … 7 — суббота) → «Пн».
+    static let weekdaysShort = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
+    static let monthsShort = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+
+    /// «Пт, 3 окт»; день другого года — «Пт, 3 янв 2027».
+    static func shortDay(_ date: Date, time: TimeContext) -> String {
+        let parts = time.calendar.dateComponents([.weekday, .day, .month, .year], from: date)
+        let weekday = weekdaysShort[((parts.weekday ?? 1) - 1 + 7) % 7]
+        let month = monthsShort[((parts.month ?? 1) - 1 + 12) % 12]
+        var text = "\(weekday), \(parts.day ?? 1) \(month)"
+        if let year = parts.year, year != time.calendar.component(.year, from: time.now) {
+            text += " \(year)"
+        }
+        return text
+    }
 }
