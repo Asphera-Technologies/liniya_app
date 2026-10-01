@@ -60,10 +60,7 @@ struct PlanView: View {
             Task { calendarEvents = await intelligence.calendarCommitments(in: interval) }
         }
         .sheet(item: $editingTask) { target in
-            switch target {
-            case .new(let date): TaskEditorView(defaultDate: date)
-            case .edit(let task): TaskEditorView(existing: task)
-            }
+            TaskEditorView(existing: target.task)
         }
         .sheet(item: $editingGoal) { target in
             switch target {
@@ -216,16 +213,17 @@ struct PlanView: View {
 
 // MARK: - Sheet routes
 
+/// A task opened in its card. New tasks go through quick capture instead.
 enum TaskEditTarget: Identifiable {
-    case new(Date?)
     case edit(LineaTask)
 
-    var id: String {
+    var task: LineaTask {
         switch self {
-        case .new: return "new-task"
-        case .edit(let task): return task.id.uuidString
+        case .edit(let task): return task
         }
     }
+
+    var id: String { task.id.uuidString }
 }
 
 enum GoalEditTarget: Identifiable {

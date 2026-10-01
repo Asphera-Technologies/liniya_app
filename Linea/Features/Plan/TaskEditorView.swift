@@ -2,9 +2,11 @@
 //  TaskEditorView.swift
 //  Linea
 //
-//  Create/edit a task. Presented as a native sheet but styled with the Linea
-//  design system (calm fields, hairlines, ink accents) rather than a generic
-//  Form. Talks to `PlanStore` intents only.
+//  The task card: every parameter of an existing task. New tasks are not
+//  created here — quick capture (`QuickAddView`) needs only a title, and
+//  everything else is changed later in this card. Presented as a native sheet
+//  but styled with the Linea design system (calm fields, hairlines, ink
+//  accents) rather than a generic Form. Talks to `PlanStore` intents only.
 //
 //  Three different times, on purpose (see Core/Domain/Models/PlanModels.swift):
 //    • «Дата»          — the day the task is planned for;
@@ -21,10 +23,8 @@ struct TaskEditorView: View {
     @Environment(PlanStore.self) private var plan
     @Environment(\.dismiss) private var dismiss
 
-    /// The task being edited, or nil when creating.
-    let existing: LineaTask?
-    /// Default date applied to a newly created task (e.g. today).
-    var defaultDate: Date?
+    /// The task being edited.
+    let existing: LineaTask
 
     @State private var title: String
     @State private var priority: TaskPriority
@@ -37,10 +37,7 @@ struct TaskEditorView: View {
     @State private var hasStart: Bool
     @State private var start: Date
     @State private var goalID: UUID?
-    /// Chosen once per editor: a second «Готово» updates the same task
-    /// instead of creating a duplicate.
-    @State private var newTaskID = UUID()
-    /// «Готово» and «Удалить» fire once; a double tap used to create two tasks.
+    /// «Готово» and «Удалить» fire once; a double tap used to save twice.
     @State private var isSaving = false
     @FocusState private var titleFocused: Bool
     @Namespace private var prioritySegments
@@ -49,24 +46,20 @@ struct TaskEditorView: View {
     private static let durations = [15, 30, 45, 60, 90, 120]
     private let matcher = KeywordGoalMatcher()
 
-    init(existing: LineaTask? = nil, defaultDate: Date? = nil) {
+    init(existing: LineaTask) {
         self.existing = existing
-        self.defaultDate = defaultDate
-        _title = State(initialValue: existing?.title ?? "")
-        _priority = State(initialValue: existing?.priority ?? .normal)
-        _demand = State(initialValue: existing?.cognitiveDemand ?? .normal)
-        _estimatedMinutes = State(initialValue: existing?.estimatedMinutes)
-        let initialDate = existing?.date ?? defaultDate
-        _hasDate = State(initialValue: initialDate != nil)
-        _date = State(initialValue: initialDate ?? Date())
-        _hasDeadline = State(initialValue: existing?.deadline != nil)
-        _deadline = State(initialValue: existing?.deadline ?? Self.defaultDeadline(for: initialDate))
-        _hasStart = State(initialValue: existing?.scheduledStart != nil)
-        _start = State(initialValue: existing?.scheduledStart ?? Self.defaultStart(for: initialDate))
-        _goalID = State(initialValue: existing?.goalID)
+        _title = State(initialValue: existing.title)
+        _priority = State(initialValue: existing.priority)
+        _demand = State(initialValue: existing.cognitiveDemand)
+        _estimatedMinutes = State(initialValue: existing.estimatedMinutes)
+        _hasDate = State(initialValue: existing.date != nil)
+        _date = State(initialValue: existing.date ?? Date())
+        _hasDeadline = State(initialValue: existing.deadline != nil)
+        _deadline = State(initialValue: existing.deadline ?? Self.defaultDeadline(for: existing.date))
+        _hasStart = State(initialValue: existing.scheduledStart != nil)
+        _start = State(initialValue: existing.scheduledStart ?? Self.defaultStart(for: existing.date))
+        _goalID = State(initialValue: existing.goalID)
     }
-
-    private var isEditing: Bool { existing != nil }
 
     var body: some View {
         NavigationStack {
@@ -81,13 +74,13 @@ struct TaskEditorView: View {
                     durationSection
                     scheduleSection
 
-                    if isEditing { deleteButton }
+                    deleteButton
                 }
                 .padding(.horizontal, LineaMetrics.screenPadding)
                 .padding(.vertical, 20)
             }
             .background(LineaColor.background.ignoresSafeArea())
-            .navigationTitle(isEditing ? "Задача" : "Новая задача")
+            .navigationTitle("Задача")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -101,9 +94,6 @@ struct TaskEditorView: View {
             }
         }
         .presentationDragIndicator(.visible)
-        .onAppear {
-            if !isEditing { titleFocused = true }
-        }
     }
 
     // MARK: Goal
@@ -277,7 +267,7 @@ struct TaskEditorView: View {
             guard !isSaving else { return }
             isSaving = true
             Task {
-                if let existing { await plan.deleteTask(existing) }
+                await plan.deleteTask(existing)
                 dismiss()
             }
         } label: {
@@ -334,19 +324,19 @@ struct TaskEditorView: View {
         isSaving = true
         let day = hasDate ? Calendar.current.startOfDay(for: date) : nil
         let result = LineaTask(
-            id: existing?.id ?? newTaskID,
+            id: existing.id,
             title: trimmedTitle,
-            notes: existing?.notes,
+            notes: existing.notes,
             date: day,
             priority: priority,
-            isDone: existing?.isDone ?? false,
-            createdAt: existing?.createdAt ?? Date(),
+            isDone: existing.isDone,
+            createdAt: existing.createdAt,
             deadline: hasDeadline ? moment(deadline, onto: day ?? deadline) : nil,
             scheduledStart: hasStart ? moment(start, onto: day) : nil,
             estimatedMinutes: estimatedMinutes,
             cognitiveDemand: demand,
             goalID: goalID,
-            completedAt: existing?.completedAt
+            completedAt: existing.completedAt
         )
         Task {
             await plan.saveTask(result)
