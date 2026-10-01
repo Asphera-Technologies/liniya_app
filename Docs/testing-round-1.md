@@ -3,11 +3,11 @@
 Это список для того, кто будет гонять приложение на живом телефоне. По каждой
 фиче: что это, как она должна вести себя правильно и куда смотреть.
 
-Всё лежит в ветке `feature/customer-feedback-round-1`, в `main` этого пока нет.
+Всё это уже в `main`.
 
 ```bash
-git fetch origin
-git checkout feature/customer-feedback-round-1
+git checkout main
+git pull
 ```
 
 Дальше открыть `Linea.xcodeproj` в Xcode 26, выбрать свой iPhone и запустить.

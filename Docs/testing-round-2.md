@@ -30,9 +30,11 @@ Xcode.
   кнопок «Скачать» и «Удалить» больше нет. Копия, скачанная в первом раунде,
   удаляется сама при первом запуске новой версии.
 
-Если время ограничено, перепроверь сначала это: проверки 2, 4, 7, 8 и 12. Чтобы
-поставить новую версию, в папке проекта выполни `git pull` и снова нажми
-«Play» в Xcode.
+Если время ограничено, перепроверь сначала это: проверки 2, 4, 7, 8 и 12.
+
+Отдельной ветки `feature/voice-check-in` больше нет — всё влито в `main`.
+Чтобы поставить новую версию, в папке проекта выполни `git checkout main`,
+потом `git pull`, и снова нажми «Play» в Xcode.
 
 ---
 
@@ -57,11 +59,11 @@ Xcode.
    ```bash
    git clone git@github.com:Asphera-Technologies/liniya_app.git   # если ещё нет
    cd liniya_app
-   git fetch origin
-   git checkout feature/voice-check-in
+   git checkout main
+   git pull
    ```
-   Без git: на GitHub открыть репозиторий, переключить ветку на
-   `feature/voice-check-in`, «Code» → «Download ZIP», распаковать.
+   Без git: на GitHub открыть репозиторий (ветка `main`), «Code» →
+   «Download ZIP», распаковать.
 2. **Положить ключ.** В папке проекта есть папка `Linea`. Внутри неё создать
    папку `Resources`, если её нет, и положить туда полученный файл
    `AISecrets.plist`. Итоговый путь: `Linea/Resources/AISecrets.plist`.
