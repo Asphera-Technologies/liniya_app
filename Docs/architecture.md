@@ -15,13 +15,13 @@ Linea/
 ├── App/          LineaApp (composition root), AppState, RootView
 ├── Core/         Foundation-only. Domain models, protocols, use cases, engines, connector logic
 │   ├── Domain/{Models,Protocols,UseCases}
-│   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,FeedbackEngine,LLM,CheckIn,Memory}
+│   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,FeedbackEngine,LLM,CheckIn,Memory,TaskCapture}
 │   └── Connectors/   Foundation-only parts of connectors (Nutrition, Calendar)
 ├── Data/         Apple frameworks allowed: SwiftData entities and Local* repositories,
 │                 HealthKit reader, EventKit provider, LLM client (chat), on-device speech (GigaAM, Apple)
 ├── Platform/     iOS adapters: notifications (nudges), voice recording, diagnostics (OSLog)
 ├── Features/     SwiftUI screens and view-facing stores (Today, Plan, Health, Nutrition,
-│                 Profile, AI, CheckIn, Memory)
+│                 Profile, AI, CheckIn, Memory, QuickAdd)
 ├── Components/, DesignSystem/   shared UI
 ├── Networking/   LineaBackend (sample-only protocol; no production API yet)
 └── Services/     SampleData / SampleModels for screens not yet backed by real data
@@ -86,6 +86,20 @@ Explainer      → Russian text (rule-based always; on-device LLM optional, vali
         ↓
 Today / notifications → UserFeedback → FeedbackEngine → Calibration
 ```
+
+### Quick task capture
+
+```text
+Строка (набрана / надиктована: GigaAM или диктовка клавиатуры)
+        ↓  QuickTaskParser — правила на телефоне
+QuickTaskParse: название, день, срок, время, длительность, приоритет, цель
+        ↓  QuickTaskDraft.resolve — чип > сказанное > по умолчанию
+QuickTaskResolution → чипы на экране → «Добавить» → PlanStore.saveTask
+```
+
+A title is the only required field; everything else can be changed later in
+the task card (ADR-023). The «+» next to the command bar and «+ Задача» on
+Plan open the same sheet.
 
 ### Evening check-in and memory
 
