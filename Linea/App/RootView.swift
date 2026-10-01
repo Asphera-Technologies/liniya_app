@@ -14,6 +14,7 @@ struct RootView: View {
     @Environment(AppState.self) private var appState
     @Environment(IntelligenceStore.self) private var intelligence
     @Environment(CheckInStore.self) private var checkIn
+    @Environment(QuickAddStore.self) private var quickAdd
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection: AppTab = .today
 
@@ -57,6 +58,7 @@ struct RootView: View {
                 Task { await intelligence.refresh(reason: .appeared) }
             case .background:
                 checkIn.appMovedToBackground()
+                quickAdd.appMovedToBackground()
             default:
                 break
             }
@@ -68,6 +70,13 @@ struct RootView: View {
         .sheet(isPresented: $appState.isPresentingCheckIn) {
             CheckInView()
                 .presentationDetents([.large])
+        }
+        // Быстрая задача: невысокий лист над клавиатурой. Закрыли — ввод
+        // начнётся с чистого листа.
+        .sheet(isPresented: $appState.isPresentingQuickAdd, onDismiss: { quickAdd.end() }) {
+            QuickAddView()
+                .presentationDetents([.height(280)])
+                .presentationDragIndicator(.hidden)
         }
     }
 }
@@ -82,4 +91,5 @@ struct RootView: View {
         .environment(IntelligenceStore.preview)
         .environment(MemoryStore.preview)
         .environment(CheckInStore.preview)
+        .environment(QuickAddStore.preview)
 }

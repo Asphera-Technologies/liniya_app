@@ -4,7 +4,7 @@
 //
 //  Кнопка «Задать вопрос Linea», закреплённая над таб-баром на каждом экране.
 //  Это точка входа в ассистента: не отдельная вкладка, а строка, которая всегда
-//  под рукой.
+//  под рукой. Рядом — «+»: новая задача с любого экрана за пару секунд.
 //
 //  На iOS 26 и новее используется Liquid Glass: кнопка становится стеклянной и
 //  реагирует на нажатие. На более старых системах остаётся прежний спокойный
@@ -20,14 +20,29 @@ struct CommandBar: View {
     private static let title = "Задать вопрос Linea"
 
     var body: some View {
-        Button {
-            appState.openAI()
-        } label: {
-            label
+        HStack(spacing: 10) {
+            Button {
+                appState.openAI()
+            } label: {
+                label
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Self.title)
+            .accessibilityHint("Открывает Linea AI")
+
+            Button {
+                appState.openQuickAdd()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(LineaColor.textPrimary)
+                    .frame(width: LineaMetrics.controlHeight, height: LineaMetrics.controlHeight)
+                    .modifier(CommandBarSurface())
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Новая задача")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Self.title)
-        .accessibilityHint("Открывает Linea AI")
         .padding(.horizontal, LineaMetrics.screenPadding)
         .padding(.top, 8)
         .padding(.bottom, 6)

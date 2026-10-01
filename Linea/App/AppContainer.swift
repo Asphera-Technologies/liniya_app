@@ -41,6 +41,8 @@ final class AppContainer {
     let memoryStore: MemoryStore
     /// «Итог дня»: запись, распознавание, разбор, сохранение.
     let checkInStore: CheckInStore
+    /// Быстрое создание задачи: строка, чипы, голос.
+    let quickAddStore: QuickAddStore
 
     /// Local notifications for nudges.
     let nudgeScheduler: NudgeScheduler
@@ -154,18 +156,28 @@ final class AppContainer {
         // правила; языковая модель на телефоне, если появится, встанет в
         // `primary` — экрану ничего менять не придётся.
         let speechModel = GigaAMModel.bundledFolder
+        let makeTranscriber: @MainActor () -> any SpeechTranscribing = {
+            let dictation = AppleSpeechTranscriber()
+            guard let speechModel else { return dictation }
+            return FallbackSpeechTranscriber(primary: LocalSpeechTranscriber(modelFolder: speechModel), fallback: dictation)
+        }
         checkInStore = CheckInStore(
             recorder: VoiceRecorder(),
             planStore: plan,
             intelligence: intelligence,
             memory: memory,
             hasSpeechModel: speechModel != nil,
-            makeTranscriber: {
-                let dictation = AppleSpeechTranscriber()
-                guard let speechModel else { return dictation }
-                return FallbackSpeechTranscriber(primary: LocalSpeechTranscriber(modelFolder: speechModel), fallback: dictation)
-            },
+            makeTranscriber: makeTranscriber,
             extractor: FallbackCheckInExtractor(primary: nil)
+        )
+        // Задачу тоже можно надиктовать — тот же распознаватель на телефоне,
+        // строку разбирают правила (`QuickTaskParser`), наружу ничего не уходит.
+        quickAddStore = QuickAddStore(
+            recorder: VoiceRecorder(),
+            planStore: plan,
+            hasSpeechModel: speechModel != nil,
+            makeTranscriber: makeTranscriber,
+            profile: { [weak intelligence] in intelligence?.userProfile ?? .default }
         )
         // Скачанная раньше по кнопке копия модели больше не нужна.
         Task.detached(priority: .background) { GigaAMModel.removeLegacyDownload() }

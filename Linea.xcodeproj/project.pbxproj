@@ -301,7 +301,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Linea reads your calendar to see when you are busy and plan the day around it.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Linea uses your Apple Health data to provide personalized health insights.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Linea записывает твой рассказ об итоге дня, чтобы превратить его в текст.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Linea записывает голос — рассказ об итоге дня или новую задачу — и превращает его в текст прямо на телефоне.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Linea распознаёт рассказ об итоге дня прямо на телефоне.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -339,7 +339,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Linea reads your calendar to see when you are busy and plan the day around it.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Linea uses your Apple Health data to provide personalized health insights.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Linea записывает твой рассказ об итоге дня, чтобы превратить его в текст.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Linea записывает голос — рассказ об итоге дня или новую задачу — и превращает его в текст прямо на телефоне.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Linea распознаёт рассказ об итоге дня прямо на телефоне.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

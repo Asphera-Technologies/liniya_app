@@ -33,4 +33,14 @@ final class AppState {
         isPresentingAI = false
         isPresentingCheckIn = true
     }
+
+    /// Whether quick task capture is presented («+» next to the command bar,
+    /// «+ Задача» on Plan).
+    var isPresentingQuickAdd = false
+
+    /// Opens quick task capture: a title is enough, the rest is optional.
+    func openQuickAdd() {
+        isPresentingAI = false
+        isPresentingQuickAdd = true
+    }
 }

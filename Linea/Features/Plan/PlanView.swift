@@ -5,12 +5,14 @@
 //  The Plan screen: a Week/Month scope toggle, a date navigator, real goals
 //  with dash progress, and real date-grouped tasks — all persisted locally via
 //  `PlanStore` (SwiftData behind repositories). Tapping a row edits it; the
-//  add rows create; the checkbox toggles; the × deletes.
+//  add rows create (a task through quick capture: a title is enough); the
+//  checkbox toggles; the × deletes.
 //
 
 import SwiftUI
 
 struct PlanView: View {
+    @Environment(AppState.self) private var appState
     @Environment(PlanStore.self) private var plan
     @Environment(IntelligenceStore.self) private var intelligence
     @Namespace private var segmentNamespace
@@ -119,7 +121,7 @@ struct PlanView: View {
             }
 
             addRow(title: "Задача") {
-                editingTask = .new(Calendar.current.startOfDay(for: Date()))
+                appState.openQuickAdd()
             }
         }
     }
