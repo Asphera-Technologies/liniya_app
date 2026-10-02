@@ -7,6 +7,9 @@
 //  is not the middle one, a chevron, and a delete affordance. Bound to the
 //  `LineaTask` domain.
 //
+//  С `actions` у строки есть свайпы и меню долгого нажатия (`TaskActions`):
+//  главное делается в списке, без карточки задачи.
+//
 
 import SwiftUI
 
@@ -17,6 +20,8 @@ struct TaskRow: View {
     var onDelete: () -> Void = {}
     /// Подпись под названием вместо заметки: «Linea нашла время: сегодня в 16:30».
     var caption: String? = nil
+    /// Свайпы и меню долгого нажатия; `nil` — только кнопки строки.
+    var actions: TaskRowActions? = nil
 
     /// Средний приоритет не подписывается: подпись у каждой строки — шум.
     private var tag: String? {
@@ -56,6 +61,7 @@ struct TaskRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .taskAccessibilityActions(actions, for: task)
 
             if let tag {
                 Text(tag)
@@ -76,5 +82,6 @@ struct TaskRow: View {
             .accessibilityLabel("Удалить задачу")
         }
         .padding(.vertical, 14)
+        .taskActions(actions, for: task)
     }
 }

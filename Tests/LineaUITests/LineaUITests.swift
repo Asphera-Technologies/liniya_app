@@ -415,6 +415,96 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "39 Карточка цели: как Linea её поняла")
     }
 
+    // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
+
+    @MainActor
+    func test10SwipeAndLongPress() throws {
+        let app = launch()
+        openTab(app, "План", index: 1)
+        createGoal(app, "Запустить MVP Linea", details: "Есть прототип. Хочу выпустить первую версию в TestFlight.")
+        addTask(app, "Купить молоко сегодня")
+        addTask(app, "Позвонить маме сегодня")
+        addTask(app, "Подготовить релиз сегодня")
+        openTab(app, "План", index: 1)
+
+        // Вправо — «Готово».
+        let milk = button(app, startingWith: "Купить молоко")
+        XCTAssertTrue(milk.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Отметить невыполненной"].exists)
+        milk.swipeRight()
+        XCTAssertTrue(app.buttons["Отметить невыполненной"].waitForExistence(timeout: 5), "Свайп вправо закрывает задачу")
+        XCTAssertFalse(app.navigationBars["Задача"].exists, "Карточка задачи не открывалась")
+        snapshot(app, "40 Свайп вправо — Готово")
+
+        // Влево — «Перенести»: короткий выбор; «Без даты» — во входящие.
+        button(app, startingWith: "Позвонить маме").swipeLeft()
+        XCTAssertTrue(app.staticTexts["Перенести «Позвонить маме»"].waitForExistence(timeout: 5), "Свайп влево — «Перенести»")
+        for option in ["Завтра", "Выбрать дату…", "Без даты"] {
+            XCTAssertTrue(app.buttons[option].exists, "В «Перенести» есть «\(option)»")
+        }
+        snapshot(app, "41 Свайп влево — Перенести")
+        app.buttons["Без даты"].tap()
+        let inbox = app.descendants(matching: .any).matching(identifier: "plan.inbox").firstMatch
+        XCTAssertTrue(inbox.waitForExistence(timeout: 5), "Появился раздел «Без даты»")
+        XCTAssertTrue(inbox.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Позвонить маме")).firstMatch
+            .waitForExistence(timeout: 5), "Задача перенесена в «Без даты»")
+
+        // «Выбрать дату…» — календарь.
+        button(app, startingWith: "Подготовить релиз").swipeLeft()
+        let pickDay = app.buttons["Выбрать дату…"]
+        XCTAssertTrue(pickDay.waitForExistence(timeout: 5))
+        pickDay.tap()
+        XCTAssertTrue(app.datePickers.firstMatch.waitForExistence(timeout: 5), "«Выбрать дату…» открывает календарь")
+        snapshot(app, "42 Перенести — свой день")
+        app.navigationBars["Перенести"].buttons["Отмена"].tap()
+        XCTAssertTrue(app.datePickers.firstMatch.waitForNonExistence(timeout: 5))
+
+        // Долгое нажатие — меню задачи.
+        let release = button(app, startingWith: "Подготовить релиз")
+        release.press(forDuration: 1.2)
+        for item in ["Изменить", "Привязать к цели", "Изменить приоритет", "Удалить"] {
+            XCTAssertTrue(app.buttons[item].waitForExistence(timeout: 5), "В меню есть «\(item)»")
+        }
+        snapshot(app, "43 Долгое нажатие — меню")
+        app.buttons["Изменить приоритет"].tap()
+        tapMenuItem(app, "Высокий")
+        XCTAssertTrue(app.staticTexts["Высокий"].waitForExistence(timeout: 5), "Приоритет сменился без карточки")
+
+        button(app, startingWith: "Подготовить релиз").press(forDuration: 1.2)
+        let linkGoal = app.buttons["Привязать к цели"]
+        XCTAssertTrue(linkGoal.waitForExistence(timeout: 5))
+        linkGoal.tap()
+        tapMenuItem(app, "Запустить MVP Linea")
+
+        button(app, startingWith: "Подготовить релиз").press(forDuration: 1.2)
+        let edit = app.buttons["Изменить"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        edit.tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForExistence(timeout: 5), "«Изменить» открывает карточку")
+        let linked = app.buttons.matching(NSPredicate(format: "label == %@ AND isSelected == true", "Запустить MVP Linea")).firstMatch
+        XCTAssertTrue(linked.exists, "Задача привязана к цели из меню")
+        snapshot(app, "44 Карточка: цель и приоритет из меню")
+        app.navigationBars["Задача"].buttons["Отмена"].tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForNonExistence(timeout: 5))
+
+        button(app, startingWith: "Купить молоко").press(forDuration: 1.2)
+        let delete = app.buttons["Удалить"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+        XCTAssertTrue(button(app, startingWith: "Купить молоко").waitForNonExistence(timeout: 5), "«Удалить» из меню")
+
+        // «Сегодня»: те же жесты у задачи в «Дальше».
+        openTab(app, "Сегодня", index: 0)
+        let planned = app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "Подготовить релиз", "мин"))
+            .firstMatch
+        XCTAssertTrue(planned.waitForExistence(timeout: 10), "Задача в «Дальше»")
+        scrollTo(planned, in: app)
+        planned.swipeRight()
+        openTab(app, "План", index: 1)
+        XCTAssertTrue(app.buttons["Отметить невыполненной"].waitForExistence(timeout: 5), "Свайп на «Сегодня» закрыл задачу")
+        snapshot(app, "45 План после свайпа на «Сегодня»")
+    }
+
     // MARK: - 6. Длительность по типу задачи
 
     @MainActor

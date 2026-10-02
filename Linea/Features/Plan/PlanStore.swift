@@ -124,6 +124,28 @@ final class PlanStore {
         await saveTask(updated)
     }
 
+    /// «Перенести» у строки: день, срок и время — по правилу `TaskReschedule`.
+    /// Перенос задачи, которую пора было делать, засчитывается в `saveTask`.
+    func rescheduleTask(_ task: LineaTask, to target: TaskReschedule.Target, profile: UserProfile) async {
+        await saveTask(TaskReschedule().apply(target, to: task, profile: profile, time: timeProvider()))
+    }
+
+    /// «Привязать к цели» из меню строки; `nil` — без цели.
+    func linkTask(_ task: LineaTask, toGoal goalID: UUID?) async {
+        guard task.goalID != goalID else { return }
+        var updated = task
+        updated.goalID = goalID
+        await saveTask(updated)
+    }
+
+    /// «Изменить приоритет» из меню строки.
+    func setPriority(_ priority: TaskPriority, of task: LineaTask) async {
+        guard task.priority != priority else { return }
+        var updated = task
+        updated.priority = priority
+        await saveTask(updated)
+    }
+
     func deleteTask(_ task: LineaTask) async {
         do {
             try await taskRepository.delete(id: task.id)

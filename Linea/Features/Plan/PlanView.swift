@@ -19,6 +19,8 @@ struct PlanView: View {
 
     @State private var editingTask: TaskEditTarget?
     @State private var editingGoal: GoalEditTarget?
+    /// Задача, для которой открыт выбор «Перенести».
+    @State private var rescheduling: LineaTask?
     @State private var calendarEvents: [Commitment] = []
 
     var body: some View {
@@ -63,6 +65,7 @@ struct PlanView: View {
         .sheet(item: $editingTask) { target in
             TaskEditorView(existing: target.task)
         }
+        .taskRescheduleDialog($rescheduling)
         .sheet(item: $editingGoal) { target in
             switch target {
             // Новая цель — сначала понять, потом создать.
@@ -119,7 +122,8 @@ struct PlanView: View {
                             onDelete: { Task { await plan.deleteTask(task) } },
                             caption: task.isDone ? nil : intelligence.plannedStart(for: task.id).map {
                                 InboxReview.plannedCaption($0, time: intelligence.time)
-                            }
+                            },
+                            actions: rowActions(for: task)
                         )
                         if index < inbox.count - 1 { LineaHairline() }
                     }
@@ -146,7 +150,8 @@ struct PlanView: View {
                                 onDelete: { Task { await plan.deleteTask(task) } },
                                 caption: section.day == nil
                                     ? task.deadline.map { QuickTaskText.deadline($0, time: intelligence.time) }
-                                    : nil
+                                    : nil,
+                                actions: rowActions(for: task)
                             )
                             if index < section.tasks.count - 1 { LineaHairline() }
                         }
@@ -165,6 +170,15 @@ struct PlanView: View {
                 appState.openQuickAdd()
             }
         }
+    }
+
+    /// Свайп вправо — «Готово», влево — «Перенести», долгое нажатие — меню.
+    private func rowActions(for task: LineaTask) -> TaskRowActions {
+        plan.rowActions(
+            for: task,
+            onEdit: { editingTask = .edit(task) },
+            onReschedule: { rescheduling = task }
+        )
     }
 
     // MARK: Calendar

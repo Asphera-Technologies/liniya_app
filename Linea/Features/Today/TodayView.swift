@@ -23,6 +23,10 @@ struct TodayView: View {
     @Environment(IntelligenceStore.self) private var intelligence
     /// «Другое» у «Сейчас» раскрыто.
     @State private var showsAlternatives = false
+    /// Карточка задачи из «Дальше».
+    @State private var editingTask: TaskEditTarget?
+    /// Задача, для которой открыт выбор «Перенести».
+    @State private var rescheduling: LineaTask?
 
     var body: some View {
         NavigationStack {
@@ -57,6 +61,10 @@ struct TodayView: View {
         .task { await intelligence.refresh(reason: .appeared) }
         .task { await intelligence.keepNextActionFresh() }
         .refreshable { await intelligence.refresh(reason: .manual) }
+        .sheet(item: $editingTask) { target in
+            TaskEditorView(existing: target.task)
+        }
+        .taskRescheduleDialog($rescheduling)
     }
 
     // MARK: Brief
@@ -233,15 +241,38 @@ struct TodayView: View {
                 SectionLabel(text: "Дальше", trailing: intelligence.planTag)
                 VStack(spacing: 0) {
                     ForEach(blocks) { block in
-                        PlanBlockRow(
-                            block: block,
-                            time: intelligence.time,
-                            isDone: intelligence.isDone(block)
-                        )
+                        // Задача в плане — те же свайпы и меню, что в «Плане»;
+                        // тап открывает её карточку. Еда и встречи — как есть.
+                        if let task = block.taskID.flatMap({ id in plan.tasks.first { $0.id == id } }) {
+                            let actions = rowActions(for: task)
+                            PlanBlockRow(
+                                block: block,
+                                time: intelligence.time,
+                                isDone: task.isDone,
+                                onTap: { editingTask = .edit(task) }
+                            )
+                            .taskAccessibilityActions(actions, for: task)
+                            .taskActions(actions, for: task)
+                        } else {
+                            PlanBlockRow(
+                                block: block,
+                                time: intelligence.time,
+                                isDone: intelligence.isDone(block)
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    /// Свайп вправо — «Готово», влево — «Перенести», долгое нажатие — меню.
+    private func rowActions(for task: LineaTask) -> TaskRowActions {
+        plan.rowActions(
+            for: task,
+            onEdit: { editingTask = .edit(task) },
+            onReschedule: { rescheduling = task }
+        )
     }
 
     // MARK: Advice (nutrition and the like)
