@@ -148,10 +148,10 @@
 				};
 			};
 			buildConfigurationList = 9F4BBA3630418A23009126E3 /* Build configuration list for PBXProject "Linea" */;
-			developmentRegion = en;
+			developmentRegion = ru;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
+				ru,
 				Base,
 			);
 			mainGroup = 9F4BBA3230418A23009126E3;

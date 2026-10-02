@@ -111,15 +111,16 @@ struct TodayView: View {
 
     // MARK: Now
 
-    /// «Сейчас — …»: главное сегодня важно вообще, а это — уместно прямо
-    /// сейчас. Текст готов в ядре (`NextActionUseCase`).
+    /// «Сейчас»: главное сегодня важно вообще, а это — уместно прямо сейчас.
+    /// Как и «Главное сегодня» — название задачи, под ним пояснение из ядра
+    /// (`NextActionUseCase`). Ничего не помещается — фраза ядра вместо названия.
     @ViewBuilder
     private var nowSection: some View {
-        if let action = intelligence.nextAction {
+        if let action = intelligence.nextAction, !repeatsMainTask(action) {
             VStack(alignment: .leading, spacing: 8) {
                 SectionLabel(text: "Сейчас")
-                Text(action.headline)
-                    .font(LineaFont.rowTitle)
+                Text(nowTitle(action))
+                    .font(LineaFont.feature)
                     .foregroundStyle(LineaColor.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 if !action.body.isEmpty {
@@ -129,7 +130,23 @@ struct TodayView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("today.now")
         }
+    }
+
+    private func nowTitle(_ action: NextAction) -> String {
+        guard let taskID = action.taskID, let task = plan.tasks.first(where: { $0.id == taskID }) else {
+            return action.headline
+        }
+        return task.title
+    }
+
+    /// «Сейчас» совпадает с «Главное сегодня» и пояснять нечего — второй раз
+    /// то же название не нужно.
+    private func repeatsMainTask(_ action: NextAction) -> Bool {
+        guard let taskID = action.taskID, action.body.isEmpty else { return false }
+        return (intelligence.topTask ?? plan.topTaskToday)?.id == taskID
     }
 
     // MARK: Timeline

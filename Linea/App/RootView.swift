@@ -73,10 +73,9 @@ struct RootView: View {
         }
         // Быстрая задача: невысокий лист над клавиатурой. Закрыли — ввод
         // начнётся с чистого листа.
+        // Высоту листа QuickAddView задаёт сам — по содержимому.
         .sheet(isPresented: $appState.isPresentingQuickAdd, onDismiss: { quickAdd.end() }) {
             QuickAddView()
-                .presentationDetents([.height(280)])
-                .presentationDragIndicator(.hidden)
         }
     }
 }

@@ -24,6 +24,8 @@ struct QuickAddView: View {
     @State private var dayPopover: DayPopover?
     /// Колесо «Другое…» у чипа длительности.
     @State private var isPickingMinutes = false
+    /// Высота листа — по содержимому: строка, чипы, пояснение.
+    @State private var contentHeight: CGFloat = 200
 
     private enum DayPopover: String, Identifiable {
         case day, deadline
@@ -47,8 +49,17 @@ struct QuickAddView: View {
         }
         .padding(.horizontal, LineaMetrics.screenPadding)
         .padding(.top, 16)
+        .padding(.bottom, 12)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            contentHeight = height
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(LineaColor.background.ignoresSafeArea())
+        // Невысокий лист над клавиатурой — ровно по содержимому.
+        .presentationDetents([.height(max(contentHeight, 160))])
+        .presentationDragIndicator(.hidden)
         .interactiveDismissDisabled(store.voice != .idle)
         .onAppear { isTitleFocused = true }
     }
@@ -139,15 +150,14 @@ struct QuickAddView: View {
     // MARK: Чипы
 
     /// Когда, сколько, приоритет — всегда; цель — четвёртым, если цели есть.
+    /// Не влезли в ширину — переносятся на вторую строку, а не прячутся за край.
     private func chips(_ resolution: QuickTaskResolution) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                dayChip(resolution)
-                durationChip(resolution)
-                priorityChip(resolution)
-                if !store.activeGoals.isEmpty {
-                    goalChip(resolution)
-                }
+        FlowLayout(spacing: 8, lineSpacing: 8) {
+            dayChip(resolution)
+            durationChip(resolution)
+            priorityChip(resolution)
+            if !store.activeGoals.isEmpty {
+                goalChip(resolution)
             }
         }
     }
@@ -158,7 +168,7 @@ struct QuickAddView: View {
             Button { store.chooseDay(.today) } label: { option("Сегодня", isSelected: resolution.day == .today) }
             Button { store.chooseDay(.tomorrow) } label: { option("Завтра", isSelected: resolution.day == .tomorrow) }
             Button { store.chooseDay(.thisWeek) } label: { option("На неделе", isSelected: resolution.day == .thisWeek) }
-            Button { dayPopover = .day } label: { Label("Выбрать дату…", systemImage: "calendar") }
+            Button { openPopover { dayPopover = .day } } label: { Label("Выбрать дату…", systemImage: "calendar") }
             Divider()
             Button { startDeadline(resolution) } label: { Label("Срок…", systemImage: "flag.checkered") }
             Button { clearDay() } label: { option("Без даты", isSelected: resolution.date == nil && resolution.deadline == nil) }
@@ -167,7 +177,7 @@ struct QuickAddView: View {
                      isMuted: resolution.dayOrigin == .assumed && resolution.deadlineOrigin == .assumed)
         }
         .accessibilityLabel("Когда: \(title)")
-        .popover(item: $dayPopover) { popover in
+        .popover(item: $dayPopover, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) { popover in
             switch popover {
             case .day: dayPicker(resolution)
             case .deadline: deadlinePicker(resolution)
@@ -192,7 +202,9 @@ struct QuickAddView: View {
             TaskChip(systemImage: "clock", title: title, isMuted: resolution.minutes == nil)
         }
         .accessibilityLabel("Сколько займёт: \(title)")
-        .popover(isPresented: $isPickingMinutes) { minutesPicker(resolution) }
+        .popover(isPresented: $isPickingMinutes, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+            minutesPicker(resolution)
+        }
     }
 
     private func priorityChip(_ resolution: QuickTaskResolution) -> some View {
@@ -335,14 +347,29 @@ struct QuickAddView: View {
     private func startCustomMinutes(_ resolution: QuickTaskResolution) {
         // На колесе сразу стоит текущая оценка — «Готово» без прокрутки её и оставит.
         store.chooseMinutes(Self.nearestCustom(resolution.estimatedMinutes))
-        isPickingMinutes = true
+        openPopover { isPickingMinutes = true }
     }
 
     private func startDeadline(_ resolution: QuickTaskResolution) {
         if resolution.deadline == nil {
             store.chooseDeadline(defaultDeadline(for: resolution))
         }
-        dayPopover = .deadline
+        openPopover { dayPopover = .deadline }
+    }
+
+    /// Маленький выбор открывается без клавиатуры: с ней календарю не хватает
+    /// места, и iOS ставит его сбоку от чипа — за край экрана. Клавиатура
+    /// уходит, лист опускается, и выбор встаёт над чипом.
+    private func openPopover(_ show: @escaping () -> Void) {
+        guard isTitleFocused else {
+            show()
+            return
+        }
+        isTitleFocused = false
+        Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            show()
+        }
     }
 
     /// «Без даты»: ни дня, ни срока.

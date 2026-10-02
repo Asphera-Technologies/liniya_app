@@ -82,7 +82,8 @@ final class LineaUITests: XCTestCase {
         let calendar = app.datePickers.firstMatch
         XCTAssertTrue(calendar.waitForExistence(timeout: 5), "«Выбрать дату…» открывает календарь")
         snapshot(app, "07 Выбрать дату — календарь")
-        let today = calendar.buttons.matching(NSPredicate(format: "label CONTAINS %@", Self.dayMonth(daysFromNow: 0))).firstMatch
+        // День в календаре подписан по-разному на разных языках, число — всегда.
+        let today = calendar.buttons.matching(NSPredicate(format: "label MATCHES %@", Self.dayPattern(daysFromNow: 0))).firstMatch
         if today.exists {
             today.tap()
             XCTAssertTrue(chip(app, "Когда: Сегодня").waitForExistence(timeout: 5), "Тап по дню выбирает его и закрывает календарь")
@@ -92,15 +93,16 @@ final class LineaUITests: XCTestCase {
         }
 
         chip(app, "Когда:").tap()
-        app.buttons["На неделе"].tap()
-        XCTAssertTrue(chip(app, "Когда: На неделе").waitForExistence(timeout: 5))
-
-        chip(app, "Когда:").tap()
         app.buttons["Срок…"].tap()
         XCTAssertTrue(app.datePickers.firstMatch.waitForExistence(timeout: 5), "«Срок…» открывает дату и время")
         snapshot(app, "08 Срок — дата и время")
         app.buttons["quickAdd.deadline.done"].tap()
-        XCTAssertTrue(chip(app, "Когда: до").waitForExistence(timeout: 5), "Названный срок виден в чипе")
+        XCTAssertTrue(chip(app, "Когда: Сегодня, до 18:00").waitForExistence(timeout: 5), "Срок по умолчанию — 18:00 дня задачи")
+
+        chip(app, "Когда:").tap()
+        app.buttons["На неделе"].tap()
+        // Названный срок сильнее недели: в чипе — он.
+        XCTAssertTrue(chip(app, "Когда: до 18:00").waitForExistence(timeout: 5))
 
         chip(app, "Сколько займёт:").tap()
         for option in ["15 мин", "30 мин", "45 мин", "1 час", "Другое…"] {
@@ -199,9 +201,10 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "18 Карточка: тип и «Сначала нужно»")
 
         addBlocker.tap()
-        let option = app.buttons["Собрать данные"]
-        XCTAssertTrue(option.waitForExistence(timeout: 5))
-        option.tap()
+        // Строка задачи в «Плане» под карточкой подписана так же — пункт меню последний.
+        let options = app.buttons.matching(NSPredicate(format: "label == %@", "Собрать данные"))
+        XCTAssertTrue(options.firstMatch.waitForExistence(timeout: 5))
+        options.element(boundBy: options.count - 1).tap()
         XCTAssertTrue(app.buttons["Убрать «Собрать данные»"].waitForExistence(timeout: 5))
         snapshot(app, "19 Зависимость добавлена")
         app.navigationBars.buttons["Готово"].tap()
@@ -226,13 +229,12 @@ final class LineaUITests: XCTestCase {
         addTask(app, "Ответить на письма 15 минут")
 
         openTab(app, "Сегодня", index: 0)
-        let headline = app.staticTexts["Сейчас — «Ответить на письма»."]
-        XCTAssertTrue(headline.waitForExistence(timeout: 15), "До встречи 25 минут — сейчас короткое дело")
-        let body = element(app, labelContaining: "её лучше после")
-        XCTAssertTrue(body.exists, "Стратегия — после встречи")
-        XCTAssertTrue(body.label.contains("«Подготовить стратегию» нужно 1 ч 30 мин"), body.label)
-        XCTAssertTrue(body.label.contains("«Встреча с клиентом»"), body.label)
-        scrollTo(headline, in: app)
+        let now = app.descendants(matching: .any).matching(identifier: "today.now").firstMatch
+        XCTAssertTrue(now.waitForExistence(timeout: 15), "На «Сегодня» есть «Сейчас»")
+        XCTAssertTrue(now.label.contains("Ответить на письма"), "До встречи 25 минут — сейчас короткое дело: \(now.label)")
+        XCTAssertTrue(now.label.contains("«Подготовить стратегию» нужно 1 ч 30 мин — её лучше после"), now.label)
+        XCTAssertTrue(now.label.contains("До «Встреча с клиентом»"), now.label)
+        scrollTo(now, in: app)
         snapshot(app, "21 Сейчас: короткое дело до встречи")
     }
 
@@ -286,13 +288,13 @@ final class LineaUITests: XCTestCase {
         return String(format: "%d:%02d", parts.hour ?? 0, parts.minute ?? 0)
     }
 
-    /// «3 октября» — как день подписан в календаре.
-    static func dayMonth(daysFromNow days: Int) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.timeZone = appTimeZone
-        formatter.dateFormat = "d MMMM"
-        return formatter.string(from: Date().addingTimeInterval(TimeInterval(days * 86_400)))
+    /// Подпись дня в календаре содержит его число отдельным словом:
+    /// «пятница, 2 октября» или «Friday, October 2».
+    static func dayPattern(daysFromNow days: Int) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = appTimeZone
+        let day = calendar.component(.day, from: Date().addingTimeInterval(TimeInterval(days * 86_400)))
+        return ".*(^|[^0-9])\(day)([^0-9]|$).*"
     }
 
     // MARK: - Шаги
