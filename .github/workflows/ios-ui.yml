@@ -114,7 +114,8 @@ jobs:
                       source = os.path.join(raw, item["exportedFileName"])
                       title = item.get("suggestedHumanReadableName", item["exportedFileName"])
                       title = re.sub(r"_\d+_[0-9A-F-]+(?=\.\w+$)", "", title)
-                      safe = re.sub(r"[/\\:]", "-", f"{name} — {title}")
+                      # Артефакт не принимает в именах « " : < > | * ? » и переводы строк.
+                      safe = re.sub(r'[/\\:"<>|*?\r\n]', "-", f"{name} — {title}")
                       if os.path.exists(source):
                           shutil.copy(source, os.path.join(out, safe))
           PY
