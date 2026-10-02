@@ -94,6 +94,7 @@ struct QuickAddView: View {
                     .lineLimit(1...3)
                     .focused($isTitleFocused)
                     .submitLabel(.done)
+                    .accessibilityIdentifier("quickAdd.title")
                     .onChange(of: text.wrappedValue) { _, value in
                         // В многострочном поле «Готово» вставляет перевод строки — это «Добавить».
                         guard value.contains("\n") else { return }
@@ -215,7 +216,7 @@ struct QuickAddView: View {
         return Menu {
             if let suggested {
                 Button { store.chooseGoal(suggested.id) } label: {
-                    Label("Похоже, к цели «\(suggested.title)»", systemImage: "sparkles")
+                    Label("Связать с целью «\(suggested.title)»", systemImage: "sparkles")
                 }
                 Divider()
             }
@@ -294,6 +295,7 @@ struct QuickAddView: View {
                 Button("Готово") { dayPopover = nil }
                     .font(LineaFont.control)
                     .tint(LineaColor.ink)
+                    .accessibilityIdentifier("quickAdd.deadline.done")
             }
         }
         .padding(12)
@@ -319,6 +321,7 @@ struct QuickAddView: View {
             Button("Готово") { isPickingMinutes = false }
                 .font(LineaFont.control)
                 .tint(LineaColor.ink)
+                .accessibilityIdentifier("quickAdd.minutes.done")
         }
         .padding(12)
         .frame(width: 240)
