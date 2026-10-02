@@ -468,7 +468,8 @@ struct TaskEditorView: View {
             kindOverride: kindOverride,
             deferralCount: existing.deferralCount,
             // Удалённые задачи из «Сначала нужно» не тянутся дальше.
-            blockedBy: blockedBy.filter { id in plan.tasks.contains { $0.id == id } }
+            blockedBy: blockedBy.filter { id in plan.tasks.contains { $0.id == id } },
+            inboxReviewedAt: existing.inboxReviewedAt
         )
         Task {
             await plan.saveTask(result)

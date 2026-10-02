@@ -48,6 +48,7 @@ struct PlanView: View {
                 }
 
                 goalsSection
+                inboxSection
                 tasksSection
                 calendarSection
             }
@@ -89,6 +90,45 @@ struct PlanView: View {
         }
     }
 
+    // MARK: Inbox
+
+    /// «Без даты» — входящие: всё, что записали, не думая «когда». Linea сама
+    /// находит время паре таких задач (подпись под строкой), а «Разобрать»
+    /// проходит их по одной.
+    @ViewBuilder
+    private var inboxSection: some View {
+        let inbox = plan.inboxTasks
+        if !inbox.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    SectionLabel(text: "Без даты")
+                    if inbox.contains(where: { !$0.isDone }) {
+                        Button("Разобрать") { appState.openInboxReview(.all) }
+                            .font(LineaFont.sectionLabel)
+                            .tint(LineaColor.textPrimary)
+                            .accessibilityIdentifier("plan.reviewInbox")
+                    }
+                }
+                VStack(spacing: 0) {
+                    ForEach(Array(inbox.enumerated()), id: \.element.id) { index, task in
+                        TaskRow(
+                            task: task,
+                            onToggle: { Task { await plan.toggleTask(task) } },
+                            onOpen: { editingTask = .edit(task) },
+                            onDelete: { Task { await plan.deleteTask(task) } },
+                            caption: task.isDone ? nil : intelligence.plannedStart(for: task.id).map {
+                                InboxReview.plannedCaption($0, time: intelligence.time)
+                            }
+                        )
+                        if index < inbox.count - 1 { LineaHairline() }
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("plan.inbox")
+        }
+    }
+
     // MARK: Tasks
 
     private var tasksSection: some View {
@@ -102,7 +142,10 @@ struct PlanView: View {
                                 task: task,
                                 onToggle: { Task { await plan.toggleTask(task) } },
                                 onOpen: { editingTask = .edit(task) },
-                                onDelete: { Task { await plan.deleteTask(task) } }
+                                onDelete: { Task { await plan.deleteTask(task) } },
+                                caption: section.day == nil
+                                    ? task.deadline.map { QuickTaskText.deadline($0, time: intelligence.time) }
+                                    : nil
                             )
                             if index < section.tasks.count - 1 { LineaHairline() }
                         }
@@ -110,7 +153,7 @@ struct PlanView: View {
                 }
             }
 
-            if plan.taskSections.isEmpty {
+            if plan.taskSections.isEmpty && plan.inboxTasks.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     SectionLabel(text: "Задачи")
                     emptyHint("На этот период задач нет")

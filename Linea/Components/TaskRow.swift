@@ -15,6 +15,8 @@ struct TaskRow: View {
     var onToggle: () -> Void = {}
     var onOpen: () -> Void = {}
     var onDelete: () -> Void = {}
+    /// Подпись под названием вместо заметки: «Linea нашла время: сегодня в 16:30».
+    var caption: String? = nil
 
     /// Средний приоритет не подписывается: подпись у каждой строки — шум.
     private var tag: String? {
@@ -22,7 +24,7 @@ struct TaskRow: View {
     }
 
     private var meta: String? {
-        task.notes?.isEmpty == false ? task.notes : nil
+        caption ?? (task.notes?.isEmpty == false ? task.notes : nil)
     }
 
     var body: some View {

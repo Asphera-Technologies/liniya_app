@@ -37,6 +37,7 @@ struct TodayView: View {
                 mainToday
                 nowSection
                 timeline
+                inboxOffer
 
                 if intelligence.isCheckInDue {
                     EveningReviewCard(
@@ -199,6 +200,26 @@ struct TodayView: View {
                 .accessibilityLabel("\(option.title), \(QuickTaskText.duration(minutes: option.minutes))")
                 if option.id != options.last?.id { LineaHairline() }
             }
+        }
+    }
+
+    // MARK: Inbox
+
+    /// «Без даты» накопилось — Linea предлагает разобрать за минуту. Текст и
+    /// когда предлагать — из ядра (`InboxReview.offer`).
+    @ViewBuilder
+    private var inboxOffer: some View {
+        if let offer = InboxReview().offer(tasks: plan.tasks, time: intelligence.time) {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Без даты")
+                Text(offer.text)
+                    .font(LineaFont.rowTitle)
+                    .foregroundStyle(LineaColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                LineaOutlineButton(title: "Разобрать") { appState.openInboxReview(.unsorted) }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("today.inbox")
         }
     }
 

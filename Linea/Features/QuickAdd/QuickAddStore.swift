@@ -35,9 +35,9 @@ final class QuickAddStore {
     /// Не ошибка, а пояснение: «распознала диктовка», «запись остановилась».
     private(set) var notice: String?
     private(set) var isSaving = false
-    /// Чем станет задача без слов о дне: «+ Задача» в плане и кнопка «+»
-    /// создают задачу на сегодня.
-    private(set) var defaultDay: TaskDay? = .today
+    /// Чем станет задача без слов о дне: «Без даты» — входящие. «Когда?»
+    /// Linea не спрашивает; место задаче подберёт план или разбор.
+    private(set) var defaultDay: TaskDay? = .someday
 
     let recorder: VoiceRecorder
     /// Модель GigaAM в этой сборке есть. Без неё голос распознаёт диктовка.
@@ -91,7 +91,7 @@ final class QuickAddStore {
     // MARK: Экран
 
     /// Открыть ввод с чистого листа.
-    func begin(defaultDay: TaskDay? = .today) {
+    func begin(defaultDay: TaskDay? = .someday) {
         end()
         self.defaultDay = defaultDay
     }

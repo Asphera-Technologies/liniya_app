@@ -11,6 +11,8 @@ import SwiftUI
 
 struct LineaOutlineButton: View {
     let title: String
+    /// Во всю ширину — для списка вариантов.
+    var fillsWidth = false
     var action: () -> Void
 
     var body: some View {
@@ -20,6 +22,7 @@ struct LineaOutlineButton: View {
                 .foregroundStyle(LineaColor.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
+                .frame(maxWidth: fillsWidth ? .infinity : nil)
                 .background(
                     RoundedRectangle(cornerRadius: LineaMetrics.controlRadius, style: .continuous)
                         .fill(LineaColor.background)

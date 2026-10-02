@@ -45,4 +45,13 @@ final class AppState {
         isPresentingAI = false
         isPresentingQuickAdd = true
     }
+
+    /// «Без даты» → «Разобрать»: the inbox, one task at a time.
+    var inboxReview: InboxReviewScope?
+
+    func openInboxReview(_ scope: InboxReviewScope) {
+        isPresentingAI = false
+        isPresentingQuickAdd = false
+        inboxReview = scope
+    }
 }

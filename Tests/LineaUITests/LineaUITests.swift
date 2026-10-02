@@ -32,7 +32,7 @@ final class LineaUITests: XCTestCase {
 
         let field = openQuickAdd(app)
         snapshot(app, "02 Быстрая задача — пусто")
-        XCTAssertTrue(chip(app, "Когда: Сегодня").exists, "Чип дня по умолчанию — «Сегодня»")
+        XCTAssertTrue(chip(app, "Когда: Без даты").exists, "«Когда?» не спрашиваем: по умолчанию — «Без даты»")
         XCTAssertTrue(chip(app, "Приоритет: Средний").exists, "Приоритет по умолчанию — «Средний»")
         XCTAssertFalse(app.buttons["Добавить задачу"].isEnabled, "Без названия добавлять нечего")
 
@@ -187,8 +187,8 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test4TaskCardKindAndDependencies() throws {
         let app = launch()
-        addTask(app, "Собрать данные")
-        addTask(app, "Написать отчёт, важно")
+        addTask(app, "Собрать данные сегодня")
+        addTask(app, "Написать отчёт сегодня, важно")
 
         openTab(app, "План", index: 1)
         let report = button(app, startingWith: "Написать отчёт")
@@ -226,8 +226,8 @@ final class LineaUITests: XCTestCase {
     func test5NowBeforeMeeting() throws {
         let app = launch()
         addTask(app, "Встреча с клиентом в \(Self.clock(minutesFromNow: 25)) на 30 минут")
-        addTask(app, "Подготовить стратегию на полтора часа, важно")
-        addTask(app, "Ответить на письма 15 минут")
+        addTask(app, "Подготовить стратегию сегодня на полтора часа, важно")
+        addTask(app, "Ответить на письма сегодня 15 минут")
 
         openTab(app, "Сегодня", index: 0)
         let now = nowCard(app)
@@ -282,6 +282,64 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(now.buttons["Начать"].waitForExistence(timeout: 10), "После «Готово» — следующее действие")
         XCTAssertFalse(now.staticTexts["Проверить сборку"].exists)
         snapshot(app, "27 Следующее действие")
+    }
+
+    // MARK: - 8. «Без даты»: без вопроса «Когда?», список и разбор
+
+    @MainActor
+    func test8InboxWithoutDate() throws {
+        let app = launch()
+        let field = openQuickAdd(app)
+        field.tap()
+        field.typeText("Посмотреть новые AI-модели")
+        XCTAssertTrue(chip(app, "Когда: Без даты").waitForExistence(timeout: 5), "«Когда?» не спрашиваем")
+        snapshot(app, "28 Без даты — сразу «Добавить»")
+        app.buttons["Добавить задачу"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5), "Одного названия достаточно")
+        addTask(app, "Написать Саше")
+        addTask(app, "Изучить новый API")
+
+        openTab(app, "План", index: 1)
+        let inbox = app.descendants(matching: .any).matching(identifier: "plan.inbox").firstMatch
+        XCTAssertTrue(inbox.waitForExistence(timeout: 5), "В «Плане» есть «Без даты»")
+        for title in ["Посмотреть новые AI-модели", "Написать Саше", "Изучить новый API"] {
+            XCTAssertTrue(inbox.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch.exists,
+                          "«\(title)» — в «Без даты»")
+        }
+        snapshot(app, "29 План: Без даты")
+
+        openTab(app, "Сегодня", index: 0)
+        let offer = app.descendants(matching: .any).matching(identifier: "today.inbox").firstMatch
+        XCTAssertTrue(offer.waitForExistence(timeout: 10), "Три задачи без даты — Linea предлагает разобрать")
+        XCTAssertTrue(offer.staticTexts["3 задачи без даты — разберём за минуту?"].exists)
+        scrollTo(offer, in: app)
+        snapshot(app, "30 Сегодня: предложение разобрать")
+        offer.buttons["Разобрать"].tap()
+
+        let title = app.staticTexts.matching(identifier: "inbox.title").firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "Разбор открылся")
+        XCTAssertEqual(title.label, "Посмотреть новые AI-модели", "Давние — первыми")
+        XCTAssertTrue(app.staticTexts["1 из 3"].exists)
+        XCTAssertTrue(app.staticTexts.matching(identifier: "inbox.suggestion").firstMatch.exists, "Linea подсказывает, куда")
+        snapshot(app, "31 Разбор: первая задача")
+        app.buttons["inbox.choice.today"].tap()
+        XCTAssertTrue(app.staticTexts["2 из 3"].waitForExistence(timeout: 5))
+        snapshot(app, "32 Разбор: вторая задача")
+        app.buttons["inbox.choice.keep"].tap()
+        XCTAssertTrue(app.staticTexts["3 из 3"].waitForExistence(timeout: 5))
+        app.buttons["inbox.delete"].tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: 5), "Разобрали последнюю — лист закрылся")
+        XCTAssertTrue(offer.waitForNonExistence(timeout: 5), "Разобрано — предложения больше нет")
+
+        openTab(app, "План", index: 1)
+        XCTAssertTrue(inbox.waitForExistence(timeout: 5))
+        XCTAssertTrue(inbox.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Написать Саше")).firstMatch.exists,
+                      "Оставленная — в «Без даты»")
+        XCTAssertFalse(inbox.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Посмотреть новые AI-модели")).firstMatch.exists,
+                       "Отправленная на сегодня ушла из «Без даты»")
+        XCTAssertFalse(element(app, labelContaining: "Изучить новый API").exists, "Удалённой нет")
+        XCTAssertTrue(button(app, startingWith: "Посмотреть новые AI-модели").exists, "Она — в дне")
+        snapshot(app, "33 План после разбора")
     }
 
     // MARK: - 6. Длительность по типу задачи

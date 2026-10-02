@@ -77,6 +77,11 @@ struct RootView: View {
         .sheet(isPresented: $appState.isPresentingQuickAdd, onDismiss: { quickAdd.end() }) {
             QuickAddView()
         }
+        // «Без даты» → «Разобрать»: по одной задаче, с подсказкой Linea.
+        .sheet(item: $appState.inboxReview) { scope in
+            InboxReviewView(scope: scope)
+                .presentationDetents([.large])
+        }
     }
 }
 

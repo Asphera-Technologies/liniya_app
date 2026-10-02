@@ -181,7 +181,8 @@ final class PlanStore {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         return tasks
-            .filter { !$0.isDone }
+            // «Без даты» — не главное сегодня: у таких задач дня нет.
+            .filter { !$0.isDone && !InboxReview.isInInbox($0) }
             .sorted { lhs, rhs in
                 let lToday = lhs.date.map { calendar.isDate($0, inSameDayAs: today) } ?? false
                 let rToday = rhs.date.map { calendar.isDate($0, inSameDayAs: today) } ?? false
@@ -233,8 +234,8 @@ final class PlanStore {
     }
 
     /// Tasks grouped for display: dated tasks that fall inside the visible
-    /// interval (grouped by day), followed by an always-visible "Без дня"
-    /// group for undated tasks.
+    /// interval (grouped by day), then «Со сроком» — no day but a deadline,
+    /// soonest first. «Без даты» (the inbox) is its own list, `inboxTasks`.
     var taskSections: [TaskSection] {
         let calendar = Calendar.current
         let interval = visibleInterval
@@ -243,7 +244,10 @@ final class PlanStore {
             guard let date = task.date else { return false }
             return interval.contains(date) || calendar.isDate(date, inSameDayAs: interval.start)
         }
-        let undated = tasks.filter { $0.date == nil }
+        let dueOnly = tasks.filter { task in
+            guard task.date == nil, task.deadline != nil else { return false }
+            return !task.isDone || (task.completedAt.map(interval.contains) ?? false)
+        }
 
         let byDay = Dictionary(grouping: dated) { calendar.startOfDay(for: $0.date!) }
 
@@ -255,12 +259,31 @@ final class PlanStore {
             )
         }
 
-        if !undated.isEmpty {
-            sections.append(
-                TaskSection(id: "Без дня", day: nil, tasks: undated.sorted(by: Self.taskOrder))
-            )
+        if !dueOnly.isEmpty {
+            let ordered = dueOnly.sorted { lhs, rhs in
+                if lhs.isDone != rhs.isDone { return !lhs.isDone }
+                return (lhs.deadline ?? .distantFuture) < (rhs.deadline ?? .distantFuture)
+            }
+            sections.append(TaskSection(id: "Со сроком", day: nil, tasks: ordered))
         }
         return sections
+    }
+
+    /// «Без даты» — входящие: открытые задачи без дня и срока, давние первыми,
+    /// плюс закрытые в видимый период, чтобы отметка не исчезала сразу.
+    var inboxTasks: [LineaTask] {
+        let interval = visibleInterval
+        let closed = tasks.filter { task in
+            task.isDone && task.date == nil && task.deadline == nil && task.scheduledStart == nil
+                && (task.completedAt.map(interval.contains) ?? false)
+        }
+        return InboxReview.inbox(tasks) + closed.sorted { ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast) }
+    }
+
+    /// Разбор «Без даты»: задача получает день или срок — или остаётся без
+    /// даты, но больше не считается неразобранной.
+    func sortInboxTask(_ task: LineaTask, as choice: InboxReview.Choice, profile: UserProfile) async {
+        await saveTask(InboxReview().apply(choice, to: task, profile: profile, time: timeProvider()))
     }
 
     // MARK: - Ordering & formatting helpers

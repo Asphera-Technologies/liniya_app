@@ -500,6 +500,14 @@ final class IntelligenceStore {
 
     var canAcceptPlan: Bool { plan?.status == .proposed && !(plan?.blocks.isEmpty ?? true) }
 
+    /// Когда сегодняшний план поставил задачу. Для «Без даты» это значит,
+    /// что Linea сама нашла ей время.
+    func plannedStart(for taskID: UUID) -> Date? {
+        let now = time.now
+        guard let plan, time.isSameDay(plan.day, now) else { return nil }
+        return plan.blocks.first { $0.taskID == taskID && $0.kind == .focus && $0.end > now }?.start
+    }
+
     var topTask: LineaTask? {
         guard let id = plan?.topTaskIDs.first else { return nil }
         return planStore.tasks.first { $0.id == id }

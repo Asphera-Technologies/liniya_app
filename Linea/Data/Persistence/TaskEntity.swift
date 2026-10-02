@@ -37,6 +37,8 @@ final class TaskEntity {
     /// «Сначала нужно»: id задач через запятую. Строкой, а не массивом, —
     /// самая простая для lightweight-миграции колонка.
     var blockedByRaw: String?
+    /// Разобрана из «Без даты» и оставлена там; nil — не разбиралась.
+    var inboxReviewedAt: Date?
 
     init(
         id: UUID,
@@ -54,7 +56,8 @@ final class TaskEntity {
         completedAt: Date? = nil,
         kindRaw: String? = nil,
         deferralCount: Int? = nil,
-        blockedByRaw: String? = nil
+        blockedByRaw: String? = nil,
+        inboxReviewedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -72,6 +75,7 @@ final class TaskEntity {
         self.kindRaw = kindRaw
         self.deferralCount = deferralCount
         self.blockedByRaw = blockedByRaw
+        self.inboxReviewedAt = inboxReviewedAt
     }
 }
 
@@ -93,7 +97,8 @@ extension TaskEntity {
             completedAt: task.completedAt,
             kindRaw: task.kindOverride?.rawValue,
             deferralCount: task.deferralCount,
-            blockedByRaw: Self.raw(task.blockedBy)
+            blockedByRaw: Self.raw(task.blockedBy),
+            inboxReviewedAt: task.inboxReviewedAt
         )
     }
 
@@ -115,7 +120,8 @@ extension TaskEntity {
             completedAt: completedAt,
             kindOverride: kindRaw.flatMap(TaskKind.init(rawValue:)),
             deferralCount: deferralCount ?? 0,
-            blockedBy: Self.ids(blockedByRaw)
+            blockedBy: Self.ids(blockedByRaw),
+            inboxReviewedAt: inboxReviewedAt
         )
     }
 
@@ -135,6 +141,7 @@ extension TaskEntity {
         kindRaw = task.kindOverride?.rawValue
         deferralCount = task.deferralCount
         blockedByRaw = Self.raw(task.blockedBy)
+        inboxReviewedAt = task.inboxReviewedAt
     }
 
     private static func raw(_ ids: [UUID]) -> String? {
