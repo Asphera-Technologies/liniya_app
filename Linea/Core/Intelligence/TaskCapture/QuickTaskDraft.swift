@@ -109,6 +109,7 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
                 // «На неделе» — срок конца недели.
                 result.deadline = resolvedDay.deadline
                 result.deadlineOrigin = resolvedDay.deadline == nil ? .assumed : result.dayOrigin
+                result.isEndOfWeekDeadline = resolvedDay.deadline != nil
             }
         }
 
@@ -186,6 +187,8 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
     var date: Date?
     var deadline: Date?
     var deadlineOrigin: Origin = .assumed
+    /// Срок — просто конец недели из «на неделе», а не названный отдельно.
+    var isEndOfWeekDeadline = false
     var scheduledStart: Date?
     /// Nil — человек не сказал; план возьмёт свою оценку.
     var minutes: Int?
@@ -242,7 +245,11 @@ nonisolated enum QuickTaskText {
             }
             return text
         }
-        if resolution.day == .thisWeek { return "На неделе" }
+        // «На неделе» — пока срок не назвали отдельно: «на неделе, до 18:00
+        // сегодня» показывает срок, а не неделю.
+        if resolution.day == .thisWeek, resolution.deadline == nil || resolution.isEndOfWeekDeadline {
+            return "На неделе"
+        }
         if let deadline = resolution.deadline {
             if time.isSameDay(deadline, time.now) { return "до \(RussianText.clock(deadline, time: time))" }
             return "до " + dayName(deadline, time: time).lowercased()

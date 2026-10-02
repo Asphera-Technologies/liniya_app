@@ -85,6 +85,12 @@ struct QuickTaskDraftTests {
         #expect(result.deadline == WowFixture.moment(21, 0, dayOffset: 4))
         #expect(result.deadlineOrigin == .chosen)
         #expect(QuickTaskText.day(result, time: time) == "На неделе")
+
+        // Срок, названный отдельно, видно в чипе — «на неделе» его не прячет.
+        draft.deadline = .at(WowFixture.moment(18))
+        let named = resolve(draft)
+        #expect(named.deadline == WowFixture.moment(18))
+        #expect(QuickTaskText.day(named, time: time) == "до 18:00")
     }
 
     @Test("Срок без дня — задача без дня; день из чипа остаётся вместе со сроком")
