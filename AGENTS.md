@@ -51,6 +51,11 @@
 - `Scripts/check-layers.sh` lints layer boundaries; both must be green before finishing a core task.
 - Anything that imports SwiftUI/SwiftData/HealthKit can only be verified on a Mac; list such changes
   explicitly when finishing a task.
+- Screens can be checked without a Mac: `.github/workflows/ios-ui.yml` runs the UI tests
+  (`Tests/LineaUITests`, scheme `LineaUITests`) on an iPhone simulator and uploads a screenshot of
+  every step (artifact `ui-screenshots`; `gh run download <id> -n ui-screenshots`). The app runs
+  with `-uiTesting` (DEBUG only): SwiftData in memory, data entered through the UI. Voice,
+  HealthKit and notifications cannot be checked there.
 
 ## Before finishing each iOS task
 
