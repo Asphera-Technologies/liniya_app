@@ -431,13 +431,16 @@ final class LineaUITests: XCTestCase {
         let milk = button(app, startingWith: "Купить молоко")
         XCTAssertTrue(milk.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Отметить невыполненной"].exists)
+        bringAboveCommandBar(milk, in: app)
         milk.swipeRight()
         XCTAssertTrue(app.buttons["Отметить невыполненной"].waitForExistence(timeout: 5), "Свайп вправо закрывает задачу")
         XCTAssertFalse(app.navigationBars["Задача"].exists, "Карточка задачи не открывалась")
         snapshot(app, "40 Свайп вправо — Готово")
 
         // Влево — «Перенести»: короткий выбор; «Без даты» — во входящие.
-        button(app, startingWith: "Позвонить маме").swipeLeft()
+        let mom = button(app, startingWith: "Позвонить маме")
+        bringAboveCommandBar(mom, in: app)
+        mom.swipeLeft()
         XCTAssertTrue(app.staticTexts["Перенести «Позвонить маме»"].waitForExistence(timeout: 5), "Свайп влево — «Перенести»")
         for option in ["Завтра", "Выбрать дату…", "Без даты"] {
             XCTAssertTrue(app.buttons[option].exists, "В «Перенести» есть «\(option)»")
@@ -450,7 +453,9 @@ final class LineaUITests: XCTestCase {
             .waitForExistence(timeout: 5), "Задача перенесена в «Без даты»")
 
         // «Выбрать дату…» — календарь.
-        button(app, startingWith: "Подготовить релиз").swipeLeft()
+        let release = button(app, startingWith: "Подготовить релиз")
+        bringAboveCommandBar(release, in: app)
+        release.swipeLeft()
         let pickDay = app.buttons["Выбрать дату…"]
         XCTAssertTrue(pickDay.waitForExistence(timeout: 5))
         pickDay.tap()
@@ -460,7 +465,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(app.datePickers.firstMatch.waitForNonExistence(timeout: 5))
 
         // Долгое нажатие — меню задачи.
-        let release = button(app, startingWith: "Подготовить релиз")
+        bringAboveCommandBar(release, in: app)
         release.press(forDuration: 1.2)
         for item in ["Изменить", "Привязать к цели", "Изменить приоритет", "Удалить"] {
             XCTAssertTrue(app.buttons[item].waitForExistence(timeout: 5), "В меню есть «\(item)»")
@@ -470,13 +475,15 @@ final class LineaUITests: XCTestCase {
         tapMenuItem(app, "Высокий")
         XCTAssertTrue(app.staticTexts["Высокий"].waitForExistence(timeout: 5), "Приоритет сменился без карточки")
 
-        button(app, startingWith: "Подготовить релиз").press(forDuration: 1.2)
+        bringAboveCommandBar(release, in: app)
+        release.press(forDuration: 1.2)
         let linkGoal = app.buttons["Привязать к цели"]
         XCTAssertTrue(linkGoal.waitForExistence(timeout: 5))
         linkGoal.tap()
         tapMenuItem(app, "Запустить MVP Linea")
 
-        button(app, startingWith: "Подготовить релиз").press(forDuration: 1.2)
+        bringAboveCommandBar(release, in: app)
+        release.press(forDuration: 1.2)
         let edit = app.buttons["Изменить"]
         XCTAssertTrue(edit.waitForExistence(timeout: 5))
         edit.tap()
@@ -487,7 +494,8 @@ final class LineaUITests: XCTestCase {
         app.navigationBars["Задача"].buttons["Отмена"].tap()
         XCTAssertTrue(app.navigationBars["Задача"].waitForNonExistence(timeout: 5))
 
-        button(app, startingWith: "Купить молоко").press(forDuration: 1.2)
+        bringAboveCommandBar(milk, in: app)
+        milk.press(forDuration: 1.2)
         let delete = app.buttons["Удалить"]
         XCTAssertTrue(delete.waitForExistence(timeout: 5))
         delete.tap()
@@ -499,6 +507,7 @@ final class LineaUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(planned.waitForExistence(timeout: 10), "Задача в «Дальше»")
         scrollTo(planned, in: app)
+        bringAboveCommandBar(planned, in: app)
         planned.swipeRight()
         openTab(app, "План", index: 1)
         XCTAssertTrue(app.buttons["Отметить невыполненной"].waitForExistence(timeout: 5), "Свайп на «Сегодня» закрыл задачу")
@@ -622,6 +631,18 @@ final class LineaUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.25)
         }
         XCTFail("В меню нет пункта «\(label)»")
+    }
+
+    /// Строка выше строки ассистента: низ экрана перекрыт ею и вкладками, и
+    /// жест по строке под ними попал бы в них.
+    @MainActor
+    private func bringAboveCommandBar(_ element: XCUIElement, in app: XCUIApplication) {
+        let bar = app.buttons["Новая задача"].firstMatch
+        var attempts = 0
+        while element.exists, bar.exists, element.frame.maxY > bar.frame.minY - 12, attempts < 4 {
+            app.swipeUp()
+            attempts += 1
+        }
     }
 
     @MainActor
