@@ -57,7 +57,8 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
         time: TimeContext,
         defaultDay: TaskDay? = .today,
         parser: QuickTaskParser = QuickTaskParser(),
-        linker: GoalLinker = GoalLinker()
+        linker: GoalLinker = GoalLinker(),
+        classifier: TaskClassifier = TaskClassifier()
     ) -> QuickTaskResolution {
         let activeGoals = goals.filter { $0.isActive && !$0.isCompleted }
         let parsed = parser.parse(text, goals: activeGoals, profile: profile, time: time)
@@ -132,8 +133,6 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
             result.priorityOrigin = .typed
         }
 
-        result.demand = parsed.demand ?? .normal
-
         switch goal {
         case .linked(let id)?:
             result.goalID = id
@@ -154,6 +153,15 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
                 }
             }
         }
+
+        // Тип — по тому, что получилось: связь с целью делает задачу шагом к
+        // цели. От типа — сложность, если человек её не назвал, и оценка
+        // длительности, которую покажет серый чип.
+        result.kind = classifier.classify(
+            title: result.title, goalID: result.goalID,
+            isFixed: result.scheduledStart != nil, demand: parsed.demand
+        ).kind
+        result.demand = parsed.demand ?? result.kind.typicalDemand
 
         result.recognized = parsed.recognized
         return result
@@ -185,6 +193,8 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
     var priority: TaskPriority = .normal
     var priorityOrigin: Origin = .assumed
     var demand: CognitiveDemand = .normal
+    /// Какого типа задача — внутреннее, в интерфейсе не показывается.
+    var kind: TaskKind = .standalone
     var goalID: UUID?
     var goalOrigin: Origin = .assumed
     /// «Похоже, это к цели …» — когда цель не выбрана.
@@ -196,6 +206,9 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
     }
 
     var canSave: Bool { !title.isEmpty }
+
+    /// Сколько займёт: сказанное или обычное для типа задачи.
+    var estimatedMinutes: Int { minutes ?? kind.typicalMinutes }
 
     /// Задача, которую сохранит «Добавить».
     func task(id: UUID, createdAt: Date) -> LineaTask {

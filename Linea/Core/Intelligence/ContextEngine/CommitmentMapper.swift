@@ -48,7 +48,7 @@ nonisolated struct CommitmentMapper: Sendable {
         for task in tasks {
             guard let start = task.scheduledStart, !task.isDone, !claimedTasks.contains(task.id) else { continue }
             guard day.contains(start) else { continue }
-            let end = start.addingTimeInterval(TimeInterval(task.effectiveEstimatedMinutes * 60))
+            let end = start.addingTimeInterval(TimeInterval(TaskEstimate.minutes(for: task) * 60))
             result.append(
                 Commitment(
                     id: "task-\(task.id.uuidString)",

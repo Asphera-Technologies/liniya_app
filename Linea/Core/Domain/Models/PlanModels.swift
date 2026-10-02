@@ -88,6 +88,9 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     var cognitiveDemand: CognitiveDemand
     var goalID: UUID?
     var completedAt: Date?
+    /// Тип, который человек выбрал сам в карточке задачи. `nil` — тип
+    /// определяет Linea (`TaskClassifier`), и он меняется вместе с названием.
+    var kindOverride: TaskKind?
 
     init(
         id: UUID = UUID(),
@@ -102,7 +105,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         estimatedMinutes: Int? = nil,
         cognitiveDemand: CognitiveDemand = .normal,
         goalID: UUID? = nil,
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        kindOverride: TaskKind? = nil
     ) {
         self.id = id
         self.title = title
@@ -117,12 +121,11 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         self.cognitiveDemand = cognitiveDemand
         self.goalID = goalID
         self.completedAt = completedAt
+        self.kindOverride = kindOverride
     }
 
-    /// Duration the planner works with when the user gave none.
-    static let defaultEstimatedMinutes = 45
-
-    var effectiveEstimatedMinutes: Int { max(5, estimatedMinutes ?? LineaTask.defaultEstimatedMinutes) }
+    // Duration without the user's estimate depends on what the task is —
+    // see `TaskEstimate` (Intelligence) and `TaskKind.typicalMinutes`.
 
     /// A task with a user-chosen start is a commitment for the planner.
     var isFixed: Bool { scheduledStart != nil }

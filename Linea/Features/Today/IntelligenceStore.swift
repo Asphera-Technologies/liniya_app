@@ -211,6 +211,14 @@ final class IntelligenceStore {
         if let plan = record.plan {
             LineaLog.plan.notice("План: блоков \(plan.blocks.count, privacy: .public), приоритетов \(plan.topTaskIDs.count, privacy: .public), перенесено \(plan.deferredTaskIDs.count, privacy: .public)")
         }
+
+        // Типы задач в интерфейсе не видны — журнал показывает, как Linea их поняла.
+        let classifier = TaskClassifier()
+        let kinds = Dictionary(grouping: (record.snapshot?.tasks ?? []).filter { !$0.isDone }) { classifier.kind(of: $0).rawValue }
+            .map { "\($0.key) \($0.value.count)" }
+            .sorted()
+            .joined(separator: ", ")
+        LineaLog.plan.notice("Типы открытых задач: \(kinds.isEmpty ? "нет" : kinds, privacy: .public)")
     }
 
     /// Health history is read once a day: HealthKit is the source of truth,

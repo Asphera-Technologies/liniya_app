@@ -74,7 +74,7 @@ nonisolated struct CheckInDraft: Sendable, Equatable {
             return TaskLine(
                 id: task.id,
                 title: task.title,
-                minutes: task.effectiveEstimatedMinutes,
+                minutes: TaskEstimate.minutes(for: task),
                 isPlannedForDay: planned,
                 wasDone: task.isDone,
                 understood: outcome?.status,

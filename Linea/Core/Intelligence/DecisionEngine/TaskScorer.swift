@@ -14,11 +14,12 @@
 
 import Foundation
 
-/// How long the planner reserves for a task: the user's estimate stretched by
-/// the calibrated multiplier (people underestimate their own tasks).
+/// How long the planner reserves for a task: the user's estimate (or the usual
+/// one for the task's kind) stretched by the calibrated multiplier — people
+/// underestimate their own tasks.
 nonisolated enum PlanDuration {
     static func minutes(for task: LineaTask, calibration: Calibration) -> Int {
-        let raw = Double(task.effectiveEstimatedMinutes) * calibration.estimateMultiplier
+        let raw = Double(TaskEstimate.minutes(for: task)) * calibration.estimateMultiplier
         return max(5, Int(raw.rounded()))
     }
 }

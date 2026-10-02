@@ -175,7 +175,7 @@ struct QuickAddView: View {
     }
 
     private func durationChip(_ resolution: QuickTaskResolution) -> some View {
-        let minutes = resolution.minutes ?? LineaTask.defaultEstimatedMinutes
+        let minutes = resolution.estimatedMinutes
         let title = QuickTaskText.duration(minutes: minutes)
         return Menu {
             ForEach(Self.durations, id: \.self) { value in
@@ -306,7 +306,7 @@ struct QuickAddView: View {
             Picker(
                 "Сколько займёт",
                 selection: Binding(
-                    get: { Self.nearestCustom(resolution.minutes ?? LineaTask.defaultEstimatedMinutes) },
+                    get: { Self.nearestCustom(resolution.estimatedMinutes) },
                     set: { store.chooseMinutes($0) }
                 )
             ) {
@@ -331,7 +331,7 @@ struct QuickAddView: View {
 
     private func startCustomMinutes(_ resolution: QuickTaskResolution) {
         // На колесе сразу стоит текущая оценка — «Готово» без прокрутки её и оставит.
-        store.chooseMinutes(Self.nearestCustom(resolution.minutes ?? LineaTask.defaultEstimatedMinutes))
+        store.chooseMinutes(Self.nearestCustom(resolution.estimatedMinutes))
         isPickingMinutes = true
     }
 

@@ -37,6 +37,8 @@ struct TaskEditorView: View {
     @State private var hasStart: Bool
     @State private var start: Date
     @State private var goalID: UUID?
+    /// Тип, выбранный человеком; nil — как решит Linea.
+    @State private var kindOverride: TaskKind?
     /// «Готово» and «Удалить» fire once; a double tap used to save twice.
     @State private var isSaving = false
     @FocusState private var titleFocused: Bool
@@ -45,6 +47,7 @@ struct TaskEditorView: View {
 
     private static let durations = [15, 30, 45, 60, 90, 120]
     private let matcher = KeywordGoalMatcher()
+    private let classifier = TaskClassifier()
 
     init(existing: LineaTask) {
         self.existing = existing
@@ -59,6 +62,7 @@ struct TaskEditorView: View {
         _hasStart = State(initialValue: existing.scheduledStart != nil)
         _start = State(initialValue: existing.scheduledStart ?? Self.defaultStart(for: existing.date))
         _goalID = State(initialValue: existing.goalID)
+        _kindOverride = State(initialValue: existing.kindOverride)
     }
 
     var body: some View {
@@ -73,6 +77,7 @@ struct TaskEditorView: View {
                     demandSection
                     durationSection
                     scheduleSection
+                    kindSection
 
                     deleteButton
                 }
@@ -228,6 +233,60 @@ struct TaskEditorView: View {
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
+    // MARK: Kind
+
+    /// Тип задачи — внутренний, Linea определяет его сама; здесь его можно
+    /// поправить. Нигде больше он не показывается.
+    private var kindSection: some View {
+        let automatic = classifier.classify(
+            title: trimmedTitle, goalID: goalID, isFixed: hasStart, demand: demand
+        ).kind
+        let current = kindOverride ?? automatic
+        return VStack(alignment: .leading, spacing: 6) {
+            Menu {
+                Button { kindOverride = nil } label: {
+                    kindOption("Как решит Linea: \(automatic.title.lowercased())", isSelected: kindOverride == nil)
+                }
+                Divider()
+                ForEach(TaskKind.allCases, id: \.self) { kind in
+                    Button { kindOverride = kind } label: {
+                        kindOption(kind.title, isSelected: kindOverride == kind)
+                    }
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Text("Тип задачи")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                    Spacer(minLength: 8)
+                    Text(current.title)
+                        .font(LineaFont.rowValue)
+                        .foregroundStyle(kindOverride == nil ? LineaColor.textTertiary : LineaColor.textSecondary)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(LineaColor.textTertiary)
+                }
+                .padding(.vertical, 14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Тип задачи: \(current.title)")
+            Text("Linea определяет тип сама и балансирует по нему день: шаги к целям, обязательства, быт, рутину.")
+                .font(LineaFont.caption)
+                .foregroundStyle(LineaColor.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private func kindOption(_ title: String, isSelected: Bool) -> some View {
+        if isSelected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
+    }
+
     // MARK: Dates
 
     private var scheduleSection: some View {
@@ -336,7 +395,8 @@ struct TaskEditorView: View {
             estimatedMinutes: estimatedMinutes,
             cognitiveDemand: demand,
             goalID: goalID,
-            completedAt: existing.completedAt
+            completedAt: existing.completedAt,
+            kindOverride: kindOverride
         )
         Task {
             await plan.saveTask(result)

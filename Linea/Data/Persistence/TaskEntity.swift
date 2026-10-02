@@ -30,6 +30,8 @@ final class TaskEntity {
     var cognitiveDemandRaw: String?
     var goalID: UUID?
     var completedAt: Date?
+    /// Тип задачи, выбранный человеком; nil — тип определяет Linea.
+    var kindRaw: String?
 
     init(
         id: UUID,
@@ -44,7 +46,8 @@ final class TaskEntity {
         estimatedMinutes: Int? = nil,
         cognitiveDemandRaw: String? = nil,
         goalID: UUID? = nil,
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        kindRaw: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -59,6 +62,7 @@ final class TaskEntity {
         self.cognitiveDemandRaw = cognitiveDemandRaw
         self.goalID = goalID
         self.completedAt = completedAt
+        self.kindRaw = kindRaw
     }
 }
 
@@ -77,7 +81,8 @@ extension TaskEntity {
             estimatedMinutes: task.estimatedMinutes,
             cognitiveDemandRaw: task.cognitiveDemand.rawValue,
             goalID: task.goalID,
-            completedAt: task.completedAt
+            completedAt: task.completedAt,
+            kindRaw: task.kindOverride?.rawValue
         )
     }
 
@@ -96,7 +101,8 @@ extension TaskEntity {
             estimatedMinutes: estimatedMinutes,
             cognitiveDemand: cognitiveDemandRaw.flatMap(CognitiveDemand.init(rawValue:)) ?? .normal,
             goalID: goalID,
-            completedAt: completedAt
+            completedAt: completedAt,
+            kindOverride: kindRaw.flatMap(TaskKind.init(rawValue:))
         )
     }
 
@@ -113,5 +119,6 @@ extension TaskEntity {
         cognitiveDemandRaw = task.cognitiveDemand.rawValue
         goalID = task.goalID
         completedAt = task.completedAt
+        kindRaw = task.kindOverride?.rawValue
     }
 }
