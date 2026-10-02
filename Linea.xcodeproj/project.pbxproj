@@ -11,8 +11,19 @@
 		9F4BBA4B3041A101009126E3 /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F4BBA4A3041A100009126E3 /* HealthKitManager.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		8B5F4E2A8545FF6CC35F107F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9F4BBA3330418A23009126E3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9F4BBA3A30418A24009126E3;
+			remoteInfo = Linea;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		9F4BBA3B30418A24009126E3 /* Linea.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Linea.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4C529BACCA00ADD8995CB004 /* LineaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LineaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9F4BBA4A3041A100009126E3 /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -20,6 +31,11 @@
 		9F4BBA3D30418A24009126E3 /* Linea */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Linea;
+			sourceTree = "<group>";
+		};
+		506403CA4A8D0B127860EC9F /* LineaUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Tests/LineaUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +49,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8469AACFEEAB13923306E540 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -40,6 +63,7 @@
 			isa = PBXGroup;
 			children = (
 				9F4BBA3D30418A24009126E3 /* Linea */,
+				506403CA4A8D0B127860EC9F /* LineaUITests */,
 				9F4BBA3C30418A24009126E3 /* Products */,
 				9F4BBA4A3041A100009126E3 /* HealthKitManager.swift */,
 			);
@@ -49,6 +73,7 @@
 			isa = PBXGroup;
 			children = (
 				9F4BBA3B30418A24009126E3 /* Linea.app */,
+				4C529BACCA00ADD8995CB004 /* LineaUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -80,6 +105,29 @@
 			productReference = 9F4BBA3B30418A24009126E3 /* Linea.app */;
 			productType = "com.apple.product-type.application";
 		};
+		09C10832165A1FE17517C4AD /* LineaUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 40E560C7698695D2DDF97490 /* Build configuration list for PBXNativeTarget "LineaUITests" */;
+			buildPhases = (
+				159CBAA135D81DC1EC8F3127 /* Sources */,
+				8469AACFEEAB13923306E540 /* Frameworks */,
+				D8DD11995F9BD3D548BD4DAF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				322EF9BF5DD3970B7A7CBAD9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				506403CA4A8D0B127860EC9F /* LineaUITests */,
+			);
+			name = LineaUITests;
+			packageProductDependencies = (
+			);
+			productName = LineaUITests;
+			productReference = 4C529BACCA00ADD8995CB004 /* LineaUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -92,6 +140,10 @@
 				TargetAttributes = {
 					9F4BBA3A30418A24009126E3 = {
 						CreatedOnToolsVersion = 26.6;
+					};
+					09C10832165A1FE17517C4AD = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 9F4BBA3A30418A24009126E3;
 					};
 				};
 			};
@@ -113,12 +165,20 @@
 			projectRoot = "";
 			targets = (
 				9F4BBA3A30418A24009126E3 /* Linea */,
+				09C10832165A1FE17517C4AD /* LineaUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		9F4BBA3930418A24009126E3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D8DD11995F9BD3D548BD4DAF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -163,7 +223,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		159CBAA135D81DC1EC8F3127 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		322EF9BF5DD3970B7A7CBAD9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9F4BBA3A30418A24009126E3 /* Linea */;
+			targetProxy = 8B5F4E2A8545FF6CC35F107F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		9F4BBA4430418A28009126E3 /* Debug */ = {
@@ -363,6 +438,46 @@
 			};
 			name = Release;
 		};
+		EC1B8E0544410B88BABE4EA0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WYML7G6KQP;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.asphera.LineaUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Linea;
+			};
+			name = Debug;
+		};
+		31F603A683D15522A91DF261 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WYML7G6KQP;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.asphera.LineaUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Linea;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -380,6 +495,15 @@
 			buildConfigurations = (
 				9F4BBA4730418A28009126E3 /* Debug */,
 				9F4BBA4830418A28009126E3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		40E560C7698695D2DDF97490 /* Build configuration list for PBXNativeTarget "LineaUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EC1B8E0544410B88BABE4EA0 /* Debug */,
+				31F603A683D15522A91DF261 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

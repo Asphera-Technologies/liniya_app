@@ -30,7 +30,10 @@ struct LineaApp: App {
     init() {
         let modelContainer: ModelContainer
         do {
-            modelContainer = try ModelContainer(for: Schema(LineaSchema.models))
+            modelContainer = try ModelContainer(
+                for: Schema(LineaSchema.models),
+                configurations: ModelConfiguration(isStoredInMemoryOnly: Self.isUITesting)
+            )
         } catch {
             fatalError("Failed to create SwiftData ModelContainer: \(error)")
         }
@@ -38,6 +41,15 @@ struct LineaApp: App {
         _healthKit = State(initialValue: health)
         _container = State(initialValue: AppContainer(modelContainer: modelContainer, healthKit: health))
     }
+
+    #if DEBUG
+    /// UI-тесты (`Tests/LineaUITests`) запускают приложение с `-uiTesting`:
+    /// данные только в памяти, каждый тест начинается с чистого листа.
+    /// Данные тесты вводят через интерфейс, как человек.
+    static var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-uiTesting") }
+    #else
+    static let isUITesting = false
+    #endif
 
     var body: some Scene {
         WindowGroup {

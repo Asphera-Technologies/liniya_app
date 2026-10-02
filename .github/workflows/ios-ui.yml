@@ -1,0 +1,147 @@
+name: ios-ui
+
+# Проход по экранам на симуляторе iPhone. UI-тесты (Tests/LineaUITests) жмут
+# кнопки, вводят текст, открывают меню и на каждом шаге оставляют скриншот.
+# Скриншоты — артефакт «ui-screenshots»: интерфейс можно посмотреть без Mac.
+#
+# Запускается на изменения экранов и самих тестов в feature-ветках и вручную
+# (Actions → ios-ui → Run workflow; вручную — после попадания файла в main).
+# Это дороже обычной сборки — около 10–15 минут macOS-раннера.
+
+on:
+  push:
+    branches: ["feature/**", "fix/**"]
+    paths:
+      - "Linea/Features/**"
+      - "Linea/Components/**"
+      - "Linea/App/**"
+      - "Tests/LineaUITests/**"
+      - ".github/workflows/ios-ui.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-tests:
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          if [ -d /Applications/Xcode_26.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.app
+          else
+            newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)"
+            echo "::warning::Xcode 26 not found, falling back to $newest"
+            [ -n "$newest" ] && sudo xcode-select -s "$newest"
+          fi
+          xcodebuild -version
+          xcodebuild -project Linea.xcodeproj -list
+
+      # Та же модель распознавания и тот же кэш, что у сборки (ios-macos).
+      - name: Speech model cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Linea
+          key: speech-model-${{ hashFiles('Scripts/fetch-speech-model.sh') }}
+
+      - name: Simulator
+        id: sim
+        run: |
+          udid="$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          devices = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, items in devices.items():
+              match = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              if not match:
+                  continue
+              version = (int(match.group(1)), int(match.group(2)))
+              for device in items:
+                  name = device["name"]
+                  if not device.get("isAvailable") or not name.startswith("iPhone"):
+                      continue
+                  # Обычный iPhone удобнее для скриншотов, чем Max и mini.
+                  plain = 1 if re.fullmatch(r"iPhone \d+( Pro)?", name) else 0
+                  key = (version, plain, name)
+                  if best is None or key > best[0]:
+                      best = (key, device["udid"])
+          print(best[1] if best else "")
+          ')"
+          if [ -z "$udid" ]; then echo "::error::Нет доступного симулятора iPhone"; exit 1; fi
+          xcrun simctl list devices | grep "$udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+          # Автозамена и подсказки клавиатуры переписали бы текст, который набирает тест.
+          for key in KeyboardAutocorrection KeyboardPrediction KeyboardAutocapitalization KeyboardCheckSpelling KeyboardShowPredictionBar; do
+            xcrun simctl spawn "$udid" defaults write com.apple.keyboard.preferences "$key" -bool NO || true
+          done
+
+      - name: UI tests
+        id: tests
+        run: |
+          set +e
+          xcodebuild test \
+            -project Linea.xcodeproj \
+            -scheme LineaUITests \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -resultBundlePath UITests.xcresult \
+            CODE_SIGNING_ALLOWED=NO > uitests.log 2>&1
+          status=$?
+          grep -E "Test Case|error:|failed|passed|\*\* TEST" uitests.log | sed 's|^.*/liniya_app/||' | tail -120
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Screenshots
+        if: always()
+        run: |
+          mkdir -p ui-screenshots
+          if [ -d UITests.xcresult ]; then
+            xcrun xcresulttool export attachments --path UITests.xcresult --output-path ui-raw || true
+            python3 - <<'PY'
+          import json, os, re, shutil
+          raw, out = "ui-raw", "ui-screenshots"
+          manifest = os.path.join(raw, "manifest.json")
+          if os.path.exists(manifest):
+              for test in json.load(open(manifest)):
+                  name = test.get("testIdentifier", "test").split("/")[-1].replace("()", "")
+                  for item in test.get("attachments", []):
+                      source = os.path.join(raw, item["exportedFileName"])
+                      title = item.get("suggestedHumanReadableName", item["exportedFileName"])
+                      title = re.sub(r"_\d+_[0-9A-F-]+(?=\.\w+$)", "", title)
+                      safe = re.sub(r"[/\\:]", "-", f"{name} — {title}")
+                      if os.path.exists(source):
+                          shutil.copy(source, os.path.join(out, safe))
+          PY
+          fi
+          ls -la ui-screenshots | head -60
+          {
+            echo "### UI-тесты"
+            echo '```'
+            grep -E "Test Case .* (passed|failed)|error:" uitests.log | sed 's|^.*/liniya_app/||' | head -80
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots
+          path: |
+            ui-screenshots
+            ui-raw
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-tests-log
+          path: uitests.log
+          if-no-files-found: ignore
+
+      - name: Result
+        run: exit ${{ steps.tests.outputs.status }}

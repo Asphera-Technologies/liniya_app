@@ -85,7 +85,7 @@ struct PlanView: View {
                     }
                 }
             }
-            addRow(title: "Цель") { editingGoal = .new }
+            addRow(title: "Цель", identifier: "plan.addGoal") { editingGoal = .new }
         }
     }
 
@@ -117,7 +117,7 @@ struct PlanView: View {
                 }
             }
 
-            addRow(title: "Задача") {
+            addRow(title: "Задача", identifier: "plan.addTask") {
                 appState.openQuickAdd()
             }
         }
@@ -188,7 +188,7 @@ struct PlanView: View {
 
     // MARK: Building blocks
 
-    private func addRow(title: String, action: @escaping () -> Void) -> some View {
+    private func addRow(title: String, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: "plus")
@@ -201,6 +201,7 @@ struct PlanView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
     }
 
     private func emptyHint(_ text: String) -> some View {
