@@ -16,13 +16,13 @@ Linea/
 ├── Core/         Foundation-only. Domain models, protocols, use cases, engines, connector logic
 │   ├── Domain/{Models,Protocols,UseCases}
 │   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,Priority,FeedbackEngine,LLM,CheckIn,
-│   │                 Memory,TaskCapture,Classification}
+│   │                 Memory,TaskCapture,Classification,Inbox,GoalIntake}
 │   └── Connectors/   Foundation-only parts of connectors (Nutrition, Calendar)
 ├── Data/         Apple frameworks allowed: SwiftData entities and Local* repositories,
 │                 HealthKit reader, EventKit provider, LLM client (chat), on-device speech (GigaAM, Apple)
 ├── Platform/     iOS adapters: notifications (nudges), voice recording, diagnostics (OSLog)
 ├── Features/     SwiftUI screens and view-facing stores (Today, Plan, Health, Nutrition,
-│                 Profile, AI, CheckIn, Memory, QuickAdd)
+│                 Profile, AI, CheckIn, Memory, QuickAdd, Inbox, Goals, Voice)
 ├── Components/, DesignSystem/   shared UI
 ├── Networking/   LineaBackend (sample-only protocol; no production API yet)
 └── Services/     SampleData / SampleModels for screens not yet backed by real data
@@ -83,8 +83,9 @@ StateEngine    → UserState (sleep, recovery, energy, loadAdvice, facts)
         ↓
 PriorityEngine → importance + action per task (§16): what matters, what fits now
         ↓
-DecisionEngine → DayPlan (time blocks, top-3, recommendations) + NudgeEngine → Nudges
-               + NextActionUseCase → «Сейчас» on Today
+DecisionEngine → DayPlan (time blocks, top-3, recommendations; leftover time — a couple of
+                 «Без даты» tasks) + NudgeEngine → Nudges
+               + NextActionUseCase → one NextAction on Today: «Начать» / «Другое» (§17)
         ↓
 Explainer      → Russian text (rule-based always; on-device LLM optional, validated)
         ↓
@@ -103,7 +104,22 @@ QuickTaskResolution → чипы на экране → «Добавить» → 
 
 A title is the only required field; everything else can be changed later in
 the task card (ADR-023). The «+» next to the command bar and «+ Задача» on
-Plan open the same sheet.
+Plan open the same sheet. Nothing said about the day — the task goes to «Без
+даты» (ADR-028, §18): no «Когда?», a place is found by the plan or a one-minute
+review.
+
+### New goal
+
+```text
+«Чего хочешь достичь?» + «Расскажи подробнее» (текст или голос: VoiceDictation)
+        ↓  GoalAnalyzing (RuleBasedGoalAnalyzer — правила на телефоне)
+GoalUnderstanding: название, «Сейчас», «Результат», признаки, срок, вопрос?
+        ↓  вопрос — один за раз, можно пропустить
+«Я поняла цель так» → «Изменить» / «Всё верно» → PlanStore.saveGoal
+```
+
+The goal exists only after «Всё верно» (ADR-029, §19); breaking it into steps,
+when it appears, starts there.
 
 ### Evening check-in and memory
 
