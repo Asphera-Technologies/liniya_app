@@ -13,14 +13,28 @@ struct LineaTextField: View {
     let placeholder: String
     @Binding var text: String
     var axis: Axis = .horizontal
+    /// Крупно — для названий; рассказ и ответы — шрифтом строки.
+    var font: Font = LineaFont.feature
+    /// Идентификатор самого поля — по нему его находят UI-тесты.
+    var identifier: String? = nil
 
     var body: some View {
         VStack(spacing: 10) {
-            TextField(placeholder, text: $text, axis: axis)
-                .font(LineaFont.feature)
-                .foregroundStyle(LineaColor.textPrimary)
-                .tint(LineaColor.ink)
+            input
             LineaHairline()
+        }
+    }
+
+    @ViewBuilder
+    private var input: some View {
+        let field = TextField(placeholder, text: $text, axis: axis)
+            .font(font)
+            .foregroundStyle(LineaColor.textPrimary)
+            .tint(LineaColor.ink)
+        if let identifier {
+            field.accessibilityIdentifier(identifier)
+        } else {
+            field
         }
     }
 }

@@ -63,6 +63,7 @@ struct LineaApp: App {
                 .environment(container.memoryStore)
                 .environment(container.checkInStore)
                 .environment(container.quickAddStore)
+                .environment(container.goalIntakeStore)
                 // Linea говорит по-русски: календари и время в системных
                 // элементах — тоже, какой бы ни была настройка региона.
                 .environment(\.locale, Locale(identifier: "ru_RU"))

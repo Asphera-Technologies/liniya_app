@@ -13,6 +13,10 @@
 //  Прогресс считается из связанных задач, если они есть; слайдер остаётся для
 //  целей, которые ещё не разложены на задачи.
 //
+//  Новую цель создаёт `GoalIntakeView` (сначала понять, потом создать); здесь —
+//  правка существующей, в том числе того, как Linea её поняла: «Сейчас»,
+//  «Результат» и признаки успеха.
+//
 
 import SwiftUI
 
@@ -30,6 +34,10 @@ struct GoalEditorView: View {
     @State private var isActive: Bool
     /// Важность цели: задачи важной цели Linea поднимает выше.
     @State private var priority: TaskPriority
+    /// Как Linea поняла цель: «Сейчас», «Результат», признаки — по строке.
+    @State private var currentState: String
+    @State private var targetState: String
+    @State private var criteria: String
     @Namespace private var prioritySegments
     /// Chosen once per editor: a second «Готово» updates the same goal
     /// instead of creating a duplicate.
@@ -47,6 +55,9 @@ struct GoalEditorView: View {
         _dueDate = State(initialValue: existing?.endDate ?? Self.defaultDueDate())
         _isActive = State(initialValue: existing?.isActive ?? true)
         _priority = State(initialValue: existing?.priority ?? .normal)
+        _currentState = State(initialValue: existing?.currentState ?? "")
+        _targetState = State(initialValue: existing?.targetState ?? "")
+        _criteria = State(initialValue: existing?.successCriteria.joined(separator: "\n") ?? "")
     }
 
     private var isEditing: Bool { existing != nil }
@@ -58,6 +69,7 @@ struct GoalEditorView: View {
                     LineaTextField(placeholder: "Название цели", text: $title, axis: .vertical)
                         .focused($titleFocused)
 
+                    understandingSection
                     dueDateSection
                     prioritySection
                     progressSection
@@ -124,6 +136,24 @@ struct GoalEditorView: View {
         .presentationDragIndicator(.visible)
         .onAppear {
             if !isEditing { titleFocused = true }
+        }
+    }
+
+    /// «Сейчас», «Результат», «Как поймём, что получилось» — то, что Linea
+    /// поняла при создании цели; у прежних целей — пусто, можно дописать.
+    private var understandingSection: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            understandingField("Сейчас", placeholder: "С чего начинаем", text: $currentState)
+            understandingField("Результат", placeholder: "Что будет, когда цель достигнута", text: $targetState)
+            understandingField("Как поймём, что получилось", placeholder: "По одному признаку на строку", text: $criteria)
+        }
+    }
+
+    private func understandingField(_ label: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: label)
+            LineaTextField(placeholder: placeholder, text: text, axis: .vertical, font: LineaFont.rowTitle)
+                .lineLimit(1...8)
         }
     }
 
@@ -238,11 +268,23 @@ struct GoalEditorView: View {
             startDate: existing?.startDate,
             endDate: hasDueDate ? Calendar.current.startOfDay(for: dueDate) : nil,
             isActive: isActive,
-            priority: priority
+            priority: priority,
+            details: existing?.details,
+            currentState: Self.text(currentState),
+            targetState: Self.text(targetState),
+            successCriteria: criteria
+                .split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
         )
         Task {
             await plan.saveGoal(result)
             dismiss()
         }
+    }
+
+    private static func text(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

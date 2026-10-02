@@ -28,6 +28,12 @@ final class GoalEntity {
     var isActive: Bool?
     /// Важность цели; nil у целей, сохранённых раньше, — средняя.
     var priorityRaw: String?
+    /// Как Linea поняла цель при создании; у прежних целей — nil.
+    var details: String?
+    var currentState: String?
+    var targetState: String?
+    /// Признаки успеха, по одному на строку.
+    var successCriteriaRaw: String?
 
     init(
         id: UUID,
@@ -39,7 +45,11 @@ final class GoalEntity {
         startDate: Date? = nil,
         endDate: Date? = nil,
         isActive: Bool? = nil,
-        priorityRaw: String? = nil
+        priorityRaw: String? = nil,
+        details: String? = nil,
+        currentState: String? = nil,
+        targetState: String? = nil,
+        successCriteriaRaw: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -51,6 +61,10 @@ final class GoalEntity {
         self.endDate = endDate
         self.isActive = isActive
         self.priorityRaw = priorityRaw
+        self.details = details
+        self.currentState = currentState
+        self.targetState = targetState
+        self.successCriteriaRaw = successCriteriaRaw
     }
 }
 
@@ -65,7 +79,11 @@ extension GoalEntity {
             startDate: goal.startDate,
             endDate: goal.endDate,
             isActive: goal.isActive,
-            priorityRaw: goal.priority.rawValue
+            priorityRaw: goal.priority.rawValue,
+            details: goal.details,
+            currentState: goal.currentState,
+            targetState: goal.targetState,
+            successCriteriaRaw: Self.raw(goal.successCriteria)
         )
     }
 
@@ -79,7 +97,11 @@ extension GoalEntity {
             startDate: startDate ?? createdAt,
             endDate: endDate ?? Self.migratedEndDate(horizonRaw: horizonRaw, startDate: startDate ?? createdAt),
             isActive: isActive ?? true,
-            priority: priorityRaw.flatMap(TaskPriority.init(rawValue:)) ?? .normal
+            priority: priorityRaw.flatMap(TaskPriority.init(rawValue:)) ?? .normal,
+            details: details,
+            currentState: currentState,
+            targetState: targetState,
+            successCriteria: Self.lines(successCriteriaRaw)
         )
     }
 
@@ -91,6 +113,18 @@ extension GoalEntity {
         endDate = goal.endDate
         isActive = goal.isActive
         priorityRaw = goal.priority.rawValue
+        details = goal.details
+        currentState = goal.currentState
+        targetState = goal.targetState
+        successCriteriaRaw = Self.raw(goal.successCriteria)
+    }
+
+    private static func raw(_ lines: [String]) -> String? {
+        lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
+    private static func lines(_ raw: String?) -> [String] {
+        (raw ?? "").split(separator: "\n").map(String.init).filter { !$0.isEmpty }
     }
 
     /// Цель, созданная до появления явного срока, получает его из старого

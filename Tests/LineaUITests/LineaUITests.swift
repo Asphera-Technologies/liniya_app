@@ -143,16 +143,17 @@ final class LineaUITests: XCTestCase {
     func test3GoalImportanceAndLinking() throws {
         let app = launch()
         openTab(app, "План", index: 1)
-        app.buttons["plan.addGoal"].tap()
-        let goalTitle = titleField(app)
-        XCTAssertTrue(goalTitle.waitForExistence(timeout: 5))
-        goalTitle.tap()
-        goalTitle.typeText("Запустить MVP Linea")
-        XCTAssertTrue(app.buttons["Высокая"].exists, "В редакторе цели есть «Важность»")
+        createGoal(app, "Запустить MVP Linea", details: "Есть прототип. Хочу выпустить первую версию в TestFlight.")
+        let goalRow = button(app, startingWith: "Запустить MVP Linea")
+        XCTAssertTrue(goalRow.waitForExistence(timeout: 5), "Цель в плане")
+
+        // Важность — в карточке цели.
+        goalRow.tap()
+        XCTAssertTrue(app.buttons["Высокая"].waitForExistence(timeout: 5), "В карточке цели есть «Важность»")
         app.buttons["Высокая"].tap()
-        snapshot(app, "13 Новая цель с важностью")
+        snapshot(app, "13 Карточка цели: важность")
         app.navigationBars.buttons["Готово"].tap()
-        XCTAssertTrue(element(app, labelContaining: "Запустить MVP Linea").waitForExistence(timeout: 5), "Цель в плане")
+        XCTAssertTrue(app.buttons["Высокая"].waitForNonExistence(timeout: 5))
 
         let field = openQuickAdd(app)
         field.tap()
@@ -342,6 +343,78 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "33 План после разбора")
     }
 
+    // MARK: - 9. Новая цель: сначала понять, потом создать
+
+    @MainActor
+    func test9GoalIntake() throws {
+        let app = launch()
+        openTab(app, "План", index: 1)
+        app.buttons["plan.addGoal"].tap()
+        let title = field(app, "goal.title")
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "«+ Цель» открывает «Новая цель»")
+        XCTAssertTrue(app.staticTexts["Чего хочешь достичь?"].exists)
+        XCTAssertTrue(app.staticTexts["Что уже сделано, где ты сейчас и что будет означать, что цель достигнута?"].exists)
+        XCTAssertTrue(app.buttons["goal.voice"].exists, "Можно рассказать голосом")
+        XCTAssertFalse(app.buttons["goal.continue"].isEnabled, "Без названия продолжать нечего")
+        title.tap()
+        title.typeText("Запустить закрытую beta Linea")
+        let details = field(app, "goal.details")
+        details.tap()
+        details.typeText("У нас уже есть рабочий прототип приложения. Сейчас идёт переработка задач и онбординга. "
+            + "Хотим, чтобы приложение было доступно через TestFlight и подключить 50 тестировщиков.")
+        snapshot(app, "34 Новая цель: название и рассказ")
+        app.buttons["goal.continue"].tap()
+
+        let review = app.descendants(matching: .any).matching(identifier: "goal.review").firstMatch
+        XCTAssertTrue(review.waitForExistence(timeout: 5), "Linea показывает, как поняла цель, — без вопросов")
+        XCTAssertTrue(app.staticTexts["Я поняла цель так"].exists)
+        XCTAssertEqual(app.staticTexts["goal.review.title"].label, "Запустить закрытую beta Linea")
+        XCTAssertEqual(app.staticTexts["goal.review.current"].label,
+                       "Уже есть рабочий прототип приложения. Идёт переработка задач и онбординга.")
+        XCTAssertEqual(app.staticTexts["goal.review.target"].label,
+                       "Приложение доступно через TestFlight и подключить 50 тестировщиков.")
+        snapshot(app, "35 Я поняла цель так")
+
+        app.buttons["goal.change"].tap()
+        XCTAssertTrue(field(app, "goal.edit.title").waitForExistence(timeout: 5), "«Изменить» открывает правку")
+        snapshot(app, "36 Изменить")
+        app.buttons["goal.edit.done"].tap()
+        XCTAssertTrue(app.buttons["goal.confirm"].waitForExistence(timeout: 5), "После правки — снова «Я поняла цель так»")
+        app.buttons["goal.confirm"].tap()
+        XCTAssertTrue(app.buttons["goal.confirm"].waitForNonExistence(timeout: 5), "«Всё верно» создаёт цель")
+        XCTAssertTrue(button(app, startingWith: "Запустить закрытую beta Linea").waitForExistence(timeout: 5), "Цель в плане")
+
+        // Одна строка — Linea задаёт один вопрос, потом следующий.
+        app.buttons["plan.addGoal"].tap()
+        let short = field(app, "goal.title")
+        XCTAssertTrue(short.waitForExistence(timeout: 5))
+        short.tap()
+        short.typeText("Запустить продукт")
+        app.buttons["goal.continue"].tap()
+        let resultQuestion = app.staticTexts["Как поймём, что цель достигнута?"]
+        XCTAssertTrue(resultQuestion.waitForExistence(timeout: 5), "Не хватает результата — Linea спрашивает")
+        XCTAssertEqual(app.staticTexts.matching(identifier: "goal.question").count, 1, "Один вопрос за раз")
+        XCTAssertFalse(review.exists, "Цель не показана, пока не понятна")
+        snapshot(app, "37 Один вопрос")
+        let answer = field(app, "goal.answer")
+        answer.tap()
+        answer.typeText("Первые 100 платящих пользователей")
+        app.buttons["goal.answer.continue"].tap()
+        XCTAssertTrue(app.staticTexts["С чего начинаем — что уже есть?"].waitForExistence(timeout: 5), "Следующий вопрос — после ответа")
+        app.buttons["goal.skip"].tap()
+        XCTAssertTrue(review.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["goal.review.target"].label, "Первые 100 платящих пользователей.")
+        snapshot(app, "38 Понятая цель после ответа")
+        app.buttons["goal.confirm"].tap()
+        XCTAssertTrue(button(app, startingWith: "Запустить продукт").waitForExistence(timeout: 5))
+
+        // Карточка цели хранит, как Linea её поняла.
+        button(app, startingWith: "Запустить закрытую beta Linea").tap()
+        XCTAssertTrue(app.navigationBars["Цель"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Результат"].exists)
+        snapshot(app, "39 Карточка цели: как Linea её поняла")
+    }
+
     // MARK: - 6. Длительность по типу задачи
 
     @MainActor
@@ -475,7 +548,35 @@ final class LineaUITests: XCTestCase {
         }
     }
 
+    /// «+ Цель» → название и рассказ → «Я поняла цель так» → «Всё верно».
+    @MainActor
+    private func createGoal(_ app: XCUIApplication, _ title: String, details: String) {
+        app.buttons["plan.addGoal"].tap()
+        let titleInput = field(app, "goal.title")
+        XCTAssertTrue(titleInput.waitForExistence(timeout: 5), "«Новая цель» не открылась")
+        titleInput.tap()
+        titleInput.typeText(title)
+        let detailsInput = field(app, "goal.details")
+        detailsInput.tap()
+        detailsInput.typeText(details)
+        app.buttons["goal.continue"].tap()
+        let confirm = app.buttons["goal.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Linea не показала, как поняла цель")
+        confirm.tap()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5), "Цель не создалась")
+    }
+
     // MARK: - Поиск
+
+    /// Поле ввода по идентификатору — каким бы элементом его ни показала система.
+    @MainActor
+    private func field(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        let byID = app.descendants(matching: .any).matching(identifier: identifier)
+        let input = byID.matching(NSPredicate(format: "elementType == %d OR elementType == %d",
+                                              XCUIElement.ElementType.textField.rawValue,
+                                              XCUIElement.ElementType.textView.rawValue)).firstMatch
+        return input.waitForExistence(timeout: 5) ? input : byID.firstMatch
+    }
 
     @MainActor
     private func nowCard(_ app: XCUIApplication) -> XCUIElement {

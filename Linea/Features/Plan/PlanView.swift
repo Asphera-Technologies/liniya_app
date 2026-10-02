@@ -65,7 +65,8 @@ struct PlanView: View {
         }
         .sheet(item: $editingGoal) { target in
             switch target {
-            case .new: GoalEditorView()
+            // Новая цель — сначала понять, потом создать.
+            case .new: GoalIntakeView()
             case .edit(let goal): GoalEditorView(existing: goal)
             }
         }

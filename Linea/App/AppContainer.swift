@@ -43,6 +43,8 @@ final class AppContainer {
     let checkInStore: CheckInStore
     /// Быстрое создание задачи: строка, чипы, голос.
     let quickAddStore: QuickAddStore
+    /// Новая цель: сначала понять, потом создать.
+    let goalIntakeStore: GoalIntakeStore
 
     /// Local notifications for nudges.
     let nudgeScheduler: NudgeScheduler
@@ -177,6 +179,20 @@ final class AppContainer {
             planStore: plan,
             hasSpeechModel: speechModel != nil,
             makeTranscriber: makeTranscriber,
+            profile: { [weak intelligence] in intelligence?.userProfile ?? .default }
+        )
+        // Новая цель: рассказ разбирают правила на телефоне (ADR-029), голос —
+        // тот же распознаватель. Модель, если появится, встанет в `analyzer`.
+        goalIntakeStore = GoalIntakeStore(
+            dictation: VoiceDictation(
+                recorder: VoiceRecorder(),
+                hasSpeechModel: speechModel != nil,
+                makeTranscriber: makeTranscriber,
+                subject: "Цель",
+                fallbackNotice: "Распознала системная диктовка — проверь текст."
+            ),
+            planStore: plan,
+            analyzer: RuleBasedGoalAnalyzer(),
             profile: { [weak intelligence] in intelligence?.userProfile ?? .default }
         )
         // Скачанная раньше по кнопке копия модели больше не нужна.
