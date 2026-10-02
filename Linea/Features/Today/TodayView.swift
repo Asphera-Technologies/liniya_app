@@ -5,7 +5,8 @@
 //  The Today screen — the whole wow-scenario in one place:
 //    • morning: what Linea sees about the state, the day's plan, «Принять план»;
 //    • during the day: the nudge card with the same two answers the
-//      notification offers;
+//      notification offers, and «Сейчас» — what is reasonable to do this very
+//      minute (the priority engine's action score), refreshed every minute;
 //    • evening: «Как прошёл день?» — the check-in by voice or text, or three
 //      quick taps, which close the feedback loop.
 //
@@ -32,6 +33,7 @@ struct TodayView: View {
 
                 briefSection
                 mainToday
+                nowSection
                 timeline
 
                 if intelligence.isCheckInDue {
@@ -50,6 +52,7 @@ struct TodayView: View {
             }
         }
         .task { await intelligence.refresh(reason: .appeared) }
+        .task { await intelligence.keepNextActionFresh() }
         .refreshable { await intelligence.refresh(reason: .manual) }
     }
 
@@ -102,6 +105,29 @@ struct TodayView: View {
                 Text("На сегодня задач нет")
                     .font(LineaFont.feature)
                     .foregroundStyle(LineaColor.textTertiary)
+            }
+        }
+    }
+
+    // MARK: Now
+
+    /// «Сейчас — …»: главное сегодня важно вообще, а это — уместно прямо
+    /// сейчас. Текст готов в ядре (`NextActionUseCase`).
+    @ViewBuilder
+    private var nowSection: some View {
+        if let action = intelligence.nextAction {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(text: "Сейчас")
+                Text(action.headline)
+                    .font(LineaFont.rowTitle)
+                    .foregroundStyle(LineaColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !action.body.isEmpty {
+                    Text(action.body)
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

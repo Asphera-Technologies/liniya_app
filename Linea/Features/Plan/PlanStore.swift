@@ -35,9 +35,16 @@ final class PlanStore {
     var scope: PlanScope = .week
     var referenceDate: Date = Date()
 
-    init(taskRepository: TaskRepository, goalRepository: GoalRepository) {
+    private let timeProvider: @MainActor () -> TimeContext
+
+    init(
+        taskRepository: TaskRepository,
+        goalRepository: GoalRepository,
+        time: @escaping @MainActor () -> TimeContext = { .live }
+    ) {
         self.taskRepository = taskRepository
         self.goalRepository = goalRepository
+        self.timeProvider = time
     }
 
     // MARK: - Loading
@@ -62,11 +69,13 @@ final class PlanStore {
 
     // MARK: - Task intents
 
-    /// Adds a new task or updates an existing one (matched by id).
+    /// Adds a new task or updates an existing one (matched by id). A task that
+    /// was due and moves later is counted as deferred — the priority engine
+    /// lifts a task that keeps slipping (`TaskDeferral`).
     func saveTask(_ task: LineaTask) async {
         do {
-            if tasks.contains(where: { $0.id == task.id }) {
-                try await taskRepository.update(task)
+            if let previous = tasks.first(where: { $0.id == task.id }) {
+                try await taskRepository.update(TaskDeferral.counted(previous: previous, updated: task, time: timeProvider()))
             } else {
                 try await taskRepository.add(task)
             }
@@ -81,10 +90,11 @@ final class PlanStore {
     /// one reload and one replan instead of one per task.
     func saveTasks(_ updated: [LineaTask]) async {
         guard !updated.isEmpty else { return }
+        let time = timeProvider()
         do {
             for task in updated {
-                if tasks.contains(where: { $0.id == task.id }) {
-                    try await taskRepository.update(task)
+                if let previous = tasks.first(where: { $0.id == task.id }) {
+                    try await taskRepository.update(TaskDeferral.counted(previous: previous, updated: task, time: time))
                 } else {
                     try await taskRepository.add(task)
                 }

@@ -28,6 +28,9 @@ struct GoalEditorView: View {
     @State private var hasDueDate: Bool
     @State private var dueDate: Date
     @State private var isActive: Bool
+    /// Важность цели: задачи важной цели Linea поднимает выше.
+    @State private var priority: TaskPriority
+    @Namespace private var prioritySegments
     /// Chosen once per editor: a second «Готово» updates the same goal
     /// instead of creating a duplicate.
     @State private var newGoalID = UUID()
@@ -43,6 +46,7 @@ struct GoalEditorView: View {
         _hasDueDate = State(initialValue: existing?.endDate != nil)
         _dueDate = State(initialValue: existing?.endDate ?? Self.defaultDueDate())
         _isActive = State(initialValue: existing?.isActive ?? true)
+        _priority = State(initialValue: existing?.priority ?? .normal)
     }
 
     private var isEditing: Bool { existing != nil }
@@ -55,6 +59,7 @@ struct GoalEditorView: View {
                         .focused($titleFocused)
 
                     dueDateSection
+                    prioritySection
                     progressSection
 
                     VStack(spacing: 0) {
@@ -119,6 +124,20 @@ struct GoalEditorView: View {
         .presentationDragIndicator(.visible)
         .onAppear {
             if !isEditing { titleFocused = true }
+        }
+    }
+
+    private var prioritySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: "Важность", trailing: priority == .important ? "задачи цели выше" : nil)
+            LineaSegmentedControl(
+                options: TaskPriority.allCases.map(LineaGoal.importanceTitle),
+                selection: Binding(
+                    get: { TaskPriority.allCases.firstIndex(of: priority) ?? 1 },
+                    set: { priority = TaskPriority.allCases[$0] }
+                ),
+                namespace: prioritySegments
+            )
         }
     }
 
@@ -218,7 +237,8 @@ struct GoalEditorView: View {
             createdAt: existing?.createdAt ?? Date(),
             startDate: existing?.startDate,
             endDate: hasDueDate ? Calendar.current.startOfDay(for: dueDate) : nil,
-            isActive: isActive
+            isActive: isActive,
+            priority: priority
         )
         Task {
             await plan.saveGoal(result)

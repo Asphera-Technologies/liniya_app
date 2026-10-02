@@ -39,6 +39,8 @@ final class IntelligenceStore {
     private(set) var userProfile: UserProfile = .default
     private(set) var isRefreshing = false
     private(set) var errorMessage: String?
+    /// «Сейчас»: что разумнее всего делать в эту минуту — с готовым текстом.
+    private(set) var nextAction: NextAction?
 
     // MARK: Dependencies
 
@@ -47,6 +49,7 @@ final class IntelligenceStore {
     private let checkInUseCase: CheckInUseCase
     private let respondUseCase: RespondToNudgeUseCase
     private let ratingUseCase: RecordDayRatingUseCase
+    private let nextActionUseCase: NextActionUseCase
     private let records: any DayRecordRepository
     private let calibrations: any CalibrationRepository
     private let profiles: any UserProfileRepository
@@ -98,6 +101,7 @@ final class IntelligenceStore {
         self.checkInUseCase = checkIn
         self.respondUseCase = respond
         self.ratingUseCase = recordRating
+        self.nextActionUseCase = NextActionUseCase(config: config)
         self.records = records
         self.calibrations = calibrations
         self.profiles = profiles
@@ -397,9 +401,29 @@ final class IntelligenceStore {
         guard let record else { return }
         let output = checkInUseCase.run(record: record, tasks: planStore.tasks, calibration: calibration, time: time)
         dueNudge = output.due
+        updateNextAction(time: time)
         if let scheduler, plan?.status == .accepted {
             await scheduler.sync(output.scheduled, time: time)
         }
+    }
+
+    // MARK: - Сейчас
+
+    /// Пока экран «Сегодня» открыт, «Сейчас» пересчитывается раз в минуту:
+    /// началась встреча, закончилось окно — совет меняется сам.
+    func keepNextActionFresh() async {
+        while !Task.isCancelled {
+            updateNextAction(time: time)
+            try? await Task.sleep(for: .seconds(60))
+        }
+    }
+
+    private func updateNextAction(time: TimeContext) {
+        guard let record else {
+            nextAction = nil
+            return
+        }
+        nextAction = nextActionUseCase.run(record: record, tasks: planStore.tasks, calibration: calibration, time: time)
     }
 
     /// A notification action came back while the app was closed.

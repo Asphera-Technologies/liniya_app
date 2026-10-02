@@ -32,6 +32,11 @@ final class TaskEntity {
     var completedAt: Date?
     /// Тип задачи, выбранный человеком; nil — тип определяет Linea.
     var kindRaw: String?
+    /// Сколько раз задачу переносили; nil у задач, сохранённых раньше.
+    var deferralCount: Int?
+    /// «Сначала нужно»: id задач через запятую. Строкой, а не массивом, —
+    /// самая простая для lightweight-миграции колонка.
+    var blockedByRaw: String?
 
     init(
         id: UUID,
@@ -47,7 +52,9 @@ final class TaskEntity {
         cognitiveDemandRaw: String? = nil,
         goalID: UUID? = nil,
         completedAt: Date? = nil,
-        kindRaw: String? = nil
+        kindRaw: String? = nil,
+        deferralCount: Int? = nil,
+        blockedByRaw: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -63,6 +70,8 @@ final class TaskEntity {
         self.goalID = goalID
         self.completedAt = completedAt
         self.kindRaw = kindRaw
+        self.deferralCount = deferralCount
+        self.blockedByRaw = blockedByRaw
     }
 }
 
@@ -82,7 +91,9 @@ extension TaskEntity {
             cognitiveDemandRaw: task.cognitiveDemand.rawValue,
             goalID: task.goalID,
             completedAt: task.completedAt,
-            kindRaw: task.kindOverride?.rawValue
+            kindRaw: task.kindOverride?.rawValue,
+            deferralCount: task.deferralCount,
+            blockedByRaw: Self.raw(task.blockedBy)
         )
     }
 
@@ -102,7 +113,9 @@ extension TaskEntity {
             cognitiveDemand: cognitiveDemandRaw.flatMap(CognitiveDemand.init(rawValue:)) ?? .normal,
             goalID: goalID,
             completedAt: completedAt,
-            kindOverride: kindRaw.flatMap(TaskKind.init(rawValue:))
+            kindOverride: kindRaw.flatMap(TaskKind.init(rawValue:)),
+            deferralCount: deferralCount ?? 0,
+            blockedBy: Self.ids(blockedByRaw)
         )
     }
 
@@ -120,5 +133,15 @@ extension TaskEntity {
         goalID = task.goalID
         completedAt = task.completedAt
         kindRaw = task.kindOverride?.rawValue
+        deferralCount = task.deferralCount
+        blockedByRaw = Self.raw(task.blockedBy)
+    }
+
+    private static func raw(_ ids: [UUID]) -> String? {
+        ids.isEmpty ? nil : ids.map(\.uuidString).joined(separator: ",")
+    }
+
+    private static func ids(_ raw: String?) -> [UUID] {
+        (raw ?? "").split(separator: ",").compactMap { UUID(uuidString: String($0)) }
     }
 }

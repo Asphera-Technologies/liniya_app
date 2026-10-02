@@ -26,6 +26,8 @@ final class GoalEntity {
     var startDate: Date?
     var endDate: Date?
     var isActive: Bool?
+    /// Важность цели; nil у целей, сохранённых раньше, — средняя.
+    var priorityRaw: String?
 
     init(
         id: UUID,
@@ -36,7 +38,8 @@ final class GoalEntity {
         horizonRaw: String? = nil,
         startDate: Date? = nil,
         endDate: Date? = nil,
-        isActive: Bool? = nil
+        isActive: Bool? = nil,
+        priorityRaw: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -47,6 +50,7 @@ final class GoalEntity {
         self.startDate = startDate
         self.endDate = endDate
         self.isActive = isActive
+        self.priorityRaw = priorityRaw
     }
 }
 
@@ -60,7 +64,8 @@ extension GoalEntity {
             createdAt: goal.createdAt,
             startDate: goal.startDate,
             endDate: goal.endDate,
-            isActive: goal.isActive
+            isActive: goal.isActive,
+            priorityRaw: goal.priority.rawValue
         )
     }
 
@@ -73,7 +78,8 @@ extension GoalEntity {
             createdAt: createdAt,
             startDate: startDate ?? createdAt,
             endDate: endDate ?? Self.migratedEndDate(horizonRaw: horizonRaw, startDate: startDate ?? createdAt),
-            isActive: isActive ?? true
+            isActive: isActive ?? true,
+            priority: priorityRaw.flatMap(TaskPriority.init(rawValue:)) ?? .normal
         )
     }
 
@@ -84,6 +90,7 @@ extension GoalEntity {
         startDate = goal.startDate
         endDate = goal.endDate
         isActive = goal.isActive
+        priorityRaw = goal.priority.rawValue
     }
 
     /// Цель, созданная до появления явного срока, получает его из старого

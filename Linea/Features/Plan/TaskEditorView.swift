@@ -39,6 +39,8 @@ struct TaskEditorView: View {
     @State private var goalID: UUID?
     /// Тип, выбранный человеком; nil — как решит Linea.
     @State private var kindOverride: TaskKind?
+    /// «Сначала нужно»: задачи, без которых эту не начать.
+    @State private var blockedBy: [UUID]
     /// «Готово» and «Удалить» fire once; a double tap used to save twice.
     @State private var isSaving = false
     @FocusState private var titleFocused: Bool
@@ -63,6 +65,7 @@ struct TaskEditorView: View {
         _start = State(initialValue: existing.scheduledStart ?? Self.defaultStart(for: existing.date))
         _goalID = State(initialValue: existing.goalID)
         _kindOverride = State(initialValue: existing.kindOverride)
+        _blockedBy = State(initialValue: existing.blockedBy)
     }
 
     var body: some View {
@@ -77,6 +80,7 @@ struct TaskEditorView: View {
                     demandSection
                     durationSection
                     scheduleSection
+                    dependencySection
                     kindSection
 
                     deleteButton
@@ -231,6 +235,71 @@ struct TaskEditorView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(minutes) минут")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    // MARK: Dependencies
+
+    /// «Сначала нужно»: пока эти задачи открыты, Linea не поставит эту в план
+    /// раньше них, а сами они становятся важнее — их ждут.
+    @ViewBuilder
+    private var dependencySection: some View {
+        let blockers = blockedBy.compactMap { id in plan.tasks.first { $0.id == id && !$0.isDone } }
+        let options = plan.tasks.filter { candidate in
+            !candidate.isDone && candidate.id != existing.id && !blockedBy.contains(candidate.id)
+                && TaskDependencies.canBlock(existing.id, by: candidate.id, in: plan.tasks)
+        }
+        if !blockers.isEmpty || !options.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                SectionLabel(text: "Сначала нужно")
+                VStack(spacing: 0) {
+                    ForEach(blockers) { blocker in
+                        HStack(spacing: 12) {
+                            Text(blocker.title)
+                                .font(LineaFont.rowTitle)
+                                .foregroundStyle(LineaColor.textPrimary)
+                                .multilineTextAlignment(.leading)
+                            Spacer(minLength: 8)
+                            Button {
+                                withAnimation(.snappy) { blockedBy.removeAll { $0 == blocker.id } }
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(LineaColor.textTertiary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Убрать «\(blocker.title)»")
+                        }
+                        .padding(.vertical, 12)
+                        LineaHairline()
+                    }
+                }
+                if !options.isEmpty {
+                    Menu {
+                        ForEach(options) { option in
+                            Button(option.title) {
+                                withAnimation(.snappy) { blockedBy.append(option.id) }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus")
+                                .font(.footnote.weight(.medium))
+                            Text(blockers.isEmpty ? "Задача, без которой не начать" : "Ещё задача")
+                                .font(LineaFont.rowTitle)
+                        }
+                        .foregroundStyle(LineaColor.textTertiary)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                if !blockers.isEmpty {
+                    Text("Linea поставит эту задачу в план только после них.")
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textTertiary)
+                }
+            }
+        }
     }
 
     // MARK: Kind
@@ -396,7 +465,10 @@ struct TaskEditorView: View {
             cognitiveDemand: demand,
             goalID: goalID,
             completedAt: existing.completedAt,
-            kindOverride: kindOverride
+            kindOverride: kindOverride,
+            deferralCount: existing.deferralCount,
+            // Удалённые задачи из «Сначала нужно» не тянутся дальше.
+            blockedBy: blockedBy.filter { id in plan.tasks.contains { $0.id == id } }
         )
         Task {
             await plan.saveTask(result)
