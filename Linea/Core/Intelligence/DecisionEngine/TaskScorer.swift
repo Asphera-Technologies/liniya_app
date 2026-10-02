@@ -2,14 +2,14 @@
 //  TaskScorer.swift
 //  Linea
 //
-//  Why a task deserves the next free slot, as five independent 0…1 factors
-//  (Docs/intelligence.md §7). The breakdown is stored in the plan block so the
-//  UI can explain the order and the Feedback Engine can look at it later; the
-//  weights themselves are product constants and are never learned.
+//  The five 0…1 factors of the brief (Docs/intelligence.md §7): urgency,
+//  importance, goal alignment, energy fit, duration fit. They are the bricks
+//  of the priority engine's two scores (§16) and the evidence stored in every
+//  plan block; nothing here is learned.
 //
 //  A factor that has nothing to say is EXCLUDED, not defaulted to 0.5: with no
-//  health data `energyFit` would otherwise silently pull every task towards
-//  the middle. Excluding it redistributes its weight over the rest instead.
+//  health data `energyFit` is nil, and the engine leaves energy out of the
+//  action score instead of pulling every task towards the middle.
 //
 
 import Foundation
@@ -32,6 +32,9 @@ nonisolated struct TaskScorer: Sendable {
 
     init() {}
 
+    /// The planner's view of a task at a slot: the five factors of the brief
+    /// plus the two scores of the priority engine (§16). `total` is
+    /// importance × action — what the planner compares.
     func score(
         task: LineaTask,
         at slotStart: Date,
@@ -42,33 +45,10 @@ nonisolated struct TaskScorer: Sendable {
         config: EngineConfig = .default,
         time: TimeContext
     ) -> ScoreBreakdown {
-        let planned = PlanDuration.minutes(for: task, calibration: calibration)
-        let urgencyValue = urgency(task: task, plannedMinutes: planned, at: slotStart, profile: snapshot.profile, time: time)
-        let importanceValue = importance(task: task, snapshot: snapshot, at: slotStart, time: time)
-        let alignmentValue = goalAlignment(task: task, snapshot: snapshot, at: slotStart, time: time)
-        let energyValue = energyFit(task: task, at: slotStart, state: state, config: config, time: time)
-        let durationValue = durationFit(plannedMinutes: planned, windowMinutes: windowMinutes, config: config)
-
-        var weighted = 0.0
-        var weights = 0.0
-        func add(_ value: Double, _ weight: Double) {
-            weighted += value * weight
-            weights += weight
-        }
-        add(urgencyValue, config.weightUrgency)
-        add(importanceValue, config.weightImportance)
-        add(alignmentValue, config.weightGoalAlignment)
-        if let energyValue { add(energyValue, config.weightEnergyFit) }
-        add(durationValue, config.weightDurationFit)
-
-        return ScoreBreakdown(
-            urgency: urgencyValue,
-            importance: importanceValue,
-            goalAlignment: alignmentValue,
-            energyFit: energyValue,
-            durationFit: durationValue,
-            total: weights > 0 ? StateMath.clamp(weighted / weights) : 0
-        )
+        let context = PriorityContext(snapshot: snapshot, state: state, calibration: calibration, config: config, time: time)
+        return PriorityEngine(config: config)
+            .assess(task, at: slotStart, windowMinutes: windowMinutes, context: context)
+            .breakdown
     }
 
     // MARK: - Factors

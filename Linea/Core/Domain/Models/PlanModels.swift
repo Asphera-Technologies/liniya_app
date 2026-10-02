@@ -91,6 +91,12 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     /// Тип, который человек выбрал сам в карточке задачи. `nil` — тип
     /// определяет Linea (`TaskClassifier`), и он меняется вместе с названием.
     var kindOverride: TaskKind?
+    /// Сколько раз задачу, которую пора было делать, переносили на потом
+    /// (`TaskDeferral`): задача «зависает» — Linea поднимает её важность.
+    var deferralCount: Int
+    /// «Сначала нужно»: задачи, без которых эту не начать. Пока они открыты,
+    /// план не поставит эту задачу раньше них.
+    var blockedBy: [UUID]
 
     init(
         id: UUID = UUID(),
@@ -106,7 +112,9 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         cognitiveDemand: CognitiveDemand = .normal,
         goalID: UUID? = nil,
         completedAt: Date? = nil,
-        kindOverride: TaskKind? = nil
+        kindOverride: TaskKind? = nil,
+        deferralCount: Int = 0,
+        blockedBy: [UUID] = []
     ) {
         self.id = id
         self.title = title
@@ -122,6 +130,31 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         self.goalID = goalID
         self.completedAt = completedAt
         self.kindOverride = kindOverride
+        self.deferralCount = max(0, deferralCount)
+        self.blockedBy = blockedBy
+    }
+
+    /// Мягкое чтение: задачи лежат и в документах дня (`DayRecord`), и
+    /// запись, сделанная до появления поля, должна читаться — иначе пропал бы
+    /// весь день с его планом и ответами.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        date = try container.decodeIfPresent(Date.self, forKey: .date)
+        priority = try container.decodeIfPresent(TaskPriority.self, forKey: .priority) ?? .normal
+        isDone = try container.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        deadline = try container.decodeIfPresent(Date.self, forKey: .deadline)
+        scheduledStart = try container.decodeIfPresent(Date.self, forKey: .scheduledStart)
+        estimatedMinutes = try container.decodeIfPresent(Int.self, forKey: .estimatedMinutes)
+        cognitiveDemand = try container.decodeIfPresent(CognitiveDemand.self, forKey: .cognitiveDemand) ?? .normal
+        goalID = try container.decodeIfPresent(UUID.self, forKey: .goalID)
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        kindOverride = try container.decodeIfPresent(TaskKind.self, forKey: .kindOverride)
+        deferralCount = try container.decodeIfPresent(Int.self, forKey: .deferralCount) ?? 0
+        blockedBy = try container.decodeIfPresent([UUID].self, forKey: .blockedBy) ?? []
     }
 
     // Duration without the user's estimate depends on what the task is —
@@ -147,6 +180,9 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// активна, и связанные с ней задачи получают ровный приоритет.
     var endDate: Date?
     var isActive: Bool
+    /// Насколько цель важна сама по себе (`goal_importance`): задачи важной
+    /// цели поднимаются выше. Подписи — «Низкая / Средняя / Высокая».
+    var priority: TaskPriority
 
     init(
         id: UUID = UUID(),
@@ -156,7 +192,8 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         createdAt: Date = Date(),
         startDate: Date? = nil,
         endDate: Date? = nil,
-        isActive: Bool = true
+        isActive: Bool = true,
+        priority: TaskPriority = .normal
     ) {
         self.id = id
         self.title = title
@@ -166,6 +203,32 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         self.startDate = startDate ?? createdAt
         self.endDate = endDate
         self.isActive = isActive
+        self.priority = priority
+    }
+
+    /// Мягкое чтение, как у задачи: цели лежат и в документах дня.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        let storedProgress = try container.decodeIfPresent(Double.self, forKey: .progress) ?? 0
+        progress = min(max(storedProgress, 0), 1)
+        isCompleted = try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
+        let created = try container.decode(Date.self, forKey: .createdAt)
+        createdAt = created
+        startDate = try container.decodeIfPresent(Date.self, forKey: .startDate) ?? created
+        endDate = try container.decodeIfPresent(Date.self, forKey: .endDate)
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
+        priority = try container.decodeIfPresent(TaskPriority.self, forKey: .priority) ?? .normal
+    }
+
+    /// «Низкая / Средняя / Высокая» — важность цели в женском роде.
+    static func importanceTitle(_ priority: TaskPriority) -> String {
+        switch priority {
+        case .low: return "Низкая"
+        case .normal: return "Средняя"
+        case .important: return "Высокая"
+        }
     }
 
     /// Сколько дней осталось до срока; `nil`, если срок не задан.

@@ -25,6 +25,8 @@ nonisolated enum ExplanationMoment: String, Codable, Sendable {
     case meal
     /// «Собираю базу: день N из 7» / «Не вижу данных Apple Health».
     case dataSituation
+    /// «Сейчас — …»: что разумнее всего делать в эту минуту.
+    case now
 }
 
 nonisolated struct ExplanationRequest: Codable, Sendable {

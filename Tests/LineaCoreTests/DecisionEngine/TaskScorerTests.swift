@@ -6,8 +6,8 @@ import Foundation
 struct TaskScorerTests {
     private let scorer = TaskScorer()
 
-    @Test("Все пять компонентов считаются по §7 и складываются в total")
-    func components() {
+    @Test("Пять компонентов считаются по §7, total — важность × уместность (§16)")
+    func components() throws {
         let time = WowFixture.morning
         let snapshot = WowFixture.snapshot(at: time)
         let state = PlanFixture.reducedState(at: time)
@@ -26,7 +26,12 @@ struct TaskScorerTests {
         let capacity = (0.5 + 0.5 * 0.38) * 0.85
         #expect(abs((score.energyFit ?? -1) - (1 - 1.5 * (0.9 - capacity))) < 1e-9)
         #expect(score.durationFit == 1)
-        #expect(score.total > 0.80 && score.total < 0.90)
+        // Важность: высокий приоритет, цель со сроком через 4 дня, дедлайн 12:00, шаг к цели.
+        let importance = try #require(score.importanceScore)
+        #expect(abs(importance - (0.30 * 1 + 0.25 * (0.6 + 0.3 * exp(-4.0 / 7)) * 0.91 + 0.25 * exp(-1.5 / 36) + 0.10 * 1)) < 1e-9)
+        let action = try #require(score.actionScore)
+        #expect(action > 0.6 && action < 0.8)
+        #expect(abs(score.total - importance * action) < 1e-12)
     }
 
     @Test("Срок цели двигает приоритет: просрочен, горит, не задан")
@@ -81,24 +86,28 @@ struct TaskScorerTests {
         #expect(importance(endDate: nil) == 0.5)
     }
 
-    @Test("Без данных о состоянии energyFit исключается, а его вес перераспределяется")
+    @Test("Без данных о состоянии energyFit исключается: уместность считается без сил, а не с серединой")
     func energyFitExcluded() {
         let time = WowFixture.morning
         let snapshot = WowFixture.snapshot(at: time)
         let task = snapshot.tasks.first { $0.id == WowFixture.taskC }!
         let unknown = PlanFixture.unknownState(at: time)
+        let context = PriorityContext(snapshot: snapshot, state: unknown, time: time)
+        let assessment = PriorityEngine().assess(task, at: WowFixture.moment(9), windowMinutes: 240, context: context)
+
+        #expect(assessment.breakdown.energyFit == nil)
+        #expect(assessment.actionFactors.energy == nil)
+        let f = assessment.actionFactors
+        let config = EngineConfig.default
+        let weights = config.actionWeightDeadline + config.actionWeightDay + config.actionWeightRhythm + config.actionWeightBalance
+        let pull = (config.actionWeightDeadline * f.deadline + config.actionWeightDay * f.day
+                    + config.actionWeightRhythm * f.rhythm + config.actionWeightBalance * f.balance) / weights
+        #expect(abs(assessment.action - f.window * (0.5 + 0.5 * pull)) < 1e-9)
 
         let score = scorer.score(task: task, at: WowFixture.moment(9), windowMinutes: 240,
                                  snapshot: snapshot, state: unknown, time: time)
-
         #expect(score.energyFit == nil)
-        let config = EngineConfig.default
-        let weights = config.weightUrgency + config.weightImportance + config.weightGoalAlignment + config.weightDurationFit
-        let expected = (score.urgency * config.weightUrgency
-                        + score.importance * config.weightImportance
-                        + score.goalAlignment * config.weightGoalAlignment
-                        + score.durationFit * config.weightDurationFit) / weights
-        #expect(abs(score.total - expected) < 1e-9)
+        #expect(abs(score.total - (score.importanceScore ?? 0) * (score.actionScore ?? 0)) < 1e-12)
     }
 
     @Test("Просроченный дедлайн даёт максимальную срочность, отсутствие дедлайна и дня — минимальную")

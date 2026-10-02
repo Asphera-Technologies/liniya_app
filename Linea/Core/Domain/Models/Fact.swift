@@ -49,6 +49,12 @@ nonisolated enum Fact: Codable, Hashable, Sendable {
     case nextCommitment(title: String, at: Date, minutesLeft: Int)
     case endOfWorkday(minutesLeft: Int)
 
+    // Now (priority engine)
+    /// «Сейчас — …»: за эту задачу разумнее всего взяться прямо сейчас.
+    case nowAction(taskID: UUID, title: String)
+    /// Важная задача, которой сейчас не хватает окна: «её лучше после».
+    case laterAction(taskID: UUID, title: String, minutesNeeded: Int)
+
     // Feedback
     case dayRating(DayRating)
     case calibrationChanged(parameter: String, from: Double, to: Double)

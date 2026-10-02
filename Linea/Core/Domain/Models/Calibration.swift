@@ -86,12 +86,21 @@ nonisolated struct CalibrationChange: Codable, Hashable, Sendable {
 
 /// Static engine constants. Change here = product decision, not learning.
 nonisolated struct EngineConfig: Sendable {
-    // Scoring (brief: urgency + importance + goalAlignment + energyFit + durationFit)
-    var weightUrgency: Double = 0.30
-    var weightImportance: Double = 0.25
-    var weightGoalAlignment: Double = 0.15
-    var weightEnergyFit: Double = 0.20
-    var weightDurationFit: Double = 0.10
+    // Priority engine (Docs/intelligence.md §16): two scores instead of one total.
+    // importance_score — how much a task matters at all (weights sum to 1):
+    var importanceWeightPriority: Double = 0.30
+    var importanceWeightGoal: Double = 0.25
+    var importanceWeightDeadline: Double = 0.25
+    var importanceWeightKind: Double = 0.10
+    var importanceWeightDependents: Double = 0.05
+    var importanceWeightDeferrals: Double = 0.05
+    // action_score = gate × fit × (0.5 + 0.5·pull); pull weights:
+    var actionWeightDeadline: Double = 0.45
+    var actionWeightDay: Double = 0.35
+    var actionWeightRhythm: Double = 0.10
+    var actionWeightBalance: Double = 0.10
+    /// Below this action_score a task is not offered «сейчас».
+    var minimumActionScore: Double = 0.25
 
     // State fusion weights by component kind (normalised over available components)
     var componentWeights: [StateComponentKind: Double] = [.sleep: 0.45, .recovery: 0.35, .strain: 0.20, .fuel: 0.10]

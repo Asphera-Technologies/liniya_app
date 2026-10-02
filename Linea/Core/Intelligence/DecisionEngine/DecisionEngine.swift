@@ -15,6 +15,12 @@
 //  hard-coded: it falls out of the circadian capacity curve plus the `.reduce`
 //  constraints below.
 //
+//  What goes into a slot is decided by the priority engine (§16, ADR-025):
+//  the task with the highest importance × action at that moment — important,
+//  and reasonable to start there (fits the window, suits the energy of the
+//  hour, not waiting for another task). «3 приоритетных действия» are ranked
+//  by importance alone: what matters most today.
+//
 
 import Foundation
 
@@ -26,9 +32,12 @@ nonisolated struct DecisionEngine: Sendable {
         static let loadCap = "loadCap"
         /// No remaining window was long enough for the task.
         static let noWindow = "noWindow"
+        /// The task waits for another one that does not finish today.
+        static let blocked = "blocked"
     }
 
-    /// Undated tasks are pulled in only when a goal wants them, and only a few.
+    /// Undated tasks are pulled in only when an active goal wants them or they
+    /// are due this week, and only a few.
     static let maxUndatedGoalTasks = 3
     /// Cognitive demand from which a task counts as «deep» for the reduce rules.
     static let deepDemandThreshold = 0.7
@@ -40,12 +49,13 @@ nonisolated struct DecisionEngine: Sendable {
     let rules: [any PlanRule]
     let renderer: any TextRenderer
     let config: EngineConfig
-    private let scorer = TaskScorer()
+    private let priority: PriorityEngine
 
     init(rules: [any PlanRule] = [DayBriefRule()], renderer: any TextRenderer, config: EngineConfig = .default) {
         self.rules = rules
         self.renderer = renderer
         self.config = config
+        self.priority = PriorityEngine(config: config)
     }
 
     // MARK: - Entry points
@@ -112,7 +122,8 @@ nonisolated struct DecisionEngine: Sendable {
         let preservedIDs = Set(preserved.map(\.id))
         let preservedTaskIDs = Set(preserved.compactMap(\.taskID))
 
-        let candidates = candidateTasks(snapshot: snapshot, state: state, calibration: calibration, time: time)
+        let priorityContext = PriorityContext(snapshot: snapshot, state: state, calibration: calibration, config: config, time: time)
+        let candidates = priority.candidates(context: priorityContext)
         let commitments = allCommitments(snapshot: snapshot, candidates: candidates, calibration: calibration, time: time)
 
         // Time the planner may not touch: commitments plus preserved blocks
@@ -129,21 +140,20 @@ nonisolated struct DecisionEngine: Sendable {
         let placement = place(
             candidates: candidates,
             excluding: preservedTaskIDs.union(Set(commitments.compactMap(\.taskID))),
-            windows: windows, preserved: preserved,
-            snapshot: snapshot, state: state, calibration: calibration, time: time, planID: planID
+            windows: windows, preserved: preserved, commitments: commitments,
+            from: from, context: priorityContext, planID: planID
         )
 
         var blocks = preserved
-        blocks += commitmentBlocks(commitments, snapshot: snapshot, state: state, calibration: calibration,
-                                   time: time, planID: planID, from: from, taskByID: taskByID, skipping: preservedIDs)
+        blocks += commitmentBlocks(commitments, context: priorityContext, planID: planID, from: from,
+                                   taskByID: taskByID, skipping: preservedIDs)
         blocks += placement.blocks
         blocks.sort(by: Self.chronological)
 
-        // Top actions: the highest-scoring tasks that actually made it into the
+        // Top actions: the most important tasks that actually made it into the
         // day, fixed ones included — «3 приоритетных действия» is a ranking of
         // what will happen, not of what was requested.
-        let ranking = rank(blocks: blocks, taskByID: taskByID, snapshot: snapshot, state: state,
-                           calibration: calibration, time: time)
+        let ranking = rank(blocks: blocks, taskByID: taskByID, context: priorityContext)
         let topTaskIDs = Array(ranking.prefix(config.maxTopTasks).map(\.taskID))
         let topSet = Set(topTaskIDs)
         let scoreByTask = Dictionary(ranking.map { ($0.taskID, $0.score) }, uniquingKeysWith: { a, _ in a })
@@ -183,43 +193,10 @@ nonisolated struct DecisionEngine: Sendable {
     // MARK: - Candidates
 
     /// Open tasks for today, overdue tasks, tasks whose deadline is within two
-    /// days, plus a few undated tasks that serve an active goal.
+    /// days, plus a few undated tasks that serve an active goal or are due this
+    /// week — chosen by the priority engine (`PriorityEngine.candidates`).
     func candidateTasks(snapshot: ContextSnapshot, state: UserState, calibration: Calibration, time: TimeContext) -> [LineaTask] {
-        let today = time.startOfDay(snapshot.day)
-        let deadlineHorizon = time.adding(days: 3, to: today)   // «≤ today + 2» = strictly before today + 3
-        var picked: [LineaTask] = []
-        var undated: [LineaTask] = []
-
-        for task in snapshot.tasks where !task.isDone {
-            if let date = task.date, time.startOfDay(date) <= today {
-                picked.append(task)
-                continue
-            }
-            if let deadline = task.deadline, deadline < deadlineHorizon {
-                picked.append(task)
-                continue
-            }
-            guard task.date == nil, let goalID = task.goalID,
-                  let goal = snapshot.goals.first(where: { $0.id == goalID }),
-                  goal.isActive, !goal.isCompleted else { continue }
-            undated.append(task)
-        }
-
-        let extras = undated
-            .map { task -> (task: LineaTask, total: Double) in
-                let minutes = PlanDuration.minutes(for: task, calibration: calibration)
-                let score = scorer.score(task: task, at: time.now, windowMinutes: minutes, snapshot: snapshot,
-                                         state: state, calibration: calibration, config: config, time: time)
-                return (task, score.total)
-            }
-            .sorted { lhs, rhs in
-                if lhs.total != rhs.total { return lhs.total > rhs.total }
-                return Self.chronological(lhs.task, rhs.task)
-            }
-            .prefix(Self.maxUndatedGoalTasks)
-            .map(\.task)
-
-        return (picked + extras).sorted(by: Self.chronological)
+        priority.candidates(context: PriorityContext(snapshot: snapshot, state: state, calibration: calibration, config: config, time: time))
     }
 
     /// Snapshot commitments plus a synthesized one for every candidate task the
@@ -258,12 +235,15 @@ nonisolated struct DecisionEngine: Sendable {
         excluding excluded: Set<UUID>,
         windows: [DateInterval],
         preserved: [PlanBlock],
-        snapshot: ContextSnapshot,
-        state: UserState,
-        calibration: Calibration,
-        time: TimeContext,
+        commitments: [Commitment],
+        from: Date,
+        context: PriorityContext,
         planID: UUID
     ) -> Placement {
+        let snapshot = context.snapshot
+        let state = context.state
+        let calibration = context.calibration
+        let time = context.time
         var remaining = candidates.filter { !$0.isFixed && !excluded.contains($0.id) }
         let availableMinutes = windows.reduce(0.0) { $0 + $1.duration / 60 }
         let capMinutes = Int((availableMinutes * capacityFactorDay(state: state, calibration: calibration)).rounded(.down))
@@ -274,14 +254,26 @@ nonisolated struct DecisionEngine: Sendable {
         var lastDeepEnd = preserved
             .filter { $0.kind == .focus && isDeep($0.taskID, in: snapshot) }
             .map(\.end).max()
+        // When each task is over by the plan: a task that waits for another
+        // («Сначала нужно») may only start after it. Fixed tasks end with their
+        // commitment; blocks kept from the plan already lived through only count
+        // if they are still ahead.
+        var finishes: [UUID: Date] = [:]
+        for block in preserved where block.end > from {
+            if let taskID = block.taskID { finishes[taskID] = block.end }
+        }
+        for commitment in commitments {
+            if let taskID = commitment.taskID { finishes[taskID] = commitment.end }
+        }
 
         for window in windows {
             var cursor = window.start
             while true {
                 let windowMinutes = Int(window.end.timeIntervalSince(cursor) / 60)
                 guard windowMinutes >= config.minimumBlockMinutes else { break }
+                let finished = Set(finishes.filter { $0.value <= cursor }.keys)
 
-                var best: (task: LineaTask, minutes: Int, score: ScoreBreakdown)?
+                var best: (task: LineaTask, minutes: Int, assessment: PriorityAssessment)?
                 for task in remaining {
                     let planned = PlanDuration.minutes(for: task, calibration: calibration)
                     // Half a task in a leftover window is worse than moving it to
@@ -294,10 +286,12 @@ nonisolated struct DecisionEngine: Sendable {
                         continue
                     }
                     guard deepRulesAllow(task: task, start: cursor, lastDeepEnd: lastDeepEnd, state: state, time: time) else { continue }
-                    let score = scorer.score(task: task, at: cursor, windowMinutes: windowMinutes, snapshot: snapshot,
-                                             state: state, calibration: calibration, config: config, time: time)
-                    if best == nil || score.total > best!.score.total {
-                        best = (task, minutes, score)
+                    let assessment = priority.assess(task, at: cursor, windowMinutes: windowMinutes,
+                                                     context: context, assumingDone: finished)
+                    // Waiting for a task that is not over yet at this moment.
+                    guard assessment.actionFactors.gate > 0 else { continue }
+                    if best == nil || assessment.focus > best!.assessment.focus {
+                        best = (task, minutes, assessment)
                     }
                 }
                 guard let choice = best else { break }
@@ -306,18 +300,28 @@ nonisolated struct DecisionEngine: Sendable {
                 blocks.append(PlanBlock(
                     id: "\(planID.uuidString)-\(choice.task.id.uuidString)",
                     kind: .focus, taskID: choice.task.id, title: choice.task.title,
-                    start: cursor, end: end, score: choice.score,
+                    start: cursor, end: end, score: choice.assessment.breakdown,
                     facts: [.taskPlanned(taskID: choice.task.id, title: choice.task.title, start: cursor, end: end)]
                 ))
                 usedMinutes += choice.minutes
+                finishes[choice.task.id] = end
                 if choice.task.cognitiveDemand.score >= Self.deepDemandThreshold { lastDeepEnd = end }
                 remaining.removeAll { $0.id == choice.task.id }
                 cursor = end.addingTimeInterval(TimeInterval(config.blockBufferMinutes * 60))
             }
         }
 
-        let deferred = remaining.map {
-            Deferred(task: $0, reason: capBlocked.contains($0.id) ? DeferReason.loadCap : DeferReason.noWindow)
+        let planned = Set(finishes.keys)
+        let deferred = remaining.map { task -> Deferred in
+            let reason: String
+            if !context.dependencies.openBlockers(of: task.id, assumingDone: planned).isEmpty {
+                reason = DeferReason.blocked
+            } else if capBlocked.contains(task.id) {
+                reason = DeferReason.loadCap
+            } else {
+                reason = DeferReason.noWindow
+            }
+            return Deferred(task: task, reason: reason)
         }
         return Placement(blocks: blocks, deferred: deferred)
     }
@@ -353,16 +357,15 @@ nonisolated struct DecisionEngine: Sendable {
 
     private func commitmentBlocks(
         _ commitments: [Commitment],
-        snapshot: ContextSnapshot,
-        state: UserState,
-        calibration: Calibration,
-        time: TimeContext,
+        context: PriorityContext,
         planID: UUID,
         from: Date,
         taskByID: [UUID: LineaTask],
         skipping preservedIDs: Set<String>
     ) -> [PlanBlock] {
-        commitments.compactMap { commitment -> PlanBlock? in
+        let snapshot = context.snapshot
+        let time = context.time
+        return commitments.compactMap { commitment -> PlanBlock? in
             guard commitment.end > from else { return nil }
             let id = commitment.taskID.map { "\(planID.uuidString)-\($0.uuidString)" }
                 ?? "\(planID.uuidString)-c-\(commitment.id)"
@@ -379,8 +382,8 @@ nonisolated struct DecisionEngine: Sendable {
 
             var score: ScoreBreakdown?
             if let taskID = commitment.taskID, let task = taskByID[taskID] {
-                score = scorer.score(task: task, at: commitment.start, windowMinutes: max(commitment.durationMinutes, 1),
-                                     snapshot: snapshot, state: state, calibration: calibration, config: config, time: time)
+                score = priority.assess(task, at: commitment.start, windowMinutes: max(commitment.durationMinutes, 1),
+                                        context: context).breakdown
             }
 
             return PlanBlock(
@@ -412,26 +415,27 @@ nonisolated struct DecisionEngine: Sendable {
         let score: ScoreBreakdown
     }
 
-    private func rank(
-        blocks: [PlanBlock],
-        taskByID: [UUID: LineaTask],
-        snapshot: ContextSnapshot,
-        state: UserState,
-        calibration: Calibration,
-        time: TimeContext
-    ) -> [Ranked] {
+    private func rank(blocks: [PlanBlock], taskByID: [UUID: LineaTask], context: PriorityContext) -> [Ranked] {
         var seen = Set<UUID>()
         var ranked: [Ranked] = []
         for block in blocks {
             guard block.kind != .rest, let taskID = block.taskID, let task = taskByID[taskID] else { continue }
             guard seen.insert(taskID).inserted else { continue }
-            let score = block.score ?? scorer.score(
-                task: task, at: block.start, windowMinutes: max(block.durationMinutes, 1), snapshot: snapshot,
-                state: state, calibration: calibration, config: config, time: time
-            )
+            // Blocks kept from a plan made before the priority engine have no
+            // importance yet — it is computed for their start.
+            let score: ScoreBreakdown
+            if let stored = block.score, stored.importanceScore != nil {
+                score = stored
+            } else {
+                score = priority.assess(task, at: block.start, windowMinutes: max(block.durationMinutes, 1),
+                                        context: context).breakdown
+            }
             ranked.append(Ranked(taskID: taskID, task: task, score: score))
         }
         return ranked.sorted { lhs, rhs in
+            let left = lhs.score.importanceScore ?? 0
+            let right = rhs.score.importanceScore ?? 0
+            if left != right { return left > right }
             if lhs.score.total != rhs.score.total { return lhs.score.total > rhs.score.total }
             return Self.chronological(lhs.task, rhs.task)
         }

@@ -25,6 +25,12 @@ nonisolated enum PlanBlockKind: String, Codable, Hashable, Sendable {
 
 /// Per-component scores that produced a block's total — kept for
 /// explainability and for future calibration, never recomputed from text.
+///
+/// Since the priority engine (Docs/intelligence.md §16) a task has two scores
+/// instead of one: `importanceScore` — how much it matters at all, and
+/// `actionScore` — how reasonable it is to do it at this block's start.
+/// `total` is what the planner compared: importance × action. The five
+/// factors of the brief stay as the evidence behind them.
 nonisolated struct ScoreBreakdown: Codable, Hashable, Sendable {
     var urgency: Double
     var importance: Double
@@ -32,14 +38,29 @@ nonisolated struct ScoreBreakdown: Codable, Hashable, Sendable {
     var energyFit: Double?
     var durationFit: Double
     var total: Double
+    /// «Насколько задача важна вообще», 0…1. Nil в планах до движка приоритизации.
+    var importanceScore: Double?
+    /// «Насколько разумно браться сейчас», 0…1. Nil в планах до движка приоритизации.
+    var actionScore: Double?
 
-    init(urgency: Double, importance: Double, goalAlignment: Double, energyFit: Double?, durationFit: Double, total: Double) {
+    init(
+        urgency: Double,
+        importance: Double,
+        goalAlignment: Double,
+        energyFit: Double?,
+        durationFit: Double,
+        total: Double,
+        importanceScore: Double? = nil,
+        actionScore: Double? = nil
+    ) {
         self.urgency = urgency
         self.importance = importance
         self.goalAlignment = goalAlignment
         self.energyFit = energyFit
         self.durationFit = durationFit
         self.total = total
+        self.importanceScore = importanceScore
+        self.actionScore = actionScore
     }
 }
 

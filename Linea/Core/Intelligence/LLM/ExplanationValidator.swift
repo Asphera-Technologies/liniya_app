@@ -76,12 +76,14 @@ nonisolated struct ExplanationValidator: Sendable {
                 addMinutes(minutesLeft)
             case .endOfWorkday(let minutesLeft):
                 addMinutes(minutesLeft)
+            case .laterAction(_, _, let minutesNeeded):
+                addMinutes(minutesNeeded)
             case .dietRestrictions(let count):
                 add("\(count)")
             case .energy(let value, _):
                 add("\(Int((value * 100).rounded()))")
             case .hrvVsUsual, .restingHeartRateVsUsual, .recovery, .loadAdvice, .highLoadYesterday,
-                 .dataMissing, .providerUnavailable, .taskDeferred, .dayRating, .calibrationChanged:
+                 .dataMissing, .providerUnavailable, .taskDeferred, .dayRating, .calibrationChanged, .nowAction:
                 continue
             }
         }

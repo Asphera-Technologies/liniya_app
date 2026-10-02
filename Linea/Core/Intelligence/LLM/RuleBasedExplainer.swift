@@ -39,6 +39,7 @@ nonisolated struct RuleBasedExplainer: TextRenderer, Explainer {
         case .meal: return meal(request, facts)
         case .taskDeferred: return taskDeferred(facts)
         case .dataSituation: return dataSituation(facts)
+        case .now: return now(facts)
         }
     }
 
@@ -117,6 +118,41 @@ nonisolated struct RuleBasedExplainer: TextRenderer, Explainer {
         let list = request.taskTitles.prefix(3)
         guard !list.isEmpty else { return "" }
         return "Например: \(list.joined(separator: ", "))."
+    }
+
+    // MARK: Now
+
+    /// «Сейчас — «Ответить на письма».» Если важная задача ждёт окна:
+    /// «До «Созвон с командой» 20 мин, а на «Подготовить стратегию» нужно
+    /// 1 ч 30 мин — её лучше после.» Ничего не помещается: «До «Созвон с
+    /// командой» 10 мин — короткая пауза.»
+    private func now(_ facts: FactReader) -> Explanation {
+        let window: String?
+        let afterwards: String
+        if let next = facts.nextCommitment {
+            window = "До \(RussianText.quoted(next.title)) \(RussianText.duration(minutes: next.minutesLeft))"
+            afterwards = "после"
+        } else if let minutes = facts.endOfWorkdayMinutes {
+            window = "До конца рабочего дня \(RussianText.duration(minutes: minutes))"
+            afterwards = "завтра"
+        } else {
+            window = nil
+            afterwards = "позже"
+        }
+        let later = facts.laterAction
+
+        guard let action = facts.nowAction else {
+            let headline = window.map { "\($0) — короткая пауза." } ?? "Сейчас — короткая пауза."
+            let body = later.map { "\(RussianText.quoted($0.title)) лучше начать \(afterwards)." } ?? ""
+            return Explanation(headline: headline, body: body, explainerID: id)
+        }
+        let headline = "Сейчас — \(RussianText.quoted(action.title))."
+        guard let later else {
+            return Explanation(headline: headline, body: window.map { "\($0)." } ?? "", explainerID: id)
+        }
+        let need = "на \(RussianText.quoted(later.title)) нужно \(RussianText.duration(minutes: later.minutesNeeded)) — её лучше \(afterwards)."
+        let body = window.map { "\($0), а \(need)" } ?? RussianWords.capitalizedFirst(need)
+        return Explanation(headline: headline, body: body, explainerID: id)
     }
 
     // MARK: Deferred / data
@@ -270,6 +306,16 @@ nonisolated struct FactReader: Sendable {
 
     var dietRestrictions: Int? {
         for fact in facts { if case .dietRestrictions(let count) = fact { return count } }
+        return nil
+    }
+
+    var nowAction: (taskID: UUID, title: String)? {
+        for fact in facts { if case .nowAction(let id, let title) = fact { return (id, title) } }
+        return nil
+    }
+
+    var laterAction: (taskID: UUID, title: String, minutesNeeded: Int)? {
+        for fact in facts { if case .laterAction(let id, let title, let minutes) = fact { return (id, title, minutes) } }
         return nil
     }
 }
