@@ -103,6 +103,7 @@ struct ContextEngineTests {
         let snapshot = await capture(engine, tasks: WowFixture.tasks)
         let workout = snapshot.commitments.first { $0.taskID == WowFixture.taskWorkout }
         #expect(workout?.kind == .workout)
-        #expect(snapshot.commitments.first { $0.taskID == WowFixture.taskCall }?.kind == .task)
+        // «Созвон с командой» с назначенным временем — встреча.
+        #expect(snapshot.commitments.first { $0.taskID == WowFixture.taskCall }?.kind == .meeting)
     }
 }

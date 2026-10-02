@@ -17,8 +17,14 @@ nonisolated enum CommitmentKind: String, Codable, Hashable, Sendable {
     /// recognised by its name — whether it came from a task the user pinned to
     /// a time or from a calendar event. Shared so both sides agree.
     static func inferred(fromTitle title: String, default fallback: CommitmentKind) -> CommitmentKind {
-        title.lowercased().contains("тренировк") ? .workout : fallback
+        let lowered = title.lowercased()
+        if lowered.contains("тренировк") { return .workout }
+        // «Встреча с клиентом», «Созвон с командой» — встреча, кто бы её ни завёл.
+        if meetingWords.contains(where: lowered.contains) { return .meeting }
+        return fallback
     }
+
+    private static let meetingWords = ["встреч", "созвон", "совещан", "планёрк", "планерк", "звонок с", "интервью", "собеседован"]
 }
 
 nonisolated struct Commitment: Codable, Hashable, Sendable, Identifiable {

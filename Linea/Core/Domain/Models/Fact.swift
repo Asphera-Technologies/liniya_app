@@ -54,6 +54,11 @@ nonisolated enum Fact: Codable, Hashable, Sendable {
     case nowAction(taskID: UUID, title: String)
     /// Важная задача, которой сейчас не хватает окна: «её лучше после».
     case laterAction(taskID: UUID, title: String, minutesNeeded: Int)
+    /// Окно «сейчас»: до чего оно — до встречи, еды, тренировки, другого дела
+    /// или (`kind == nil`) до конца рабочего дня.
+    case windowUntil(kind: CommitmentKind?, title: String?, minutesLeft: Int)
+    /// Человек уже взялся за действие.
+    case actionStarted(at: Date, minutes: Int)
 
     // Feedback
     case dayRating(DayRating)

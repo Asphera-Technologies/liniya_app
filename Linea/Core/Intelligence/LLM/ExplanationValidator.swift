@@ -78,6 +78,11 @@ nonisolated struct ExplanationValidator: Sendable {
                 addMinutes(minutesLeft)
             case .laterAction(_, _, let minutesNeeded):
                 addMinutes(minutesNeeded)
+            case .windowUntil(_, _, let minutesLeft):
+                addMinutes(minutesLeft)
+            case .actionStarted(let at, let minutes):
+                add(RussianText.clock(at, time: time))
+                addMinutes(minutes)
             case .dietRestrictions(let count):
                 add("\(count)")
             case .energy(let value, _):

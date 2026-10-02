@@ -122,37 +122,56 @@ nonisolated struct RuleBasedExplainer: TextRenderer, Explainer {
 
     // MARK: Now
 
-    /// «Сейчас — «Ответить на письма».» Если важная задача ждёт окна:
-    /// «До «Созвон с командой» 20 мин, а на «Подготовить стратегию» нужно
-    /// 1 ч 30 мин — её лучше после.» Ничего не помещается: «До «Созвон с
-    /// командой» 10 мин — короткая пауза.»
+    /// «Сейчас»: почему именно это. Окно называется по тому, чем кончается:
+    /// «До встречи осталось 25 мин.», «До конца рабочего дня осталось 2 ч.».
+    /// Важное, которому окна не хватает: ««Подготовить стратегию» лучше после
+    /// встречи: на неё нужно 1 ч 30 мин.» Начатое: «Начато в 11:40.» Ничего не
+    /// помещается — заголовок «До встречи осталось 10 мин — короткая пауза.».
     private func now(_ facts: FactReader) -> Explanation {
-        let window: String?
-        let afterwards: String
-        if let next = facts.nextCommitment {
-            window = "До \(RussianText.quoted(next.title)) \(RussianText.duration(minutes: next.minutesLeft))"
-            afterwards = "после"
-        } else if let minutes = facts.endOfWorkdayMinutes {
-            window = "До конца рабочего дня \(RussianText.duration(minutes: minutes))"
-            afterwards = "завтра"
-        } else {
-            window = nil
-            afterwards = "позже"
+        if let started = facts.actionStarted {
+            let headline = facts.nowAction.map { "Сейчас — \(RussianText.quoted($0.title))." } ?? ""
+            return Explanation(headline: headline, body: "Начато в \(facts.clock(started.at)).", explainerID: id)
         }
-        let later = facts.laterAction
+        let window = facts.windowUntil.map { windowSentence(kind: $0.kind, title: $0.title, minutes: $0.minutesLeft) }
+        let after = facts.windowUntil.map { afterPhrase(kind: $0.kind, title: $0.title) } ?? "позже"
 
         guard let action = facts.nowAction else {
             let headline = window.map { "\($0) — короткая пауза." } ?? "Сейчас — короткая пауза."
-            let body = later.map { "\(RussianText.quoted($0.title)) лучше начать \(afterwards)." } ?? ""
+            let body = facts.laterAction.map { "\(RussianText.quoted($0.title)) лучше начать \(after)." } ?? ""
             return Explanation(headline: headline, body: body, explainerID: id)
         }
-        let headline = "Сейчас — \(RussianText.quoted(action.title))."
-        guard let later else {
-            return Explanation(headline: headline, body: window.map { "\($0)." } ?? "", explainerID: id)
+        let later = facts.laterAction.map {
+            "\(RussianText.quoted($0.title)) лучше \(after): на неё нужно \(RussianText.duration(minutes: $0.minutesNeeded))."
         }
-        let need = "на \(RussianText.quoted(later.title)) нужно \(RussianText.duration(minutes: later.minutesNeeded)) — её лучше \(afterwards)."
-        let body = window.map { "\($0), а \(need)" } ?? RussianWords.capitalizedFirst(need)
-        return Explanation(headline: headline, body: body, explainerID: id)
+        let body = [window.map { "\($0)." }, later].compactMap { $0 }.joined(separator: " ")
+        return Explanation(headline: "Сейчас — \(RussianText.quoted(action.title)).", body: body, explainerID: id)
+    }
+
+    /// «До встречи осталось 25 мин» — без точки.
+    private func windowSentence(kind: CommitmentKind?, title: String?, minutes: Int) -> String {
+        let left = RussianText.duration(minutes: minutes)
+        switch kind {
+        case .meeting?: return "До встречи осталось \(left)"
+        case .workout?: return "До тренировки осталось \(left)"
+        case .meal?: return "До еды осталось \(left)"
+        case .task?, .other?:
+            if let title { return "До \(RussianText.quoted(title)) осталось \(left)" }
+            return "До следующего дела осталось \(left)"
+        case nil: return "До конца рабочего дня осталось \(left)"
+        }
+    }
+
+    /// «после встречи», «после тренировки», а в конце дня — «завтра».
+    private func afterPhrase(kind: CommitmentKind?, title: String?) -> String {
+        switch kind {
+        case .meeting?: return "после встречи"
+        case .workout?: return "после тренировки"
+        case .meal?: return "после еды"
+        case .task?, .other?:
+            if let title { return "после \(RussianText.quoted(title))" }
+            return "позже"
+        case nil: return "завтра"
+        }
     }
 
     // MARK: Deferred / data
@@ -316,6 +335,16 @@ nonisolated struct FactReader: Sendable {
 
     var laterAction: (taskID: UUID, title: String, minutesNeeded: Int)? {
         for fact in facts { if case .laterAction(let id, let title, let minutes) = fact { return (id, title, minutes) } }
+        return nil
+    }
+
+    var windowUntil: (kind: CommitmentKind?, title: String?, minutesLeft: Int)? {
+        for fact in facts { if case .windowUntil(let kind, let title, let minutes) = fact { return (kind, title, minutes) } }
+        return nil
+    }
+
+    var actionStarted: (at: Date, minutes: Int)? {
+        for fact in facts { if case .actionStarted(let at, let minutes) = fact { return (at, minutes) } }
         return nil
     }
 }

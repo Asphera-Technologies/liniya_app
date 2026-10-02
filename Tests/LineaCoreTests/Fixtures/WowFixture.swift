@@ -182,7 +182,7 @@ nonisolated enum WowFixture {
     static var defaultCommitments: [Commitment] {
         [
             Commitment(id: "meal-lunch", title: "Обед", start: moment(13), end: moment(13, 40), kind: .meal, source: .nutrition),
-            Commitment(id: "task-\(taskCall.uuidString)", title: "Созвон с командой", start: moment(15, 50), end: moment(16, 20), kind: .task, source: .tasks, taskID: taskCall),
+            Commitment(id: "task-\(taskCall.uuidString)", title: "Созвон с командой", start: moment(15, 50), end: moment(16, 20), kind: .meeting, source: .tasks, taskID: taskCall),
             Commitment(id: "task-\(taskWorkout.uuidString)", title: "Тренировка", start: moment(17), end: moment(18), kind: .workout, source: .tasks, taskID: taskWorkout),
         ]
     }

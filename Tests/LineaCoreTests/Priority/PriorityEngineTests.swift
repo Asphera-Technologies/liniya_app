@@ -290,60 +290,69 @@ struct PriorityEngineTests {
 struct NextActionTests {
     private let useCase = NextActionUseCase(renderer: RuleBasedExplainer())
 
-    @Test("За 20 минут до встречи: короткое дело сейчас, стратегия — после встречи")
-    func shortWindowSuggestsQuickTask() throws {
-        let time = WowFixture.time(15, 30)
-        let action = try #require(useCase.run(record: Strategy.record(at: time), tasks: Strategy.tasks, calibration: .default, time: time))
-        #expect(action.taskID == Strategy.mail)
-        #expect(action.laterTaskID == Strategy.strategy)
-        #expect(action.headline == "Сейчас — «Ответить на письма».")
-        #expect(action.body == "До «Встреча с клиентом» 20 мин, а на «Подготовить стратегию» нужно 1 ч 30 мин — её лучше после.")
+    private func run(at time: TimeContext, tasks: [LineaTask] = Strategy.tasks, record: DayRecord? = nil, preferred: UUID? = nil) -> NextAction? {
+        useCase.run(record: record ?? Strategy.record(at: time, tasks: tasks), tasks: tasks, calibration: .default,
+                    time: time, preferred: preferred)
     }
 
-    @Test("После встречи стратегия снова «сейчас»")
+    /// Пять коротких задач на сегодня — есть из чего выбрать.
+    private var errands: [LineaTask] {
+        ["Ответить клиенту", "Проверить сборку", "Разобрать письмо", "Оплатить интернет", "Купить продукты"].enumerated().map { index, title in
+            LineaTask(id: UUID(uuidString: "57000000-0000-0000-0000-00000000000\(index)")!, title: title, date: WowFixture.today,
+                      priority: index == 0 ? .important : .normal,
+                      createdAt: WowFixture.created.addingTimeInterval(TimeInterval(index * 60)), estimatedMinutes: 15)
+        }
+    }
+
+    @Test("За 20 минут до встречи: короткое дело сейчас, стратегия — после встречи")
+    func shortWindowSuggestsQuickTask() throws {
+        let action = try #require(run(at: WowFixture.time(15, 30)))
+        #expect(action.taskID == Strategy.mail)
+        #expect(action.option?.title == "Ответить на письма")
+        #expect(action.option?.minutes == 15)
+        #expect(action.laterTaskID == Strategy.strategy)
+        #expect(action.headline == "Сейчас — «Ответить на письма».")
+        #expect(action.reason == "До встречи осталось 20 мин. «Подготовить стратегию» лучше после встречи: на неё нужно 1 ч 30 мин.")
+        // Стратегия сейчас не помещается — в «Другое» её нет.
+        #expect(action.alternatives.isEmpty)
+    }
+
+    @Test("После встречи стратегия снова «сейчас»; длинное окно не упоминается")
     func afterMeetingStrategyIsBack() throws {
-        let time = WowFixture.time(16, 20)
-        let action = try #require(useCase.run(record: Strategy.record(at: time), tasks: Strategy.tasks, calibration: .default, time: time))
+        let action = try #require(run(at: WowFixture.time(16, 20)))
         #expect(action.taskID == Strategy.strategy)
         #expect(action.laterTaskID == nil)
-        #expect(action.headline == "Сейчас — «Подготовить стратегию».")
-        // Четыре с лишним часа впереди — об окне не говорим.
-        #expect(action.body == "")
+        #expect(action.reason == "")
+        #expect(action.alternatives.map(\.taskID) == [Strategy.mail])
     }
 
     @Test("Окно меньше двух часов — Linea о нём напоминает")
     func shortRemainderIsMentioned() throws {
-        let time = WowFixture.time(19)
-        let action = try #require(useCase.run(record: Strategy.record(at: time), tasks: Strategy.tasks, calibration: .default, time: time))
+        let action = try #require(run(at: WowFixture.time(19)))
         #expect(action.taskID == Strategy.strategy)
-        #expect(action.body == "До конца рабочего дня 2 ч.")
+        #expect(action.reason == "До конца рабочего дня осталось 2 ч.")
     }
 
     @Test("Ничего не помещается — короткая пауза, важное — после")
     func nothingFits() throws {
-        let time = WowFixture.time(15, 40)
-        let tasks = [Strategy.tasks[0]]
-        let action = try #require(useCase.run(record: Strategy.record(at: time, tasks: tasks), tasks: tasks, calibration: .default, time: time))
-        #expect(action.taskID == nil)
-        #expect(action.headline == "До «Встреча с клиентом» 10 мин — короткая пауза.")
-        #expect(action.body == "«Подготовить стратегию» лучше начать после.")
+        let action = try #require(run(at: WowFixture.time(15, 40), tasks: [Strategy.tasks[0]]))
+        #expect(action.option == nil)
+        #expect(action.headline == "До встречи осталось 10 мин — короткая пауза.")
+        #expect(action.reason == "«Подготовить стратегию» лучше начать после встречи.")
     }
 
     @Test("Во время встречи и после рабочего дня «Сейчас» молчит")
     func silentWhenBusy() {
-        let during = WowFixture.time(16, 0)
-        #expect(useCase.run(record: Strategy.record(at: during), tasks: Strategy.tasks, calibration: .default, time: during) == nil)
-        let night = WowFixture.time(21, 30)
-        #expect(useCase.run(record: Strategy.record(at: night), tasks: Strategy.tasks, calibration: .default, time: night) == nil)
+        #expect(run(at: WowFixture.time(16, 0)) == nil)
+        #expect(run(at: WowFixture.time(21, 30)) == nil)
     }
 
     @Test("Закрытая задача больше не «сейчас»")
     func doneTaskIsSkipped() throws {
-        let time = WowFixture.time(16, 20)
         var tasks = Strategy.tasks
         tasks[0].isDone = true
         tasks[0].completedAt = WowFixture.moment(16, 19)
-        let action = try #require(useCase.run(record: Strategy.record(at: time), tasks: tasks, calibration: .default, time: time))
+        let action = try #require(run(at: WowFixture.time(16, 20), tasks: tasks))
         #expect(action.taskID == Strategy.mail)
     }
 
@@ -354,8 +363,100 @@ struct NextActionTests {
                               start: WowFixture.moment(9, 50), end: WowFixture.moment(10, 20))
         let plan = DayPlan(id: WowFixture.planID, day: WowFixture.today, status: .accepted, createdAt: WowFixture.morning.now,
                            snapshotID: WowFixture.snapshotID, blocks: [block], topTaskIDs: [Strategy.mail])
-        let record = Strategy.record(at: time, plan: plan)
-        let action = try #require(useCase.run(record: record, tasks: Strategy.tasks, calibration: .default, time: time))
+        let action = try #require(run(at: time, record: Strategy.record(at: time, plan: plan)))
         #expect(action.taskID == Strategy.mail)
+    }
+
+    // MARK: Одно действие и «Другое»
+
+    @Test("Одно действие и не больше трёх альтернатив — только то, что уместно сейчас")
+    func oneActionAndAtMostThreeAlternatives() throws {
+        let time = WowFixture.time(10)
+        let action = try #require(run(at: time, tasks: errands))
+        #expect(action.taskID == errands[0].id, "Важное и короткое — первым")
+        #expect(action.alternatives.count == NextActionUseCase.maxAlternatives)
+        #expect(!action.alternatives.contains { $0.taskID == action.taskID })
+        #expect(action.alternatives.allSatisfy { $0.minutes == 15 })
+    }
+
+    @Test("Выбранное в «Другое» становится «сейчас»")
+    func preferredAlternativeWins() throws {
+        let time = WowFixture.time(10)
+        let first = try #require(run(at: time, tasks: errands))
+        let chosen = try #require(first.alternatives.last)
+        let second = try #require(run(at: time, tasks: errands, preferred: chosen.taskID))
+        #expect(second.taskID == chosen.taskID)
+        #expect(second.alternatives.contains { $0.taskID == first.taskID })
+    }
+
+    // MARK: Начатое действие
+
+    @Test("«Начать» пишет отклик в день, задача не меняется")
+    func startActionRecordsFeedback() throws {
+        let time = WowFixture.time(10)
+        let action = try #require(run(at: time, tasks: errands))
+        let option = try #require(action.option)
+        let record = StartActionUseCase().run(record: Strategy.record(at: time, tasks: errands), option: option,
+                                              wasAlternative: false, time: time)
+        let started = record.feedback.compactMap { item -> ActionStart? in
+            if case .actionStarted(let start) = item.kind { return start }
+            return nil
+        }
+        #expect(started == [ActionStart(taskID: option.taskID, minutes: 15, wasAlternative: false)])
+    }
+
+    @Test("Начатое действие — «в работе», пока не закрыто и не вышло время")
+    func startedActionIsShown() throws {
+        let start = WowFixture.time(10)
+        let option = NextAction.Option(taskID: errands[1].id, title: "Проверить сборку", minutes: 15)
+        let record = StartActionUseCase().run(record: Strategy.record(at: start, tasks: errands), option: option,
+                                              wasAlternative: true, time: start)
+
+        let during = try #require(run(at: WowFixture.time(10, 10), tasks: errands, record: record))
+        #expect(during.taskID == option.taskID)
+        #expect(during.isStarted)
+        #expect(during.startedAt == WowFixture.moment(10))
+        #expect(during.reason == "Начато в 10:00.")
+        #expect(!during.alternatives.contains { $0.taskID == option.taskID })
+        #expect(during.alternatives.count == NextActionUseCase.maxAlternatives)
+
+        // 15 минут отведено: действие живёт до 30 минут, потом — снова выбор.
+        #expect(record.activeAction(tasks: errands, at: WowFixture.moment(10, 29)) != nil)
+        #expect(record.activeAction(tasks: errands, at: WowFixture.moment(10, 31)) == nil)
+        // Задачу закрыли — действие кончилось.
+        var done = errands
+        done[1].isDone = true
+        #expect(record.activeAction(tasks: done, at: WowFixture.moment(10, 5)) == nil)
+    }
+
+    @Test("План держит время начатого действия занятым")
+    func startedActionHoldsItsTime() async throws {
+        let time = WowFixture.time(10)
+        let option = NextAction.Option(taskID: errands[2].id, title: "Разобрать письмо", minutes: 15)
+        let record = StartActionUseCase().run(record: DayRecord(day: WowFixture.today, updatedAt: time.now),
+                                              option: option, wasAlternative: false, time: time)
+        let planDay = PlanDayUseCase(
+            contextEngine: ContextEngine(providers: []),
+            decisionEngine: PlanFixture.engine(),
+            nudgeEngine: PlanFixture.nudgeEngine(),
+            explainer: RuleBasedExplainer()
+        )
+        let output = await planDay.run(PlanDayUseCase.Input(
+            time: WowFixture.time(10, 5), tasks: errands, goals: [], existing: record, allowsRemoteExplanation: false
+        ))
+        let plan = try #require(output.record.plan)
+        let held = try #require(plan.blocks.first { $0.taskID == option.taskID })
+        #expect(held.kind == .commitment)
+        #expect(held.start == WowFixture.moment(10))
+        #expect(held.end == WowFixture.moment(10, 15))
+        #expect(!plan.blocks.contains { $0.kind == .focus && $0.start < WowFixture.moment(10, 15) })
+    }
+
+    @Test("Встреча и созвон с назначенным временем — встреча")
+    func meetingKind() {
+        #expect(CommitmentKind.inferred(fromTitle: "Встреча с клиентом", default: .task) == .meeting)
+        #expect(CommitmentKind.inferred(fromTitle: "Созвон с командой", default: .task) == .meeting)
+        #expect(CommitmentKind.inferred(fromTitle: "Тренировка", default: .task) == .workout)
+        #expect(CommitmentKind.inferred(fromTitle: "Забрать посылку", default: .task) == .task)
     }
 }

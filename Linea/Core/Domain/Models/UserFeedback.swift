@@ -18,6 +18,8 @@ nonisolated enum FeedbackKind: Codable, Hashable, Sendable {
     case mealLogged(MealKind)
     /// Итог дня: сколько плана случилось на самом деле (см. `CheckInEntry`).
     case dayReport(DayReportSummary)
+    /// «Начать» на действии «Сейчас» (см. `NextAction`).
+    case actionStarted(ActionStart)
 }
 
 nonisolated struct UserFeedback: Codable, Hashable, Sendable, Identifiable {

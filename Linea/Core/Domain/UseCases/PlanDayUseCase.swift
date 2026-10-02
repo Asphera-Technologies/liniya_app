@@ -112,7 +112,7 @@ nonisolated struct PlanDayUseCase: Sendable {
             historyDays: input.historyDays
         )
 
-        let snapshot = await contextEngine.capture(
+        var snapshot = await contextEngine.capture(
             request: request,
             snapshotID: DeterministicID.snapshotID(day: day, time: time, capturedAt: time.now),
             tasks: input.tasks,
@@ -122,6 +122,21 @@ nonisolated struct PlanDayUseCase: Sendable {
             meals: input.meals,
             additionalProviders: input.additionalProviders
         )
+
+        // Начатое действие («Сейчас» → «Начать») держит своё время: план не
+        // ставит на него другое, а пересборка обходит его.
+        if let active = input.existing?.activeAction(tasks: input.tasks, at: time.now),
+           let task = input.tasks.first(where: { $0.id == active.start.taskID }),
+           !snapshot.commitments.contains(where: { $0.taskID == task.id }) {
+            snapshot.commitments.append(Commitment(
+                id: NextActionUseCase.commitmentID(for: task.id), title: task.title, start: active.at,
+                end: active.at.addingTimeInterval(TimeInterval(active.start.minutes * 60)),
+                kind: .task, source: .tasks, taskID: task.id
+            ))
+            snapshot.commitments.sort { lhs, rhs in
+                lhs.start == rhs.start ? lhs.id < rhs.id : lhs.start < rhs.start
+            }
+        }
 
         let baselines = baselineCalculator.compute(history: input.history, config: config, time: time)
         let state = stateEngine.evaluate(

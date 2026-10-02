@@ -2,10 +2,14 @@
 //  NextActionUseCase.swift
 //  Linea
 //
-//  «Сейчас» на экране «Сегодня» — action_score в деле. «Подготовить
-//  стратегию» важна, но до встречи 20 минут: сейчас Linea предложит то, что
-//  успеется, а стратегию — после встречи. Встреча прошла — стратегия снова
-//  «сейчас».
+//  «Сейчас» на экране «Сегодня» — одно рекомендованное действие (`NextAction`)
+//  и по просьбе ещё два-три. «Подготовить стратегию» важна, но до встречи
+//  20 минут: сейчас Linea предложит то, что успеется, а стратегию — после
+//  встречи. Встреча прошла — стратегия снова «сейчас».
+//
+//  Действие и задача — разные сущности: «Начать» пишет в день отклик
+//  `actionStarted`, а задачу не трогает. Пока действие идёт, «Сейчас»
+//  показывает его, а план держит его время занятым (`PlanDayUseCase`).
 //
 //  Чистая функция от дня, свежих задач и времени; текст — из шаблонов
 //  (`ExplanationMoment.now`), экран только показывает его.
@@ -13,19 +17,11 @@
 
 import Foundation
 
-nonisolated struct NextAction: Hashable, Sendable {
-    /// Задача «сейчас»; nil — сейчас ни одна не помещается.
-    let taskID: UUID?
-    /// Важная задача, которой сейчас не хватает окна: «её лучше после».
-    let laterTaskID: UUID?
-    let headline: String
-    let body: String
-    let facts: [Fact]
-}
-
 nonisolated struct NextActionUseCase: Sendable {
     /// Окно длиннее — о нём не говорим: «до конца дня 12 ч» утром — шум.
     static let windowWorthMentioningMinutes = 120
+    /// «Другое» — не больше трёх: длинный список задач — не совет.
+    static let maxAlternatives = 3
 
     let engine: PriorityEngine
     let renderer: any TextRenderer
@@ -35,24 +31,66 @@ nonisolated struct NextActionUseCase: Sendable {
         self.renderer = renderer
     }
 
+    /// Обязательство, которым начатое действие занимает время в плане.
+    static func commitmentID(for taskID: UUID) -> String {
+        "action-\(taskID.uuidString)"
+    }
+
     /// `tasks` — свежие: после утреннего снимка человек мог что-то закрыть.
-    func run(record: DayRecord, tasks: [LineaTask], calibration: Calibration, time: TimeContext) -> NextAction? {
+    /// `preferred` — задача, которую человек выбрал в «Другое».
+    func run(
+        record: DayRecord,
+        tasks: [LineaTask],
+        calibration: Calibration,
+        time: TimeContext,
+        preferred: UUID? = nil
+    ) -> NextAction? {
         guard var snapshot = record.snapshot, let state = record.state,
               time.isSameDay(snapshot.day, time.now) else { return nil }
         snapshot.tasks = tasks
+        let active = record.activeAction(tasks: tasks, at: time.now)
+        // План держит время начатого действия занятым. Для «Другое» считаем
+        // без него: что ещё можно сделать вместо.
+        if let active {
+            snapshot.commitments.removeAll { $0.id == Self.commitmentID(for: active.start.taskID) }
+        }
         let context = PriorityContext(snapshot: snapshot, state: state, calibration: calibration,
                                       config: engine.config, time: time)
         let window = context.window(at: time.now)
+        let titles = Dictionary(tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+        let minimum = engine.config.minimumActionScore
+        let ranked = window.isBusy ? [] : engine.rankNow(context: context)
+        let actionable = ranked.filter { $0.action >= minimum }
+
+        // Человек уже взялся за действие — оно и есть «сейчас».
+        if let active, let title = titles[active.start.taskID] {
+            let option = NextAction.Option(taskID: active.start.taskID, title: title, minutes: active.start.minutes)
+            let alternatives = actionable.filter { $0.taskID != option.taskID }
+                .prefix(Self.maxAlternatives)
+                .compactMap { Self.option($0, titles: titles) }
+            let facts: [Fact] = [
+                .nowAction(taskID: option.taskID, title: title),
+                .actionStarted(at: active.at, minutes: active.start.minutes),
+            ]
+            let explanation = render(facts, snapshot: snapshot, time: time)
+            return NextAction(
+                option: option, alternatives: Array(alternatives), laterTaskID: nil, startedAt: active.at,
+                headline: explanation.headline, reason: explanation.body, facts: facts
+            )
+        }
+
         // Идёт встреча или рабочий день кончился — советовать нечего.
         guard !window.isBusy else { return nil }
 
-        let ranked = engine.rankNow(context: context)
-        let minimum = engine.config.minimumActionScore
         // Принятый план — договорённость: если его блок идёт сейчас и задача
-        // уместна, «сейчас» — она.
+        // уместна, «сейчас» — она. Выбор человека в «Другое» сильнее плана.
         let plannedNow = plannedTaskID(in: record.plan, at: time.now, tasks: tasks)
-        let best = ranked.first { $0.taskID == plannedNow && $0.action >= minimum }
-            ?? ranked.first { $0.action >= minimum }
+        let best = actionable.first { $0.taskID == preferred }
+            ?? actionable.first { $0.taskID == plannedNow }
+            ?? actionable.first
+        let alternatives = actionable.filter { $0.taskID != best?.taskID }
+            .prefix(Self.maxAlternatives)
+            .compactMap { Self.option($0, titles: titles) }
 
         // Самая важная задача, которую можно было бы начать, будь окно длиннее.
         let waiting = ranked.enumerated()
@@ -70,7 +108,6 @@ nonisolated struct NextActionUseCase: Sendable {
         }
         guard best != nil || later != nil else { return nil }
 
-        let titles = Dictionary(tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
         var facts: [Fact] = []
         if let best, let title = titles[best.taskID] {
             facts.append(.nowAction(taskID: best.taskID, title: title))
@@ -78,29 +115,39 @@ nonisolated struct NextActionUseCase: Sendable {
         if let later, let title = titles[later.taskID] {
             facts.append(.laterAction(taskID: later.taskID, title: title, minutesNeeded: later.minutesNeeded))
         }
-        // Окно упоминается, когда оно и есть причина: важное не влезает,
-        // ничего не влезает или до следующего дела меньше двух часов.
+        // Окно упоминается, когда оно и есть причина: важное или ничего не
+        // помещается, либо до следующего дела не больше двух часов.
         if later != nil || best == nil || window.minutes <= Self.windowWorthMentioningMinutes {
-            if let until = window.until {
-                facts.append(.nextCommitment(title: until.title, at: until.start, minutesLeft: window.minutes))
-            } else {
-                facts.append(.endOfWorkday(minutesLeft: window.minutes))
-            }
+            facts.append(.windowUntil(kind: window.until?.kind, title: window.until?.title, minutesLeft: window.minutes))
         }
 
-        let explanation = renderer.render(ExplanationRequest(
+        let explanation = render(facts, snapshot: snapshot, time: time)
+        return NextAction(
+            option: best.flatMap { Self.option($0, titles: titles) },
+            alternatives: Array(alternatives),
+            laterTaskID: later?.taskID,
+            startedAt: nil,
+            headline: explanation.headline,
+            reason: explanation.body,
+            facts: facts
+        )
+    }
+
+    private func render(_ facts: [Fact], snapshot: ContextSnapshot, time: TimeContext) -> Explanation {
+        renderer.render(ExplanationRequest(
             moment: .now,
             facts: facts,
-            taskTitles: [best?.taskID, later?.taskID].compactMap { $0.flatMap { titles[$0] } },
             localeIdentifier: time.locale.identifier,
             hour: time.timeOfDay(of: time.now).hour,
             userName: snapshot.profile.name,
             timeZoneIdentifier: time.timeZone.identifier
         ))
-        return NextAction(
-            taskID: best?.taskID, laterTaskID: later?.taskID,
-            headline: explanation.headline, body: explanation.body, facts: facts
-        )
+    }
+
+    private static func option(_ assessment: PriorityAssessment, titles: [UUID: String]) -> NextAction.Option? {
+        titles[assessment.taskID].map {
+            NextAction.Option(taskID: assessment.taskID, title: $0, minutes: assessment.minutesNeeded)
+        }
     }
 
     /// Задача, которую сейчас нельзя начать не из-за окна: ждёт другую, у неё
@@ -119,5 +166,25 @@ nonisolated struct NextActionUseCase: Sendable {
             block.kind == .focus && block.start <= moment && moment < block.end
                 && (block.taskID.map { open.contains($0) } ?? false)
         }?.taskID
+    }
+}
+
+/// «Начать» на «Сейчас»: в день пишется, что человек взялся за действие.
+/// Задача не меняется — у действия своя жизнь.
+nonisolated struct StartActionUseCase: Sendable {
+    init() {}
+
+    func run(record: DayRecord, option: NextAction.Option, wasAlternative: Bool, time: TimeContext) -> DayRecord {
+        var record = record
+        record.feedback.append(
+            UserFeedback(
+                at: time.now,
+                kind: .actionStarted(ActionStart(taskID: option.taskID, minutes: option.minutes, wasAlternative: wasAlternative)),
+                energy: record.state?.energy, energyConfidence: record.state?.confidence,
+                loadAdvice: record.state?.loadAdvice, planID: record.plan?.id
+            )
+        )
+        record.updatedAt = time.now
+        return record
     }
 }
