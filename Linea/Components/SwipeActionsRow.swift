@@ -48,7 +48,7 @@ struct SwipeActionsRow<Content: View>: View {
     /// Дотянул до порога — отпущенный палец выполняет действие.
     static var threshold: CGFloat { 76 }
     /// Дальше строка идёт туже.
-    private static let resistanceStart: CGFloat = 116
+    private static var resistanceStart: CGFloat { 116 }
 
     var body: some View {
         content()
