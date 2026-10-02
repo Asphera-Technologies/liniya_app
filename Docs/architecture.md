@@ -15,7 +15,8 @@ Linea/
 ├── App/          LineaApp (composition root), AppState, RootView
 ├── Core/         Foundation-only. Domain models, protocols, use cases, engines, connector logic
 │   ├── Domain/{Models,Protocols,UseCases}
-│   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,FeedbackEngine,LLM,CheckIn,Memory,TaskCapture}
+│   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,Priority,FeedbackEngine,LLM,CheckIn,
+│   │                 Memory,TaskCapture,Classification}
 │   └── Connectors/   Foundation-only parts of connectors (Nutrition, Calendar)
 ├── Data/         Apple frameworks allowed: SwiftData entities and Local* repositories,
 │                 HealthKit reader, EventKit provider, LLM client (chat), on-device speech (GigaAM, Apple)
@@ -80,7 +81,10 @@ ContextEngine  → ContextSnapshot (signals + tasks + goals + commitments + prof
         ↓
 StateEngine    → UserState (sleep, recovery, energy, loadAdvice, facts)
         ↓
+PriorityEngine → importance + action per task (§16): what matters, what fits now
+        ↓
 DecisionEngine → DayPlan (time blocks, top-3, recommendations) + NudgeEngine → Nudges
+               + NextActionUseCase → «Сейчас» on Today
         ↓
 Explainer      → Russian text (rule-based always; on-device LLM optional, validated)
         ↓

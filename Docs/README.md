@@ -14,24 +14,27 @@
    распознаёт речь, что взяли у OpenClaw, сколько это стоит в токенах.
 7. [testing-round-2.md](testing-round-2.md) — как проверить итог дня и память
    на телефоне.
-8. [secrets.md](secrets.md) — где хранить ключ доступа к модели и почему
+8. [testing-round-3.md](testing-round-3.md) — как проверить быструю задачу,
+   чипы, тип задачи и «Сейчас» на телефоне.
+9. [secrets.md](secrets.md) — где хранить ключ доступа к модели и почему
    ключ внутри приложения не секрет.
-9. [architecture.md](architecture.md) — текущая архитектура приложения и слои.
-10. [intelligence.md](intelligence.md) — спецификация Intelligence-ядра:
+10. [architecture.md](architecture.md) — текущая архитектура приложения и слои.
+11. [intelligence.md](intelligence.md) — спецификация Intelligence-ядра:
    модель данных, протоколы, формулы State/Decision/Feedback Engine,
-   объяснения, рецепт коннектора, тесты.
-11. [vkusvill.md](vkusvill.md) — интеграция с каталогом ВкусВилла: что
+   объяснения, рецепт коннектора, быстрый ввод, тип задачи, движок
+   приоритизации, тесты.
+12. [vkusvill.md](vkusvill.md) — интеграция с каталогом ВкусВилла: что
    получилось, чего в их API нет и почему.
-12. [connectors.md](connectors.md) — как подключить новый источник данных
+13. [connectors.md](connectors.md) — как подключить новый источник данных
    (календарь, питание, локация) не трогая ядро.
-13. [decisions.md](decisions.md) — журнал архитектурных решений (ADR) с
+14. [decisions.md](decisions.md) — журнал архитектурных решений (ADR) с
    обоснованиями.
-14. [open-questions.md](open-questions.md) — вопросы заказчику и дефолты, по
+15. [open-questions.md](open-questions.md) — вопросы заказчику и дефолты, по
    которым идёт работа.
-15. [roadmap.md](roadmap.md) — этапы, статусы, чек-лист проверки на Mac,
+16. [roadmap.md](roadmap.md) — этапы, статусы, чек-лист проверки на Mac,
    журнал работ.
-16. [glossary.md](glossary.md) — термины и соответствующие типы.
-17. [development.md](development.md) — процесс команды (ветки, PR).
+17. [glossary.md](glossary.md) — термины и соответствующие типы.
+18. [development.md](development.md) — процесс команды (ветки, PR).
 
 Как запустить тесты ядра без Xcode: `Scripts/test-core.sh` (нужен Docker).
 Линтер границ ядра: `Scripts/check-layers.sh`.
