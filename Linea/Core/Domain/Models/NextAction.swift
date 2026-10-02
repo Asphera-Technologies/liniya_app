@@ -51,7 +51,7 @@ nonisolated struct ActionStart: Codable, Hashable, Sendable {
     let wasAlternative: Bool
 }
 
-extension DayRecord {
+nonisolated extension DayRecord {
     /// Начатое действие, которое ещё идёт: задача не закрыта, и с начала
     /// прошло не больше полутора отведённых длительностей (и хотя бы 15 минут
     /// сверх отведённого). Новое «Начать» сменяет прежнее.
