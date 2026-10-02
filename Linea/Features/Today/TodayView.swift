@@ -21,6 +21,8 @@ struct TodayView: View {
     @Environment(AppState.self) private var appState
     @Environment(PlanStore.self) private var plan
     @Environment(IntelligenceStore.self) private var intelligence
+    /// «Другое» у «Сейчас» раскрыто.
+    @State private var showsAlternatives = false
 
     var body: some View {
         NavigationStack {
@@ -111,42 +113,93 @@ struct TodayView: View {
 
     // MARK: Now
 
-    /// «Сейчас»: главное сегодня важно вообще, а это — уместно прямо сейчас.
-    /// Как и «Главное сегодня» — название задачи, под ним пояснение из ядра
-    /// (`NextActionUseCase`). Ничего не помещается — фраза ядра вместо названия.
+    /// «Сейчас»: одно действие — что, сколько и почему, [Начать] [Другое].
+    /// «Другое» раскрывает два-три варианта, а не весь список задач. Начатое —
+    /// «в работе» с [Готово]. Текст причины готов в ядре (`NextActionUseCase`).
     @ViewBuilder
     private var nowSection: some View {
-        if let action = intelligence.nextAction, !repeatsMainTask(action) {
-            VStack(alignment: .leading, spacing: 8) {
-                SectionLabel(text: "Сейчас")
-                Text(nowTitle(action))
-                    .font(LineaFont.feature)
-                    .foregroundStyle(LineaColor.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if !action.body.isEmpty {
-                    Text(action.body)
-                        .font(LineaFont.caption)
+        if let action = intelligence.nextAction {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Сейчас", trailing: action.isStarted ? "в работе" : nil)
+                if let option = action.option {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(option.title)
+                            .font(LineaFont.feature)
+                            .foregroundStyle(LineaColor.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(QuickTaskText.duration(minutes: option.minutes))
+                            .font(LineaFont.caption)
+                            .foregroundStyle(LineaColor.textTertiary)
+                    }
+                } else {
+                    Text(action.headline)
+                        .font(LineaFont.feature)
+                        .foregroundStyle(LineaColor.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !action.reason.isEmpty {
+                    Text(action.reason)
+                        .font(LineaFont.rowTitle)
                         .foregroundStyle(LineaColor.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if action.option != nil {
+                    HStack(spacing: 12) {
+                        if action.isStarted {
+                            LineaOutlineButton(title: "Готово") {
+                                Task { await intelligence.finishAction() }
+                            }
+                        } else {
+                            LineaOutlineButton(title: "Начать") {
+                                Task { await intelligence.startAction() }
+                            }
+                        }
+                        if !action.alternatives.isEmpty {
+                            LineaOutlineButton(title: showsAlternatives ? "Скрыть" : "Другое") {
+                                withAnimation(.snappy) { showsAlternatives.toggle() }
+                            }
+                        }
+                    }
+                }
+                if showsAlternatives, !action.alternatives.isEmpty {
+                    alternativesList(action.alternatives)
+                }
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("today.now")
         }
     }
 
-    private func nowTitle(_ action: NextAction) -> String {
-        guard let taskID = action.taskID, let task = plan.tasks.first(where: { $0.id == taskID }) else {
-            return action.headline
+    /// «Можно ещё:» — два-три варианта; тап делает вариант действием «сейчас».
+    private func alternativesList(_ options: [NextAction.Option]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Можно ещё:")
+                .font(LineaFont.caption)
+                .foregroundStyle(LineaColor.textSecondary)
+                .padding(.bottom, 2)
+            ForEach(options) { option in
+                Button {
+                    withAnimation(.snappy) { showsAlternatives = false }
+                    intelligence.chooseAlternative(option)
+                } label: {
+                    HStack(spacing: 12) {
+                        Text(option.title)
+                            .font(LineaFont.rowTitle)
+                            .foregroundStyle(LineaColor.textPrimary)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 8)
+                        Text(QuickTaskText.duration(minutes: option.minutes))
+                            .font(LineaFont.caption)
+                            .foregroundStyle(LineaColor.textTertiary)
+                    }
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(option.title), \(QuickTaskText.duration(minutes: option.minutes))")
+                if option.id != options.last?.id { LineaHairline() }
+            }
         }
-        return task.title
-    }
-
-    /// «Сейчас» совпадает с «Главное сегодня» и пояснять нечего — второй раз
-    /// то же название не нужно.
-    private func repeatsMainTask(_ action: NextAction) -> Bool {
-        guard let taskID = action.taskID, action.body.isEmpty else { return false }
-        return (intelligence.topTask ?? plan.topTaskToday)?.id == taskID
     }
 
     // MARK: Timeline

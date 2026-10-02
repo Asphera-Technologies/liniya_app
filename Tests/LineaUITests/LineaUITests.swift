@@ -230,13 +230,58 @@ final class LineaUITests: XCTestCase {
         addTask(app, "Ответить на письма 15 минут")
 
         openTab(app, "Сегодня", index: 0)
-        let now = app.descendants(matching: .any).matching(identifier: "today.now").firstMatch
+        let now = nowCard(app)
         XCTAssertTrue(now.waitForExistence(timeout: 15), "На «Сегодня» есть «Сейчас»")
-        XCTAssertTrue(now.label.contains("Ответить на письма"), "До встречи 25 минут — сейчас короткое дело: \(now.label)")
-        XCTAssertTrue(now.label.contains("«Подготовить стратегию» нужно 1 ч 30 мин — её лучше после"), now.label)
-        XCTAssertTrue(now.label.contains("До «Встреча с клиентом»"), now.label)
+        XCTAssertTrue(now.staticTexts["Ответить на письма"].exists, "До встречи 25 минут — сейчас короткое дело")
+        let reason = now.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "лучше после встречи")).firstMatch
+        XCTAssertTrue(reason.exists, "Стратегия — после встречи")
+        XCTAssertTrue(reason.label.hasPrefix("До встречи осталось"), reason.label)
+        XCTAssertTrue(reason.label.contains("«Подготовить стратегию» лучше после встречи: на неё нужно 1 ч 30 мин"), reason.label)
+        XCTAssertTrue(now.buttons["Начать"].exists)
         scrollTo(now, in: app)
         snapshot(app, "21 Сейчас: короткое дело до встречи")
+    }
+
+    // MARK: - 7. Одно действие: «Начать», «Другое», «Готово»
+
+    @MainActor
+    func test7NowStartOtherDone() throws {
+        let app = launch()
+        addTask(app, "Ответить клиенту сегодня 15 минут, важно")
+        addTask(app, "Проверить сборку сегодня 15 минут")
+        addTask(app, "Разобрать письмо сегодня 10 минут")
+        addTask(app, "Оплатить интернет сегодня 10 минут")
+
+        openTab(app, "Сегодня", index: 0)
+        let now = nowCard(app)
+        XCTAssertTrue(now.waitForExistence(timeout: 15))
+        XCTAssertTrue(now.staticTexts["Ответить клиенту"].waitForExistence(timeout: 5), "Важное и короткое — первым")
+        XCTAssertTrue(now.staticTexts["~15 мин"].exists)
+        scrollTo(now, in: app)
+        snapshot(app, "24 Сейчас: одно действие")
+
+        now.buttons["Другое"].tap()
+        XCTAssertTrue(now.staticTexts["Можно ещё:"].waitForExistence(timeout: 5))
+        let options = now.buttons.matching(NSPredicate(format: "label CONTAINS %@", "мин"))
+        XCTAssertLessThanOrEqual(options.count, 3, "Не больше трёх вариантов")
+        XCTAssertGreaterThanOrEqual(options.count, 2)
+        scrollTo(options.element(boundBy: options.count - 1), in: app)
+        snapshot(app, "25 Другое: два-три варианта")
+        let chosen = now.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Проверить сборку")).firstMatch
+        XCTAssertTrue(chosen.exists)
+        chosen.tap()
+        XCTAssertTrue(now.staticTexts["Проверить сборку"].waitForExistence(timeout: 5), "Выбранное стало «сейчас»")
+
+        now.buttons["Начать"].tap()
+        XCTAssertTrue(now.buttons["Готово"].waitForExistence(timeout: 10), "Начатое — «в работе» с «Готово»")
+        XCTAssertTrue(now.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Начато в")).firstMatch.exists)
+        scrollTo(now, in: app)
+        snapshot(app, "26 В работе")
+
+        now.buttons["Готово"].tap()
+        XCTAssertTrue(now.buttons["Начать"].waitForExistence(timeout: 10), "После «Готово» — следующее действие")
+        XCTAssertFalse(now.staticTexts["Проверить сборку"].exists)
+        snapshot(app, "27 Следующее действие")
     }
 
     // MARK: - 6. Длительность по типу задачи
@@ -373,6 +418,11 @@ final class LineaUITests: XCTestCase {
     }
 
     // MARK: - Поиск
+
+    @MainActor
+    private func nowCard(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "today.now").firstMatch
+    }
 
     @MainActor
     private func chip(_ app: XCUIApplication, _ prefix: String) -> XCUIElement {

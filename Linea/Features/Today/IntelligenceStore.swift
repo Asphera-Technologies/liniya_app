@@ -41,6 +41,8 @@ final class IntelligenceStore {
     private(set) var errorMessage: String?
     /// «Сейчас»: что разумнее всего делать в эту минуту — с готовым текстом.
     private(set) var nextAction: NextAction?
+    /// Что человек выбрал в «Другое» — пока задача открыта.
+    private var preferredTaskID: UUID?
 
     // MARK: Dependencies
 
@@ -423,7 +425,43 @@ final class IntelligenceStore {
             nextAction = nil
             return
         }
-        nextAction = nextActionUseCase.run(record: record, tasks: planStore.tasks, calibration: calibration, time: time)
+        if let preferred = preferredTaskID, planStore.tasks.first(where: { $0.id == preferred })?.isDone ?? true {
+            preferredTaskID = nil
+        }
+        nextAction = nextActionUseCase.run(
+            record: record, tasks: planStore.tasks, calibration: calibration, time: time, preferred: preferredTaskID
+        )
+    }
+
+    /// «Другое» → выбранная задача становится «сейчас».
+    func chooseAlternative(_ option: NextAction.Option) {
+        preferredTaskID = option.taskID
+        updateNextAction(time: time)
+    }
+
+    /// «Начать»: действие пишется в день, задача не меняется. План
+    /// пересобирается и держит время действия занятым.
+    func startAction() async {
+        guard let record, let action = nextAction, let option = action.option, !action.isStarted else { return }
+        let time = self.time
+        let updated = StartActionUseCase().run(
+            record: record, option: option, wasAlternative: option.taskID == preferredTaskID, time: time
+        )
+        apply(updated)
+        do {
+            try await records.save(updated)
+        } catch {
+            LineaLog.plan.error("Начатое действие не записалось: \(error.localizedDescription, privacy: .public)")
+        }
+        LineaLog.plan.notice("Действие начато: \(option.minutes, privacy: .public) мин, из «Другое»: \(option.taskID == self.preferredTaskID, privacy: .public)")
+        await refresh(reason: .inputsChanged)
+    }
+
+    /// «Готово» на начатом действии — задача закрыта, «сейчас» — следующее.
+    func finishAction() async {
+        guard let taskID = nextAction?.taskID, let task = planStore.tasks.first(where: { $0.id == taskID }) else { return }
+        preferredTaskID = nil
+        await planStore.toggleTask(task)
     }
 
     /// A notification action came back while the app was closed.
