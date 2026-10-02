@@ -75,7 +75,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
     var title: String
     var notes: String?
-    /// The day the task is assigned to. `nil` means "Без дня".
+    /// The day the task is assigned to. `nil` — без дня; без дня и срока —
+    /// «Без даты» (входящие, `InboxReview`).
     var date: Date?
     var priority: TaskPriority
     var isDone: Bool
@@ -97,6 +98,9 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     /// «Сначала нужно»: задачи, без которых эту не начать. Пока они открыты,
     /// план не поставит эту задачу раньше них.
     var blockedBy: [UUID]
+    /// Когда человек разобрал задачу из «Без даты» и оставил её там: Linea
+    /// больше не предлагает разобрать её снова (`InboxReview`).
+    var inboxReviewedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -114,7 +118,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         completedAt: Date? = nil,
         kindOverride: TaskKind? = nil,
         deferralCount: Int = 0,
-        blockedBy: [UUID] = []
+        blockedBy: [UUID] = [],
+        inboxReviewedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -132,6 +137,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         self.kindOverride = kindOverride
         self.deferralCount = max(0, deferralCount)
         self.blockedBy = blockedBy
+        self.inboxReviewedAt = inboxReviewedAt
     }
 
     /// Мягкое чтение: задачи лежат и в документах дня (`DayRecord`), и
@@ -155,6 +161,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         kindOverride = try container.decodeIfPresent(TaskKind.self, forKey: .kindOverride)
         deferralCount = try container.decodeIfPresent(Int.self, forKey: .deferralCount) ?? 0
         blockedBy = try container.decodeIfPresent([UUID].self, forKey: .blockedBy) ?? []
+        inboxReviewedAt = try container.decodeIfPresent(Date.self, forKey: .inboxReviewedAt)
     }
 
     // Duration without the user's estimate depends on what the task is —

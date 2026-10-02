@@ -16,13 +16,16 @@ struct QuickTaskDraftTests {
         draft.resolve(goals: goals, profile: WowFixture.profile, time: time ?? self.time, linker: linker)
     }
 
-    @Test("Одно название — задача на сегодня, средний приоритет, остальное Linea решит сама")
+    @Test("Одно название — задача «Без даты»: «Когда?» Linea не спрашивает, приоритет средний")
     func titleOnly() {
         let result = resolve(QuickTaskDraft(text: "Оплатить интернет"))
         #expect(result.canSave)
         #expect(result.title == "Оплатить интернет")
-        #expect(result.date == WowFixture.today)
+        #expect(result.date == nil)
+        #expect(result.deadline == nil)
+        #expect(result.day == .someday)
         #expect(result.dayOrigin == .assumed)
+        #expect(QuickTaskText.day(result, time: time) == "Без даты")
         #expect(result.priority == .normal)
         #expect(result.priorityOrigin == .assumed)
         #expect(result.minutes == nil)
@@ -32,7 +35,9 @@ struct QuickTaskDraftTests {
         let task = result.task(id: WowFixture.taskA, createdAt: time.now)
         #expect(task.id == WowFixture.taskA)
         #expect(task.title == "Оплатить интернет")
-        #expect(task.date == WowFixture.today)
+        #expect(task.date == nil)
+        #expect(task.deadline == nil)
+        #expect(InboxReview.isInInbox(task))
         #expect(task.estimatedMinutes == nil)
         #expect(task.isDone == false)
     }
@@ -158,7 +163,8 @@ struct QuickTaskDraftTests {
         func label(_ text: String, day: TaskDay? = nil) -> String {
             QuickTaskText.day(resolve(QuickTaskDraft(text: text, day: day)), time: time)
         }
-        #expect(label("Отчёт") == "Сегодня")
+        #expect(label("Отчёт") == "Без даты")
+        #expect(label("Отчёт", day: .today) == "Сегодня")
         #expect(label("Отчёт завтра в 15:00") == "Завтра, 15:00")
         #expect(label("Отчёт в пятницу") == "Пт, 11 сен")
         #expect(label("Отчёт до 18:00") == "до 18:00")

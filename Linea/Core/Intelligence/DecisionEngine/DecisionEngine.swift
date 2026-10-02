@@ -144,16 +144,37 @@ nonisolated struct DecisionEngine: Sendable {
             from: from, context: priorityContext, planID: planID
         )
 
+        // «Без даты» (§18): все задачи дня встали, а время осталось — Linea сама
+        // ставит туда пару задач из входящих, в пределах той же нагрузки. Если
+        // задачи дня переносятся из-за нагрузки или окон, входящие ждут. Не
+        // поместились — не перенос: дня у них не было.
+        let dayIsFull = placement.deferred.contains { $0.reason != DeferReason.blocked }
+        let picks = dayIsFull ? [] : priority.inboxPicks(context: priorityContext).filter { !preservedTaskIDs.contains($0.id) }
+        let inboxBlocks = picks.isEmpty ? [] : place(
+            candidates: picks, excluding: Set(commitments.compactMap(\.taskID)),
+            windows: Self.gaps(in: windows, around: placement.blocks, bufferMinutes: config.blockBufferMinutes),
+            preserved: preserved + placement.blocks, commitments: commitments,
+            from: from, context: priorityContext, planID: planID,
+            budget: (used: placement.usedMinutes, cap: placement.capMinutes)
+        ).blocks
+
         var blocks = preserved
         blocks += commitmentBlocks(commitments, context: priorityContext, planID: planID, from: from,
                                    taskByID: taskByID, skipping: preservedIDs)
         blocks += placement.blocks
+        blocks += inboxBlocks
         blocks.sort(by: Self.chronological)
 
         // Top actions: the most important tasks that actually made it into the
         // day, fixed ones included — «3 приоритетных действия» is a ranking of
-        // what will happen, not of what was requested.
-        let ranking = rank(blocks: blocks, taskByID: taskByID, context: priorityContext)
+        // what will happen, not of what was requested. Tasks from «Без даты»
+        // only fill leftover time, so they are never the day's priorities.
+        let activeGoalIDs = Set(snapshot.goals.filter { $0.isActive && !$0.isCompleted }.map(\.id))
+        let rankable = blocks.filter { block in
+            guard let task = block.taskID.flatMap({ taskByID[$0] }) else { return true }
+            return !Self.isInboxFiller(task, activeGoalIDs: activeGoalIDs)
+        }
+        let ranking = rank(blocks: rankable, taskByID: taskByID, context: priorityContext)
         let topTaskIDs = Array(ranking.prefix(config.maxTopTasks).map(\.taskID))
         let topSet = Set(topTaskIDs)
         let scoreByTask = Dictionary(ranking.map { ($0.taskID, $0.score) }, uniquingKeysWith: { a, _ in a })
@@ -228,8 +249,13 @@ nonisolated struct DecisionEngine: Sendable {
     private struct Placement {
         let blocks: [PlanBlock]
         let deferred: [Deferred]
+        /// Сколько минут дня заняли задачи и сколько разрешала нагрузка.
+        let usedMinutes: Int
+        let capMinutes: Int
     }
 
+    /// `budget` — нагрузка, уже набранная прошлым проходом: второй проход
+    /// (задачи «Без даты») досыпает в тот же предел, а не в новый.
     private func place(
         candidates: [LineaTask],
         excluding excluded: Set<UUID>,
@@ -238,7 +264,8 @@ nonisolated struct DecisionEngine: Sendable {
         commitments: [Commitment],
         from: Date,
         context: PriorityContext,
-        planID: UUID
+        planID: UUID,
+        budget: (used: Int, cap: Int)? = nil
     ) -> Placement {
         let snapshot = context.snapshot
         let state = context.state
@@ -246,10 +273,11 @@ nonisolated struct DecisionEngine: Sendable {
         let time = context.time
         var remaining = candidates.filter { !$0.isFixed && !excluded.contains($0.id) }
         let availableMinutes = windows.reduce(0.0) { $0 + $1.duration / 60 }
-        let capMinutes = Int((availableMinutes * capacityFactorDay(state: state, calibration: calibration)).rounded(.down))
+        let capMinutes = budget?.cap
+            ?? Int((availableMinutes * capacityFactorDay(state: state, calibration: calibration)).rounded(.down))
 
         var blocks: [PlanBlock] = []
-        var usedMinutes = 0
+        var usedMinutes = budget?.used ?? 0
         var capBlocked = Set<UUID>()
         var lastDeepEnd = preserved
             .filter { $0.kind == .focus && isDeep($0.taskID, in: snapshot) }
@@ -323,7 +351,33 @@ nonisolated struct DecisionEngine: Sendable {
             }
             return Deferred(task: task, reason: reason)
         }
-        return Placement(blocks: blocks, deferred: deferred)
+        return Placement(blocks: blocks, deferred: deferred, usedMinutes: usedMinutes, capMinutes: capMinutes)
+    }
+
+    /// A task the plan only takes into leftover time: no day, no deadline, no
+    /// time of its own and no active goal — it is never a day candidate.
+    static func isInboxFiller(_ task: LineaTask, activeGoalIDs: Set<UUID>) -> Bool {
+        task.date == nil && task.deadline == nil && task.scheduledStart == nil
+            && !(task.goalID.map(activeGoalIDs.contains) ?? false)
+    }
+
+    /// Свободное время окон вокруг уже поставленных блоков — с буфером до и
+    /// после каждого, как между блоками одного прохода.
+    static func gaps(in windows: [DateInterval], around blocks: [PlanBlock], bufferMinutes: Int) -> [DateInterval] {
+        let buffer = TimeInterval(bufferMinutes * 60)
+        let busy = blocks
+            .map { DateInterval(start: $0.start.addingTimeInterval(-buffer), end: $0.end.addingTimeInterval(buffer)) }
+            .sorted { $0.start < $1.start }
+        var result: [DateInterval] = []
+        for window in windows {
+            var cursor = window.start
+            for interval in busy where interval.end > cursor && interval.start < window.end {
+                if interval.start > cursor { result.append(DateInterval(start: cursor, end: interval.start)) }
+                cursor = max(cursor, interval.end)
+            }
+            if cursor < window.end { result.append(DateInterval(start: cursor, end: window.end)) }
+        }
+        return result
     }
 
     /// How much of the free time the day may actually be filled with.

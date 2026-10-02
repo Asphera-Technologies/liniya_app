@@ -55,7 +55,7 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
         goals: [LineaGoal],
         profile: UserProfile,
         time: TimeContext,
-        defaultDay: TaskDay? = .today,
+        defaultDay: TaskDay? = .someday,
         parser: QuickTaskParser = QuickTaskParser(),
         linker: GoalLinker = GoalLinker(),
         classifier: TaskClassifier = TaskClassifier()
@@ -65,8 +65,8 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
         var result = QuickTaskResolution(title: parsed.title.trimmingCharacters(in: .whitespacesAndNewlines))
 
         // Когда. Срок без дня («отчёт к пятнице») — задача без дня: в какой
-        // день за неё взяться, решит план. День по умолчанию — только если
-        // ни дня, ни срока не назвали.
+        // день за неё взяться, решит план. Ни дня, ни срока не назвали —
+        // «Без даты» (входящие, §18): «Когда?» Linea не спрашивает.
         let deadlineGiven: Bool
         switch deadline {
         case .at?: deadlineGiven = true
@@ -251,10 +251,15 @@ nonisolated enum QuickTaskText {
             return "На неделе"
         }
         if let deadline = resolution.deadline {
-            if time.isSameDay(deadline, time.now) { return "до \(RussianText.clock(deadline, time: time))" }
-            return "до " + dayName(deadline, time: time).lowercased()
+            return Self.deadline(deadline, time: time)
         }
         return "Без даты"
+    }
+
+    /// Срок задачи без дня: «до 18:00» сегодня, иначе «до завтра», «до пт, 11 сен».
+    static func deadline(_ deadline: Date, time: TimeContext) -> String {
+        if time.isSameDay(deadline, time.now) { return "до \(RussianText.clock(deadline, time: time))" }
+        return "до " + dayName(deadline, time: time).lowercased()
     }
 
     /// «Сегодня», «Завтра» или «Пт, 3 окт».

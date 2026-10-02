@@ -42,6 +42,8 @@ nonisolated struct PriorityEngine: Sendable {
     static let lowEnergyFit = 0.5
     /// С какого числа переносов вес переносов полный.
     static let deferralsForFullWeight = 3
+    /// Сколько задач из «Без даты» Linea сама ставит в свободное время дня.
+    static let maxInboxPicks = 2
 
     let config: EngineConfig
     private let scorer = TaskScorer()
@@ -280,10 +282,38 @@ nonisolated struct PriorityEngine: Sendable {
         return (picked + extras).sorted(by: DecisionEngine.chronological)
     }
 
-    /// «Что делать сейчас»: кандидаты дня в момент `context.time.now`, впереди —
-    /// важные и уместные сейчас (`focus`); при равенстве — важнее, потом раньше созданные.
+    /// «Без даты» (§18): Linea сама подбирает место паре задач из входящих —
+    /// самым важным, кроме «не срочных» (низкий приоритет). В план они встают
+    /// только в то время, что осталось после задач дня (`DecisionEngine`), и
+    /// не поместились — не перенос: дня у них не было.
+    func inboxPicks(context: PriorityContext) -> [LineaTask] {
+        let time = context.time
+        let activeGoals = Set(context.snapshot.goals.filter { $0.isActive && !$0.isCompleted }.map(\.id))
+        return context.snapshot.tasks
+            .filter { task in
+                // Задачи к активной цели и так среди кандидатов дня.
+                InboxReview.isInInbox(task) && task.priority != .low
+                    && !(task.goalID.map(activeGoals.contains) ?? false)
+            }
+            .map { task in (task: task, importance: importance(of: task, at: time.now, context: context).score) }
+            .sorted { lhs, rhs in
+                if lhs.importance != rhs.importance { return lhs.importance > rhs.importance }
+                return DecisionEngine.chronological(lhs.task, rhs.task)
+            }
+            .prefix(Self.maxInboxPicks)
+            .map(\.task)
+    }
+
+    /// «Что делать сейчас»: кандидаты дня и задачи «Без даты», которым Linea
+    /// подобрала место, в момент `context.time.now`. Впереди — важные и
+    /// уместные сейчас (`focus`); при равенстве — важнее, потом раньше созданные.
+    /// Задача без дня тянет слабее задачи на сегодня (`undatedDay`), поэтому
+    /// встаёт впереди, только когда важнее.
     func rankNow(context: PriorityContext) -> [PriorityAssessment] {
-        candidates(context: context)
+        let candidates = candidates(context: context)
+        let known = Set(candidates.map(\.id))
+        let picks = inboxPicks(context: context).filter { !known.contains($0.id) }
+        return (candidates + picks)
             .map { assess($0, context: context) }
             .enumerated()
             .sorted { lhs, rhs in
