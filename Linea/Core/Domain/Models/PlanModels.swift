@@ -191,6 +191,17 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// цели поднимаются выше. Подписи — «Низкая / Средняя / Высокая».
     var priority: TaskPriority
 
+    // Как Linea поняла цель при создании (`GoalUnderstanding`). У целей,
+    // созданных раньше, — пусто.
+    /// Рассказ человека своими словами, текстом или голосом.
+    var details: String?
+    /// «Сейчас»: с чего начинаем.
+    var currentState: String?
+    /// «Результат»: что будет, когда цель достигнута.
+    var targetState: String?
+    /// Как поймём, что получилось: проверяемые признаки.
+    var successCriteria: [String]
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -200,7 +211,11 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         startDate: Date? = nil,
         endDate: Date? = nil,
         isActive: Bool = true,
-        priority: TaskPriority = .normal
+        priority: TaskPriority = .normal,
+        details: String? = nil,
+        currentState: String? = nil,
+        targetState: String? = nil,
+        successCriteria: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -211,6 +226,10 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         self.endDate = endDate
         self.isActive = isActive
         self.priority = priority
+        self.details = details
+        self.currentState = currentState
+        self.targetState = targetState
+        self.successCriteria = successCriteria
     }
 
     /// Мягкое чтение, как у задачи: цели лежат и в документах дня.
@@ -227,6 +246,10 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         endDate = try container.decodeIfPresent(Date.self, forKey: .endDate)
         isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
         priority = try container.decodeIfPresent(TaskPriority.self, forKey: .priority) ?? .normal
+        details = try container.decodeIfPresent(String.self, forKey: .details)
+        currentState = try container.decodeIfPresent(String.self, forKey: .currentState)
+        targetState = try container.decodeIfPresent(String.self, forKey: .targetState)
+        successCriteria = try container.decodeIfPresent([String].self, forKey: .successCriteria) ?? []
     }
 
     /// «Низкая / Средняя / Высокая» — важность цели в женском роде.
