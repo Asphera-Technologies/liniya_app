@@ -307,7 +307,16 @@ struct NextActionTests {
         #expect(action.taskID == Strategy.strategy)
         #expect(action.laterTaskID == nil)
         #expect(action.headline == "Сейчас — «Подготовить стратегию».")
-        #expect(action.body == "До конца рабочего дня 4 ч 40 мин.")
+        // Четыре с лишним часа впереди — об окне не говорим.
+        #expect(action.body == "")
+    }
+
+    @Test("Окно меньше двух часов — Linea о нём напоминает")
+    func shortRemainderIsMentioned() throws {
+        let time = WowFixture.time(19)
+        let action = try #require(useCase.run(record: Strategy.record(at: time), tasks: Strategy.tasks, calibration: .default, time: time))
+        #expect(action.taskID == Strategy.strategy)
+        #expect(action.body == "До конца рабочего дня 2 ч.")
     }
 
     @Test("Ничего не помещается — короткая пауза, важное — после")

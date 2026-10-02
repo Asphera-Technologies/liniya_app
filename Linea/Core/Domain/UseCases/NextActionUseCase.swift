@@ -24,6 +24,9 @@ nonisolated struct NextAction: Hashable, Sendable {
 }
 
 nonisolated struct NextActionUseCase: Sendable {
+    /// Окно длиннее — о нём не говорим: «до конца дня 12 ч» утром — шум.
+    static let windowWorthMentioningMinutes = 120
+
     let engine: PriorityEngine
     let renderer: any TextRenderer
 
@@ -75,10 +78,14 @@ nonisolated struct NextActionUseCase: Sendable {
         if let later, let title = titles[later.taskID] {
             facts.append(.laterAction(taskID: later.taskID, title: title, minutesNeeded: later.minutesNeeded))
         }
-        if let until = window.until {
-            facts.append(.nextCommitment(title: until.title, at: until.start, minutesLeft: window.minutes))
-        } else {
-            facts.append(.endOfWorkday(minutesLeft: window.minutes))
+        // Окно упоминается, когда оно и есть причина: важное не влезает,
+        // ничего не влезает или до следующего дела меньше двух часов.
+        if later != nil || best == nil || window.minutes <= Self.windowWorthMentioningMinutes {
+            if let until = window.until {
+                facts.append(.nextCommitment(title: until.title, at: until.start, minutesLeft: window.minutes))
+            } else {
+                facts.append(.endOfWorkday(minutesLeft: window.minutes))
+            }
         }
 
         let explanation = renderer.render(ExplanationRequest(

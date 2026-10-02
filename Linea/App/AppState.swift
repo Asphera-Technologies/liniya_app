@@ -22,6 +22,7 @@ final class AppState {
     /// Opens the ambient Linea AI surface, optionally seeded with a prompt.
     func openAI(prompt: String = "") {
         pendingPrompt = prompt
+        isPresentingQuickAdd = false
         isPresentingAI = true
     }
 
@@ -31,6 +32,7 @@ final class AppState {
     /// Opens the evening check-in: tell how the day went by voice or text.
     func openCheckIn() {
         isPresentingAI = false
+        isPresentingQuickAdd = false
         isPresentingCheckIn = true
     }
 
