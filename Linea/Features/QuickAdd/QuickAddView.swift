@@ -152,7 +152,7 @@ struct QuickAddView: View {
     /// Когда, сколько, приоритет — всегда; цель — четвёртым, если цели есть.
     /// Не влезли в ширину — переносятся на вторую строку, а не прячутся за край.
     private func chips(_ resolution: QuickTaskResolution) -> some View {
-        FlowLayout(spacing: 8, lineSpacing: 8) {
+        FlowLayout(spacing: 8) {
             dayChip(resolution)
             durationChip(resolution)
             priorityChip(resolution)

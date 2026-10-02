@@ -3,49 +3,49 @@
 //  Linea
 //
 //  Раскладка в строку с переносом: что не влезло в ширину, уходит на
-//  следующую строку. Для чипов под строкой ввода — на узком экране или с
-//  длинным названием цели четвёртый чип не прячется за край.
+//  следующую строку. Чипы питания и чипы под строкой быстрой задачи — на
+//  узком экране или с длинным названием цели чип не прячется за край.
 //
 
 import SwiftUI
 
+/// Minimal wrapping layout — chips of unpredictable width must not overflow.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
-    var lineSpacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
-        var x: CGFloat = 0
-        var y: CGFloat = 0
+        let maxWidth = proposal.width ?? .infinity
+        var origin = CGPoint.zero
         var lineHeight: CGFloat = 0
-        var widest: CGFloat = 0
+        var totalHeight: CGFloat = 0
+
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > width {
-                x = 0
-                y += lineHeight + lineSpacing
+            if origin.x + size.width > maxWidth, origin.x > 0 {
+                origin.x = 0
+                origin.y += lineHeight + spacing
                 lineHeight = 0
             }
-            widest = max(widest, x + size.width)
-            x += size.width + spacing
+            origin.x += size.width + spacing
             lineHeight = max(lineHeight, size.height)
+            totalHeight = origin.y + lineHeight
         }
-        return CGSize(width: proposal.width ?? widest, height: y + lineHeight)
+        return CGSize(width: proposal.width ?? origin.x, height: totalHeight)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
+        var origin = CGPoint(x: bounds.minX, y: bounds.minY)
         var lineHeight: CGFloat = 0
+
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += lineHeight + lineSpacing
+            if origin.x + size.width > bounds.maxX, origin.x > bounds.minX {
+                origin.x = bounds.minX
+                origin.y += lineHeight + spacing
                 lineHeight = 0
             }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
+            subview.place(at: origin, proposal: ProposedViewSize(size))
+            origin.x += size.width + spacing
             lineHeight = max(lineHeight, size.height)
         }
     }
