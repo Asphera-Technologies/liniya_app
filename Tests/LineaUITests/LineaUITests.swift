@@ -201,10 +201,8 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "18 Карточка: тип и «Сначала нужно»")
 
         addBlocker.tap()
-        // Строка задачи в «Плане» под карточкой подписана так же — пункт меню последний.
-        let options = app.buttons.matching(NSPredicate(format: "label == %@", "Собрать данные"))
-        XCTAssertTrue(options.firstMatch.waitForExistence(timeout: 5))
-        options.element(boundBy: options.count - 1).tap()
+        // Строка задачи в «Плане» под карточкой подписана так же, но нажать на неё нельзя.
+        tapMenuItem(app, "Собрать данные")
         XCTAssertTrue(app.buttons["Убрать «Собрать данные»"].waitForExistence(timeout: 5))
         snapshot(app, "19 Зависимость добавлена")
         app.navigationBars.buttons["Готово"].tap()
@@ -334,6 +332,22 @@ final class LineaUITests: XCTestCase {
         } else {
             app.tabBars.buttons.element(boundBy: index).tap()
         }
+    }
+
+    /// Пункт открывшегося меню. Меню появляется с анимацией, а элемент с той
+    /// же подписью может быть и под ним (строка списка) — ждём нажимаемый.
+    @MainActor
+    private func tapMenuItem(_ app: XCUIApplication, _ label: String) {
+        let matches = app.buttons.matching(NSPredicate(format: "label == %@", label))
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if let item = matches.allElementsBoundByIndex.last(where: { $0.isHittable }) {
+                item.tap()
+                return
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        XCTFail("В меню нет пункта «\(label)»")
     }
 
     @MainActor
