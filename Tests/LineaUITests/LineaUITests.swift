@@ -275,12 +275,12 @@ final class LineaUITests: XCTestCase {
         return offset > 0 ? "Etc/GMT-\(offset)" : "Etc/GMT+\(-offset)"
     }()
 
-    static var zone: TimeZone { TimeZone(identifier: zoneIdentifier)! }
+    static var appTimeZone: TimeZone { TimeZone(identifier: zoneIdentifier)! }
 
     /// «11:35» в поясе приложения через `minutes` минут.
     static func clock(minutesFromNow minutes: Int) -> String {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = zone
+        calendar.timeZone = appTimeZone
         let moment = Date().addingTimeInterval(TimeInterval(minutes * 60))
         let parts = calendar.dateComponents([.hour, .minute], from: moment)
         return String(format: "%d:%02d", parts.hour ?? 0, parts.minute ?? 0)
@@ -290,7 +290,7 @@ final class LineaUITests: XCTestCase {
     static func dayMonth(daysFromNow days: Int) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
-        formatter.timeZone = zone
+        formatter.timeZone = appTimeZone
         formatter.dateFormat = "d MMMM"
         return formatter.string(from: Date().addingTimeInterval(TimeInterval(days * 86_400)))
     }
