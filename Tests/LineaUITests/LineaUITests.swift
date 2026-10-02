@@ -131,6 +131,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertLessThanOrEqual(chips, 4, "Не больше четырёх чипов")
 
         app.buttons["Добавить задачу"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5), "После «Добавить» лист закрывается")
         openTab(app, "План", index: 1)
         XCTAssertTrue(button(app, startingWith: "Отчёт").waitForExistence(timeout: 5))
         snapshot(app, "12 План: задача без дня со сроком")
@@ -166,6 +167,7 @@ final class LineaUITests: XCTestCase {
         link.tap()
         XCTAssertTrue(chip(app, "Цель: Запустить MVP Linea").waitForExistence(timeout: 5), "Связь ставит человек")
         app.buttons["Добавить задачу"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
 
         let explicit = openQuickAdd(app)
         explicit.tap()
@@ -173,6 +175,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(chip(app, "Цель: Запустить MVP Linea").waitForExistence(timeout: 5), "«для цели …» связывает сразу")
         snapshot(app, "16 Цель названа словами")
         app.buttons["Добавить задачу"].tap()
+        XCTAssertTrue(explicit.waitForNonExistence(timeout: 5))
 
         openTab(app, "План", index: 1)
         XCTAssertTrue(button(app, startingWith: "Подготовить релиз").waitForExistence(timeout: 5))
@@ -324,14 +327,19 @@ final class LineaUITests: XCTestCase {
         return view.exists ? view : app.textFields.firstMatch
     }
 
+    /// Вкладка внизу. Нажатие во время закрытия листа теряется — проверяем,
+    /// что вкладка выбрана, и при необходимости нажимаем ещё раз.
     @MainActor
     private func openTab(_ app: XCUIApplication, _ name: String, index: Int) {
         let named = app.tabBars.buttons[name]
-        if named.waitForExistence(timeout: 3) {
-            named.tap()
-        } else {
-            app.tabBars.buttons.element(boundBy: index).tap()
+        let tab = named.waitForExistence(timeout: 3) ? named : app.tabBars.buttons.element(boundBy: index)
+        for _ in 0..<3 {
+            tab.tap()
+            let selected = NSPredicate(format: "isSelected == true")
+            let expectation = XCTNSPredicateExpectation(predicate: selected, object: tab)
+            if XCTWaiter().wait(for: [expectation], timeout: 2) == .completed { return }
         }
+        XCTFail("Вкладка «\(name)» не открылась")
     }
 
     /// Пункт открывшегося меню. Меню появляется с анимацией, а элемент с той
