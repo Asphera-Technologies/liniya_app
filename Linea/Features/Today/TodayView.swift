@@ -137,6 +137,7 @@ struct TodayView: View {
                             .font(LineaFont.feature)
                             .foregroundStyle(LineaColor.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
+                            .id(option.title)
                         Text(QuickTaskText.duration(minutes: option.minutes))
                             .font(LineaFont.caption)
                             .foregroundStyle(LineaColor.textTertiary)
@@ -147,15 +148,19 @@ struct TodayView: View {
                         .foregroundStyle(LineaColor.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel(action.headline)
+                        .id(action.headline)
                 }
                 if !action.reason.isEmpty {
-                    // Неразрывные пробелы: иначе «а» в конце строки сбивает
-                    // подсчёт высоты, и причина обрезается многоточием.
+                    // `.id` — новый текст меряется заново. Блок живёт, пока
+                    // «Сейчас» меняется, и без этого длинная причина
+                    // оставалась в высоте прежней, короткой, и обрезалась
+                    // многоточием.
                     Text(RussianTypography.nonBreaking(action.reason))
                         .font(LineaFont.rowTitle)
                         .foregroundStyle(LineaColor.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel(action.reason)
+                        .id(action.reason)
                 }
                 if action.option != nil {
                     HStack(spacing: 12) {
