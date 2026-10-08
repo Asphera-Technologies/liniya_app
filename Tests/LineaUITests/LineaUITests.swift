@@ -514,6 +514,52 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "45 План после свайпа на «Сегодня»")
     }
 
+    // MARK: - 11. AI-разбор: пример заказчика
+
+    @MainActor
+    func test11UnderstoodTask() throws {
+        let app = launch()
+        let field = openQuickAdd(app)
+        field.tap()
+        field.typeText("Завтра до обеда подготовить КП для клиента, часа на полтора, высокий приоритет.")
+        XCTAssertTrue(chip(app, "Когда: Завтра, до 12:00").waitForExistence(timeout: 5), "«Завтра до обеда» — завтра до 12:00")
+        XCTAssertTrue(chip(app, "Сколько займёт: ~1 ч 30 мин").exists, "«часа на полтора» — 1 ч 30 мин")
+        XCTAssertTrue(chip(app, "Приоритет: Высокий").exists, "«высокий приоритет» — высокий")
+        let title = app.staticTexts["quickAdd.understood.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "Linea показывает, как поняла задачу")
+        XCTAssertEqual(title.label, "Подготовить КП для клиента")
+        XCTAssertEqual(app.staticTexts["quickAdd.understood.summary"].label, "Завтра · до 12:00 · ~1 ч 30 мин · Высокий")
+        snapshot(app, "46 AI-разбор: пример заказчика")
+
+        // Не уверена — пусто: два дня на выбор и «вечером» не становятся датой.
+        field.replaceText("Позвонить маме завтра или послезавтра вечером")
+        XCTAssertTrue(chip(app, "Когда: Без даты").waitForExistence(timeout: 5), "Два дня на выбор — дня нет")
+        XCTAssertFalse(app.staticTexts["quickAdd.understood.title"].exists, "Понимать нечего — подсказки нет")
+        snapshot(app, "47 Не уверена — пусто")
+
+        // На сегодня, чтобы задача была в «Плане» этой недели.
+        field.replaceText("Сегодня до обеда подготовить КП для клиента, часа на полтора, высокий приоритет.")
+        XCTAssertTrue(chip(app, "Когда: Сегодня, до 12:00").waitForExistence(timeout: 5))
+        app.buttons["Добавить задачу"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+
+        openTab(app, "План", index: 1)
+        let row = button(app, startingWith: "Подготовить КП для клиента")
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "Задача в плане под своим названием")
+        XCTAssertTrue(row.label.contains("до 12:00 · ~1 ч 30 мин"), "Под задачей — что задано: \(row.label)")
+        XCTAssertTrue(app.staticTexts["Высокий"].exists, "Сказанный приоритет — у задачи")
+        snapshot(app, "48 План: задача после разбора")
+
+        // Человек меняет приоритет руками — дальше задача остаётся такой.
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForExistence(timeout: 5))
+        app.buttons["Средний"].tap()
+        app.navigationBars.buttons["Готово"].tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Высокий"].waitForNonExistence(timeout: 5), "Приоритет человека сохранился")
+        snapshot(app, "49 План: приоритет поменян руками")
+    }
+
     // MARK: - 6. Длительность по типу задачи
 
     @MainActor
