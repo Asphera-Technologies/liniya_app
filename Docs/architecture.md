@@ -81,11 +81,13 @@ ContextEngine  → ContextSnapshot (signals + tasks + goals + commitments + prof
         ↓
 StateEngine    → UserState (sleep, recovery, energy, loadAdvice, facts)
         ↓
-PriorityEngine → importance + action per task (§16): what matters, what fits now
+PriorityEngine → importance + action per task (§16): what matters, what fits now;
+                 a task without a goal is judged on its own merits, a goal only lifts it
         ↓
 DecisionEngine → DayPlan (time blocks, top-3, recommendations; leftover time — a couple of
                  «Без даты» tasks) + NudgeEngine → Nudges
-               + NextActionUseCase → one NextAction on Today: «Начать» / «Другое» (§17)
+               + NextActionUseCase → one NextAction on Today: «Начать» / «Другое» (§17),
+                 always with one short reason (NowReasoner, §22)
         ↓
 Explainer      → Russian text (rule-based always; on-device LLM optional, validated)
         ↓
@@ -96,14 +98,19 @@ Today / notifications → UserFeedback → FeedbackEngine → Calibration
 
 ```text
 Строка (набрана / надиктована: GigaAM или диктовка клавиатуры)
-        ↓  QuickTaskParser — правила на телефоне
+        ↓  QuickTaskParser — правила на телефоне; «или» — пусто
 QuickTaskParse: название, день, срок, время, длительность, приоритет, цель
+        ↓  grounded(in:) — у каждого значения опора в словах
         ↓  QuickTaskDraft.resolve — чип > сказанное > по умолчанию
-QuickTaskResolution → чипы на экране → «Добавить» → PlanStore.saveTask
+QuickTaskResolution → «как Linea поняла» + чипы + «Похоже, относится к… [Связать]»
+        ↓  «Добавить» — сказанное и выбранное становятся полями человека
+PlanStore.saveTask → TaskOwnership: правку человека Linea не перезаписывает
 ```
 
 A title is the only required field; everything else can be changed later in
-the task card (ADR-023). The «+» next to the command bar and «+ Задача» on
+the task card (ADR-023). Values come only from the words, and what the person
+set Linea never overwrites (ADR-031). The likely goal is found by meaning
+(`ConceptGoalMatcher`) and only suggested (ADR-033). The «+» next to the command bar and «+ Задача» on
 Plan open the same sheet. Nothing said about the day — the task goes to «Без
 даты» (ADR-028, §18): no «Когда?», a place is found by the plan or a one-minute
 review.
