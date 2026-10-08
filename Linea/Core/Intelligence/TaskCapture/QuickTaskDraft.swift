@@ -61,7 +61,7 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
         classifier: TaskClassifier = TaskClassifier()
     ) -> QuickTaskResolution {
         let activeGoals = goals.filter { $0.isActive && !$0.isCompleted }
-        let parsed = parser.parse(text, goals: activeGoals, profile: profile, time: time)
+        let parsed = parser.parse(text, goals: activeGoals, profile: profile, time: time).grounded(in: text)
         var result = QuickTaskResolution(title: parsed.title.trimmingCharacters(in: .whitespacesAndNewlines))
 
         // Когда. Срок без дня («отчёт к пятнице») — задача без дня: в какой
@@ -163,6 +163,7 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
             isFixed: result.scheduledStart != nil, demand: parsed.demand
         ).kind
         result.demand = parsed.demand ?? result.kind.typicalDemand
+        result.demandOrigin = parsed.demand == nil ? .assumed : .typed
 
         result.recognized = parsed.recognized
         return result
@@ -196,6 +197,8 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
     var priority: TaskPriority = .normal
     var priorityOrigin: Origin = .assumed
     var demand: CognitiveDemand = .normal
+    /// «сложная», «быстро» в строке — сказано; иначе обычная для типа.
+    var demandOrigin: Origin = .assumed
     /// Какого типа задача — внутреннее, в интерфейсе не показывается.
     var kind: TaskKind = .standalone
     var goalID: UUID?
@@ -213,6 +216,27 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
     /// Сколько займёт: сказанное или обычное для типа задачи.
     var estimatedMinutes: Int { minutes ?? kind.typicalMinutes }
 
+    /// Linea что-то поняла из слов строки: вырезала служебное или нашла
+    /// параметры. Тогда экран показывает задачу так, как она сохранится.
+    var isUnderstood: Bool { !recognized.isEmpty }
+
+    /// Что задал человек: сказал словами или выбрал в чипе. Сказанное
+    /// («высокий приоритет») — тоже его, а не догадка Linea; «Без даты» и
+    /// «Без цели», выбранные в чипе, — его решение. Значения по умолчанию и
+    /// подсказки — Linea, их она может поменять сама.
+    var userFields: Set<TaskField> {
+        var fields: Set<TaskField> = []
+        // Срок без дня («отчёт к пятнице») — день не назван.
+        if day != nil, dayOrigin != .assumed { fields.insert(.day) }
+        if deadlineOrigin != .assumed { fields.insert(.deadline) }
+        if scheduledStart != nil { fields.insert(.startTime) }
+        if minutesOrigin != .assumed { fields.insert(.duration) }
+        if priorityOrigin != .assumed { fields.insert(.priority) }
+        if goalOrigin != .assumed { fields.insert(.goal) }
+        if demandOrigin != .assumed { fields.insert(.demand) }
+        return fields
+    }
+
     /// Задача, которую сохранит «Добавить».
     func task(id: UUID, createdAt: Date) -> LineaTask {
         LineaTask(
@@ -225,7 +249,8 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
             scheduledStart: scheduledStart,
             estimatedMinutes: minutes,
             cognitiveDemand: demand,
-            goalID: goalID
+            goalID: goalID,
+            userFields: userFields
         )
     }
 }

@@ -264,6 +264,105 @@ struct QuickTaskParserTests {
         #expect(parse("Купить хлеб").demand == nil)
     }
 
+    // MARK: Не уверена — пусто
+
+    @Test("Два значения на выбор — Linea не берёт ни одного, слова остаются в названии")
+    func alternativesStayEmpty() {
+        let days = parse("Отчёт завтра или послезавтра")
+        #expect(days.day == nil)
+        #expect(days.title == "Отчёт завтра или послезавтра")
+        let weekdays = parse("Сходить в банк в пятницу или в субботу")
+        #expect(weekdays.day == nil)
+        #expect(weekdays.title == "Сходить в банк в пятницу или в субботу")
+        let times = parse("Позвонить в 10:00 или в 11:00")
+        #expect(times.startTime == nil)
+        #expect(times.title == "Позвонить в 10:00 или в 11:00")
+        let durations = parse("Созвон 30 минут или час")
+        #expect(durations.minutes == nil)
+        #expect(durations.title == "Созвон 30 минут или час")
+        let deadlines = parse("Сдать отчёт до пятницы или до субботы")
+        #expect(deadlines.deadline == nil)
+        #expect(deadlines.day == nil)
+        #expect(deadlines.title == "Сдать отчёт до пятницы или до субботы")
+        // День на выбор — время и срок без своего дня привязать не к чему.
+        let call = parse("Позвонить завтра или послезавтра в 10")
+        #expect(call.day == nil)
+        #expect(call.startTime == nil)
+        #expect(call.title == "Позвонить завтра или послезавтра в 10")
+        let send = parse("Отправить завтра или послезавтра до 18:00, на час")
+        #expect(send.deadline == nil)
+        #expect(send.minutes == 60)
+        #expect(send.title == "Отправить завтра или послезавтра до 18:00")
+        let mixed = parse("Сдать до 18:00 или завтра")
+        #expect(mixed.deadline == nil)
+        #expect(mixed.day == nil)
+        // «или» между другими словами значению не мешает.
+        let bread = parse("Купить хлеб или булку завтра")
+        #expect(bread.day == .tomorrow)
+        #expect(bread.title == "Купить хлеб или булку")
+        // За «или» нет второго значения — это не выбор.
+        let start = parse("Сделать отчёт завтра, или хотя бы начать")
+        #expect(start.day == .tomorrow)
+        #expect(start.title == "Сделать отчёт или хотя бы начать")
+        #expect(parse("Отчёт завтра или это подождёт").day == .tomorrow)
+        #expect(parse("Отчёт завтра или в эту пятницу").day == nil)
+        let earlier = parse("Отчёт до пятницы или раньше")
+        #expect(earlier.deadline == WowFixture.moment(21, 0, dayOffset: 2))
+        #expect(earlier.title == "Отчёт или раньше")
+    }
+
+    @Test("«Утром», «вечером», «на днях», «потом» временем не становятся")
+    func vagueWordsStay() {
+        let evening = parse("Позвонить маме вечером")
+        #expect(evening.startTime == nil)
+        #expect(evening.deadline == nil)
+        #expect(evening.day == nil)
+        #expect(evening.title == "Позвонить маме вечером")
+        let soon = parse("Разобрать шкаф на днях")
+        #expect(soon.day == nil)
+        #expect(soon.title == "Разобрать шкаф на днях")
+        let later = parse("Написать Пете потом")
+        #expect(later.day == nil)
+        #expect(later.priority == nil)
+        #expect(later.title == "Написать Пете потом")
+        // «Сегодня» названо, «утром» — нет: день есть, времени нет.
+        let morning = parse("Сегодня утром отправить договор")
+        #expect(morning.day == .today)
+        #expect(morning.startTime == nil)
+        #expect(morning.title == "Утром отправить договор")
+    }
+
+    @Test("Диапазон длительности — по верхней границе, целиком уходит из названия")
+    func durationRanges() {
+        let call = parse("Созвон 20-30 минут")
+        #expect(call.minutes == 30)
+        #expect(call.title == "Созвон")
+        let mail = parse("Разобрать почту минут 15–20")
+        #expect(mail.minutes == 20)
+        #expect(mail.title == "Разобрать почту")
+        let report = parse("Отчёт на 1-2 часа")
+        #expect(report.minutes == 120)
+        #expect(report.title == "Отчёт")
+        #expect(parse("Отчёт, часа 2-3").minutes == 180)
+        // Длинное тире — разделитель, а не диапазон.
+        let dash = parse("Отчёт — 30 минут")
+        #expect(dash.minutes == 30)
+        #expect(dash.title == "Отчёт")
+    }
+
+    @Test("«Как можно скорее», «в первую очередь» — высокий; «в последнюю очередь» — низкий")
+    func spokenUrgency() {
+        let reply = parse("Ответить клиенту как можно скорее")
+        #expect(reply.priority == .important)
+        #expect(reply.title == "Ответить клиенту")
+        #expect(parse("В первую очередь отправить счёт").priority == .important)
+        #expect(parse("В первую очередь отправить счёт").title == "Отправить счёт")
+        let closet = parse("Разобрать шкаф в последнюю очередь")
+        #expect(closet.priority == .low)
+        #expect(closet.title == "Разобрать шкаф")
+        #expect(parse("Созвон asap").priority == .important)
+    }
+
     // MARK: Конец недели
 
     @Test("«На неделе»: до воскресенья этой недели, в выходные — следующей")

@@ -101,6 +101,11 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     /// Когда человек разобрал задачу из «Без даты» и оставил её там: Linea
     /// больше не предлагает разобрать её снова (`InboxReview`).
     var inboxReviewedAt: Date?
+    /// Параметры, которые человек задал сам: сказал при создании, выбрал в
+    /// чипе или поменял потом. Linea их сама не перезаписывает
+    /// (`TaskOwnership`). `nil` — задача сохранена раньше, чем Linea стала
+    /// это помнить: тогда всё в ней считается заданным человеком.
+    var userFields: Set<TaskField>?
 
     init(
         id: UUID = UUID(),
@@ -119,7 +124,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         kindOverride: TaskKind? = nil,
         deferralCount: Int = 0,
         blockedBy: [UUID] = [],
-        inboxReviewedAt: Date? = nil
+        inboxReviewedAt: Date? = nil,
+        userFields: Set<TaskField>? = nil
     ) {
         self.id = id
         self.title = title
@@ -138,6 +144,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         self.deferralCount = max(0, deferralCount)
         self.blockedBy = blockedBy
         self.inboxReviewedAt = inboxReviewedAt
+        self.userFields = userFields
     }
 
     /// Мягкое чтение: задачи лежат и в документах дня (`DayRecord`), и
@@ -162,6 +169,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         deferralCount = try container.decodeIfPresent(Int.self, forKey: .deferralCount) ?? 0
         blockedBy = try container.decodeIfPresent([UUID].self, forKey: .blockedBy) ?? []
         inboxReviewedAt = try container.decodeIfPresent(Date.self, forKey: .inboxReviewedAt)
+        userFields = try container.decodeIfPresent(Set<TaskField>.self, forKey: .userFields)
     }
 
     // Duration without the user's estimate depends on what the task is —
@@ -169,6 +177,12 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
 
     /// A task with a user-chosen start is a commitment for the planner.
     var isFixed: Bool { scheduledStart != nil }
+
+    /// Параметр задал человек — Linea его сама не меняет. У задачи,
+    /// сохранённой до того, как Linea стала это помнить, — любой.
+    func isSetByUser(_ field: TaskField) -> Bool {
+        userFields?.contains(field) ?? true
+    }
 }
 
 /// A personal goal with coarse progress.
