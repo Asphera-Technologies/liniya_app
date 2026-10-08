@@ -557,11 +557,16 @@ final class LineaUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["quickAdd.understood.summary"].label, "Завтра · до 12:00 · ~1 ч 30 мин · Высокий")
         snapshot(app, "46 AI-разбор: пример заказчика")
 
-        // Не уверена — пусто: два дня на выбор и «вечером» не становятся датой.
-        field.replaceText("Позвонить маме завтра или послезавтра вечером")
-        XCTAssertTrue(chip(app, "Когда: Без даты").waitForExistence(timeout: 5), "Два дня на выбор — дня нет")
+        // Не уверена — пусто: два дня на выбор, время без дня и «вечером» не становятся датой.
+        field.replaceText("Позвонить маме завтра в 10 или послезавтра вечером")
+        XCTAssertTrue(chip(app, "Когда: Без даты").waitForExistence(timeout: 5), "Два дня на выбор — ни дня, ни времени")
         XCTAssertFalse(app.staticTexts["quickAdd.understood.title"].exists, "Понимать нечего — подсказки нет")
         snapshot(app, "47 Не уверена — пусто")
+
+        // Одно «завтра» — день понятен, но название то же: «как поняла» не нужна.
+        field.replaceText("Завтра")
+        XCTAssertTrue(chip(app, "Когда: Завтра").waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["quickAdd.understood.title"].exists, "Название не изменилось — подсказки нет")
 
         // На сегодня, чтобы задача была в «Плане» этой недели.
         field.replaceText("Сегодня до обеда подготовить КП для клиента, часа на полтора, высокий приоритет.")
