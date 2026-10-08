@@ -14,6 +14,7 @@
 //  ядро (`QuickTaskDraft`). Когда Linea что-то поняла из слов, под строкой
 //  видно задачу такой, какой она сохранится: «Подготовить КП для клиента» и
 //  «Завтра · до 12:00 · ~1 ч 30 мин · Высокий» — только сказанное и выбранное.
+//  Похожа задача на цель — под чипами тихо: «Похоже, относится к: … [Связать]».
 //
 
 import SwiftUI
@@ -48,6 +49,7 @@ struct QuickAddView: View {
             titleField(text: $store.draft.text)
             understood(resolution)
             chips(resolution)
+            goalSuggestion(resolution)
             status
         }
         .padding(.horizontal, LineaMetrics.screenPadding)
@@ -259,15 +261,7 @@ struct QuickAddView: View {
 
     private func goalChip(_ resolution: QuickTaskResolution) -> some View {
         let linked = store.goal(with: resolution.goalID)
-        let suggested = store.goal(with: resolution.suggestion?.goalID)
-        let title = linked?.title ?? suggested.map { "\($0.title)?" } ?? "Цель"
         return Menu {
-            if let suggested {
-                Button { store.chooseGoal(suggested.id) } label: {
-                    Label("Связать с целью «\(suggested.title)»", systemImage: "sparkles")
-                }
-                Divider()
-            }
             ForEach(store.activeGoals) { goal in
                 Button { store.chooseGoal(goal.id) } label: {
                     option(goal.title, isSelected: resolution.goalID == goal.id)
@@ -278,10 +272,21 @@ struct QuickAddView: View {
                 option("Без цели", isSelected: resolution.goalID == nil && resolution.goalOrigin == .chosen)
             }
         } label: {
-            TaskChip(systemImage: suggested != nil ? "sparkles" : "scope", title: title, isMuted: linked == nil)
+            TaskChip(systemImage: "scope", title: linked?.title ?? "Цель", isMuted: linked == nil)
                 .frame(maxWidth: 200)
         }
-        .accessibilityLabel(linked.map { "Цель: \($0.title)" } ?? suggested.map { "Похоже, к цели «\($0.title)»" } ?? "Цель не выбрана")
+        .accessibilityLabel(linked.map { "Цель: \($0.title)" } ?? "Цель не выбрана")
+    }
+
+    /// «Похоже, относится к: … [Связать]» — Linea нашла вероятную цель.
+    /// Связывает только человек; не нажал — задача сохранится без цели.
+    @ViewBuilder
+    private func goalSuggestion(_ resolution: QuickTaskResolution) -> some View {
+        if let goal = store.goal(with: resolution.suggestion?.goalID) {
+            GoalSuggestionRow(goalTitle: goal.title) {
+                store.chooseGoal(goal.id)
+            }
+        }
     }
 
     @ViewBuilder

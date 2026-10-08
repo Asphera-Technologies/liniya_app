@@ -48,7 +48,7 @@ struct TaskEditorView: View {
     @Namespace private var demandSegments
 
     private static let durations = [15, 30, 45, 60, 90, 120]
-    private let matcher = KeywordGoalMatcher()
+    private let linker = GoalLinker()
     private let classifier = TaskClassifier()
 
     init(existing: LineaTask) {
@@ -120,26 +120,25 @@ struct TaskEditorView: View {
                         goalRow(title: goal.title, isSelected: goalID == goal.id) { goalID = goal.id }
                     }
                 }
-                if let suggestion, goalID == nil {
-                    Button {
+                if let suggestion {
+                    GoalSuggestionRow(goalTitle: suggestion.title) {
                         withAnimation(.snappy) { goalID = suggestion.id }
-                    } label: {
-                        Text("Похоже, это к цели «\(suggestion.title)» — связать?")
-                            .font(LineaFont.caption)
-                            .foregroundStyle(LineaColor.textSecondary)
-                            .multilineTextAlignment(.leading)
                     }
-                    .buttonStyle(.plain)
+                    .padding(.top, 4)
                 }
             }
         }
     }
 
-    /// A lexical hint only — Linea never links a task to a goal by itself.
+    /// «Похоже, относится к: …» — Linea никогда не связывает сама. Человек
+    /// выбрал «Без цели» раньше или только что снял цель здесь — не
+    /// переспрашиваем.
     private var suggestion: LineaGoal? {
-        guard goalID == nil, trimmedTitle.count >= 4 else { return nil }
-        guard let match = matcher.bestMatch(for: trimmedTitle, in: plan.activeGoals) else { return nil }
-        return plan.activeGoals.first { $0.id == match.goalID }
+        guard goalID == nil, existing.goalID == nil else { return nil }
+        var probe = existing
+        probe.title = trimmedTitle
+        guard let link = linker.suggestion(for: probe, goals: plan.activeGoals) else { return nil }
+        return plan.activeGoals.first { $0.id == link.goalID }
     }
 
     private func goalRow(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
