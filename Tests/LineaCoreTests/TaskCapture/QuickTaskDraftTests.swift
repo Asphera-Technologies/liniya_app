@@ -119,12 +119,15 @@ struct QuickTaskDraftTests {
         #expect(resolve(QuickTaskDraft(text: "Отчёт к пятнице", deadline: .noDeadline)).deadline == nil)
     }
 
-    @Test("Цель: подсказка по словам, явная «для цели …», «Без цели» сильнее всего")
+    @Test("Цель: подсказка по смыслу, явная «для цели …», «Без цели» сильнее всего")
     func goals() {
-        let hint = resolve(QuickTaskDraft(text: "Запустить лендинг"))
+        let hint = resolve(QuickTaskDraft(text: "Подготовить релиз"))
         #expect(hint.goalID == nil)
         #expect(hint.suggestion?.goalID == WowFixture.goalMVP)
         #expect(hint.suggestion?.source == .suggested)
+        #expect(!hint.userFields.contains(.goal), "Подсказка — не выбор человека")
+        // Общий глагол — не повод: «Запустить лендинг» не обязательно про MVP.
+        #expect(resolve(QuickTaskDraft(text: "Запустить лендинг")).suggestion == nil)
 
         let explicit = resolve(QuickTaskDraft(text: "Подготовить релиз для цели MVP"))
         #expect(explicit.goalID == WowFixture.goalMVP)
@@ -146,7 +149,7 @@ struct QuickTaskDraftTests {
     @Test("Автосвязь заложена: по политике уверенное совпадение связывается само")
     func automaticLink() {
         let automatic = GoalLinker(policy: .automatic(minimumScore: 0.3))
-        let result = resolve(QuickTaskDraft(text: "Запустить лендинг"), linker: automatic)
+        let result = resolve(QuickTaskDraft(text: "Подготовить релиз"), linker: automatic)
         #expect(result.goalID == WowFixture.goalMVP)
         #expect(result.goalOrigin == .assumed)
         #expect(result.suggestion == nil)
@@ -155,7 +158,7 @@ struct QuickTaskDraftTests {
         // Завершённая цель не предлагается.
         var done = WowFixture.goals[0]
         done.isCompleted = true
-        #expect(resolve(QuickTaskDraft(text: "Запустить лендинг"), goals: [done]).suggestion == nil)
+        #expect(resolve(QuickTaskDraft(text: "Подготовить релиз"), goals: [done]).suggestion == nil)
     }
 
     @Test("Подписи чипов: дни, время, срок, длительность")

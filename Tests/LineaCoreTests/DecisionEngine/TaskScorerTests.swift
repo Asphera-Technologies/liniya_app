@@ -26,9 +26,15 @@ struct TaskScorerTests {
         let capacity = (0.5 + 0.5 * 0.38) * 0.85
         #expect(abs((score.energyFit ?? -1) - (1 - 1.5 * (0.9 - capacity))) < 1e-9)
         #expect(score.durationFit == 1)
-        // Важность: высокий приоритет, цель со сроком через 4 дня, дедлайн 12:00, шаг к цели.
+        // Важность — большая из двух оценок: сама по себе (вес цели делится
+        // между остальными признаками, тип — по словам: «Презентация КП» —
+        // обязательство) и как шаг к цели со сроком через 4 дня.
         let importance = try #require(score.importanceScore)
-        #expect(abs(importance - (0.30 * 1 + 0.25 * (0.6 + 0.3 * exp(-4.0 / 7)) * 0.91 + 0.25 * exp(-1.5 / 36) + 0.10 * 1)) < 1e-9)
+        #expect(TaskClassifier().classify(title: "Презентация КП", goalID: nil).kind == .obligation)
+        let alone = (0.30 * 1 + 0.25 * exp(-1.5 / 36) + 0.10 * 0.9) / 0.75
+        let linked = 0.30 * 1 + 0.25 * (0.6 + 0.3 * exp(-4.0 / 7)) * 0.91 + 0.25 * exp(-1.5 / 36) + 0.10 * 1
+        #expect(abs(importance - max(alone, linked)) < 1e-9)
+        #expect(alone > linked, "Срочное обязательство важно и без цели — связь с целью его не опускает")
         let action = try #require(score.actionScore)
         #expect(action > 0.6 && action < 0.8)
         #expect(abs(score.total - importance * action) < 1e-12)

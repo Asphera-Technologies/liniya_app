@@ -5,9 +5,12 @@
 //  Движок приоритизации v1 (Docs/intelligence.md §16, ADR-025). Одного общего
 //  балла нет — у задачи две оценки:
 //
-//    importance = Σ w·f   — приоритет человека, важность и срок цели, срок и
-//                           просрочка задачи, тип, сколько задач её ждут,
-//                           сколько раз переносили;
+//    importance = Σ w·f / Σ w — приоритет человека, важность и срок цели,
+//                           срок и просрочка задачи, тип, сколько задач её
+//                           ждут, сколько раз переносили. Без цели задача
+//                           оценивается по своим признакам, а связь с целью
+//                           может её только поднять: goal_id = null
+//                           ценности не снижает;
 //    action = gate × fit × (0.5 + 0.5·pull)
 //      gate — 0, если сейчас нельзя: ждёт другую задачу, у неё своё время,
 //             сейчас занято;
@@ -56,26 +59,47 @@ nonisolated struct PriorityEngine: Sendable {
     // MARK: - importance_score
 
     /// «Насколько задача важна вообще». От момента зависит только через сроки.
+    ///
+    /// Задача без цели — полноценная задача (goal_id = null ценности не
+    /// снижает): её важность — по её собственным признакам, а вес цели
+    /// делится между ними. Связь с целью может задачу только поднять: важна
+    /// большая из двух оценок — сама по себе и как шаг к цели.
     func importance(of task: LineaTask, at moment: Date, context: PriorityContext) -> (score: Double, factors: ImportanceFactors) {
         let planned = PlanDuration.minutes(for: task, calibration: context.calibration)
+        let goal = context.snapshot.goals.contains { $0.id == task.goalID } ? goalFactor(of: task, at: moment, context: context) : nil
         let factors = ImportanceFactors(
             priority: task.priority.score,
-            goal: goalFactor(of: task, at: moment, context: context),
+            goal: goal ?? 0,
             deadline: scorer.urgency(task: task, plannedMinutes: planned, at: moment, profile: context.profile, time: context.time),
             kind: Self.kindWeight(classifier.kind(of: task)),
             dependents: Self.dependentsWeight(context.dependencies.dependents(of: task.id)),
             deferrals: min(1, Double(task.deferralCount) / Double(Self.deferralsForFullWeight))
         )
         let c = config
-        let weights = c.importanceWeightPriority + c.importanceWeightGoal + c.importanceWeightDeadline
+        // Сама по себе: тип — по словам названия, как если бы цели не было.
+        var own = factors
+        own.kind = Self.kindWeight(classifier.classify(
+            title: task.title, goalID: nil, isFixed: task.isFixed, demand: task.cognitiveDemand, override: task.kindOverride
+        ).kind)
+        let alone = weighted(own, goalWeight: 0)
+        guard let goal else { return (alone, factors) }
+        var linked = factors
+        linked.goal = goal
+        return (max(alone, weighted(linked, goalWeight: c.importanceWeightGoal)), factors)
+    }
+
+    /// Σ w·f / Σ w; цель — со своим весом или без него.
+    private func weighted(_ factors: ImportanceFactors, goalWeight: Double) -> Double {
+        let c = config
+        let weights = c.importanceWeightPriority + goalWeight + c.importanceWeightDeadline
             + c.importanceWeightKind + c.importanceWeightDependents + c.importanceWeightDeferrals
         var sum = c.importanceWeightPriority * factors.priority
-        sum += c.importanceWeightGoal * factors.goal
+        sum += goalWeight * factors.goal
         sum += c.importanceWeightDeadline * factors.deadline
         sum += c.importanceWeightKind * factors.kind
         sum += c.importanceWeightDependents * factors.dependents
         sum += c.importanceWeightDeferrals * factors.deferrals
-        return (weights > 0 ? StateMath.clamp(sum / weights) : 0, factors)
+        return weights > 0 ? StateMath.clamp(sum / weights) : 0
     }
 
     /// Цель задачи: насколько близок её срок (`TaskScorer.goalAlignment`) и

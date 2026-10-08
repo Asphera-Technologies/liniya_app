@@ -70,7 +70,9 @@ nonisolated struct RecentExecution: Hashable, Sendable {
 nonisolated struct ImportanceFactors: Codable, Hashable, Sendable {
     /// Приоритет, который поставил человек (`user_priority`).
     var priority: Double
-    /// Цель: её важность и срок (`goal_importance`, `goal_deadline`); 0 без цели.
+    /// Цель: её важность и срок (`goal_importance`, `goal_deadline`). Без
+    /// цели — 0, и в важность она не входит: задача оценивается по своим
+    /// признакам (`PriorityEngine.importance`).
     var goal: Double
     /// Срок задачи и просрочка (`deadline`, `overdue`).
     var deadline: Double

@@ -7,10 +7,9 @@
 //    • Linea сама — когда совпадение уверенное и политика это разрешает;
 //    • подсказка — «похоже, это к цели …», связывает человек.
 //
-//  Сейчас политика — только подсказка (ADR-023): связь меняет приоритет
-//  задачи, и пусть её ставит человек, пока совпадение по словам — всё, что
-//  Linea умеет. Автосвязь включается одной строкой, когда матчер станет
-//  умнее (модель на телефоне — ещё одна реализация `GoalMatcher`).
+//  Политика — только подсказка: так просил заказчик («Похоже, относится к: …
+//  [Связать]»; ничего не нажал — задача спокойно живёт без цели). Автосвязь
+//  заложена политикой `.automatic` и выключена.
 //
 
 import Foundation
@@ -39,17 +38,26 @@ nonisolated struct GoalLinker: Sendable {
         case automatic(minimumScore: Double)
     }
 
-    /// Сейчас связь ставит человек (ADR-023).
+    /// Связь ставит человек (ADR-023, ADR-033).
     static let defaultPolicy: Policy = .suggestOnly
-    /// Порог автосвязи, когда её включат: половина значимых слов — общие.
-    static let automaticScore = 0.5
+    /// Порог автосвязи, когда её включат: заметно увереннее подсказки.
+    static let automaticScore = 0.8
 
     let matcher: any GoalMatcher
     let policy: Policy
 
-    init(matcher: any GoalMatcher = KeywordGoalMatcher(), policy: Policy = GoalLinker.defaultPolicy) {
+    init(matcher: any GoalMatcher = ConceptGoalMatcher(), policy: Policy = GoalLinker.defaultPolicy) {
         self.matcher = matcher
         self.policy = policy
+    }
+
+    /// Подсказка для сохранённой задачи: «Похоже, относится к: … [Связать]».
+    /// Не нужна, если цель уже есть или человек сам выбрал «Без цели» — его
+    /// решение Linea не переспрашивает.
+    func suggestion(for task: LineaTask, goals: [LineaGoal]) -> GoalLink? {
+        guard !task.isDone, task.goalID == nil, task.userFields?.contains(.goal) != true else { return nil }
+        guard let match = matcher.bestMatch(for: task.title, in: goals) else { return nil }
+        return GoalLink(goalID: match.goalID, source: .suggested, score: match.score)
     }
 
     /// Связь по названию задачи: автоматическая или подсказка. Nil — ничего похожего.
