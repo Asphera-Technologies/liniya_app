@@ -62,6 +62,15 @@ struct ConceptGoalMatcherTests {
 
     // MARK: Не уверена — молчит
 
+    @Test("Общие слова не в счёт — в любой форме")
+    func genericWords() {
+        #expect(ConceptGoalMatcher.terms("Найти 50 тестировщиков") == ["#beta"])
+        #expect(ConceptGoalMatcher.terms("Подготовить и проверить отчёт") == [RussianWords.stem("отчёт")])
+        #expect(ConceptGoalMatcher.terms("Надо купить хлеб") == [RussianWords.stem("хлеб")])
+        #expect(ConceptGoalMatcher.terms("Закрыть вкладки") == [RussianWords.stem("закрыть"), RussianWords.stem("вкладки")])
+        #expect(GoalConcepts.genericWords.allSatisfy { ConceptGoalMatcher.terms($0).isEmpty }, "Каждое общее слово отбрасывается")
+    }
+
     @Test("Общий глагол или случайное слово — не связь")
     func weakEvidence() {
         let beta = goal("Запустить Линия Beta")
