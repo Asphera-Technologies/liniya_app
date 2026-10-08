@@ -153,7 +153,7 @@ nonisolated struct ConceptGoalMatcher: GoalMatcher {
         return profile
     }
 
-    /// Понятия текста: группа слов («launch»), если слово в группе, иначе
+    /// Понятия текста: группа слов («#launch»), если слово в группе, иначе
     /// основа слова. Служебные, общие и числа не в счёт.
     static func terms(_ text: String) -> Set<String> {
         var terms = Set<String>()
