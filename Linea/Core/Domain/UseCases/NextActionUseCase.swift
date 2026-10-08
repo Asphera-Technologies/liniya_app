@@ -11,6 +11,9 @@
 //  `actionStarted`, а задачу не трогает. Пока действие идёт, «Сейчас»
 //  показывает его, а план держит его время занятым (`PlanDayUseCase`).
 //
+//  У каждой рекомендации — причина (`NowReasoner`): одна короткая фраза,
+//  понятная без техники.
+//
 //  Чистая функция от дня, свежих задач и времени; текст — из шаблонов
 //  (`ExplanationMoment.now`), экран только показывает его.
 //
@@ -25,6 +28,7 @@ nonisolated struct NextActionUseCase: Sendable {
 
     let engine: PriorityEngine
     let renderer: any TextRenderer
+    let reasoner = NowReasoner()
 
     init(config: EngineConfig = .default, renderer: any TextRenderer = RuleBasedExplainer()) {
         self.engine = PriorityEngine(config: config)
@@ -119,6 +123,15 @@ nonisolated struct NextActionUseCase: Sendable {
         // помещается, либо до следующего дела не больше двух часов.
         if later != nil || best == nil || window.minutes <= Self.windowWorthMentioningMinutes {
             facts.append(.windowUntil(kind: window.until?.kind, title: window.until?.title, minutesLeft: window.minutes))
+        }
+        // У каждой рекомендации — одна причина, понятная без техники.
+        if let best, let task = tasks.first(where: { $0.id == best.taskID }) {
+            let choice = NowReasoner.Choice(
+                task: task, assessment: best, window: window,
+                laterTitle: later.flatMap { titles[$0.taskID] },
+                isPlanned: best.taskID == plannedNow
+            )
+            facts.append(.nowReason(reasoner.reason(for: choice, context: context)))
         }
 
         let explanation = render(facts, snapshot: snapshot, time: time)

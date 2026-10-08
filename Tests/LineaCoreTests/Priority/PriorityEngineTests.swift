@@ -312,25 +312,26 @@ struct NextActionTests {
         #expect(action.option?.minutes == 15)
         #expect(action.laterTaskID == Strategy.strategy)
         #expect(action.headline == "Сейчас — «Ответить на письма».")
-        #expect(action.reason == "До встречи осталось 20 мин. «Подготовить стратегию» лучше после встречи: на неё нужно 1 ч 30 мин.")
+        // Одна короткая фраза: почему это и что с важным.
+        #expect(action.reason == "До встречи 20 мин — на это хватит, а «Подготовить стратегию» лучше после встречи.")
         // Стратегия сейчас не помещается — в «Другое» её нет.
         #expect(action.alternatives.isEmpty)
     }
 
-    @Test("После встречи стратегия снова «сейчас»; длинное окно не упоминается")
+    @Test("После встречи стратегия снова «сейчас»; причина — приоритет, а не длинное окно")
     func afterMeetingStrategyIsBack() throws {
         let action = try #require(run(at: WowFixture.time(16, 20)))
         #expect(action.taskID == Strategy.strategy)
         #expect(action.laterTaskID == nil)
-        #expect(action.reason == "")
+        #expect(action.reason == "Высокий приоритет — лучше не откладывать.")
         #expect(action.alternatives.map(\.taskID) == [Strategy.mail])
     }
 
-    @Test("Окно меньше двух часов — Linea о нём напоминает")
+    @Test("Окно тесное для задачи — Linea называет его причиной")
     func shortRemainderIsMentioned() throws {
         let action = try #require(run(at: WowFixture.time(19)))
         #expect(action.taskID == Strategy.strategy)
-        #expect(action.reason == "До конца рабочего дня осталось 2 ч.")
+        #expect(action.reason == "До конца рабочего дня 2 ч — на эту задачу как раз хватит.")
     }
 
     @Test("Ничего не помещается — короткая пауза, важное — после")

@@ -14,8 +14,8 @@ import Foundation
 nonisolated struct TaskDependencies: Sendable {
     /// Задача → открытые задачи, которые её держат.
     private let blockers: [UUID: [UUID]]
-    /// Задача → сколько открытых задач её ждут.
-    private let dependentCounts: [UUID: Int]
+    /// Задача → открытые задачи, которые её ждут, по порядку создания.
+    private let waiting: [UUID: [UUID]]
 
     init(tasks: [LineaTask]) {
         let open = tasks.filter { !$0.isDone }
@@ -28,11 +28,11 @@ nonisolated struct TaskDependencies: Sendable {
             }
         }
         blockers = edges
-        var counts: [UUID: Int] = [:]
-        for list in edges.values {
-            for blocker in list { counts[blocker, default: 0] += 1 }
+        var waiting: [UUID: [UUID]] = [:]
+        for task in open.sorted(by: DecisionEngine.chronological) {
+            for blocker in edges[task.id] ?? [] { waiting[blocker, default: []].append(task.id) }
         }
-        dependentCounts = counts
+        self.waiting = waiting
     }
 
     /// Открытые задачи, без которых `taskID` не начать. `done` — задачи,
@@ -43,7 +43,12 @@ nonisolated struct TaskDependencies: Sendable {
 
     /// Сколько открытых задач ждут эту.
     func dependents(of taskID: UUID) -> Int {
-        dependentCounts[taskID] ?? 0
+        waiting[taskID]?.count ?? 0
+    }
+
+    /// Открытые задачи, которые ждут эту, — давние первыми.
+    func dependentIDs(of taskID: UUID) -> [UUID] {
+        waiting[taskID] ?? []
     }
 
     /// Можно ли поставить `taskID` в зависимость от `blockerID`: не ждёт ли

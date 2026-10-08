@@ -87,6 +87,20 @@ nonisolated struct ExplanationValidator: Sendable {
                 add("\(count)")
             case .energy(let value, _):
                 add("\(Int((value * 100).rounded()))")
+            case .nowReason(let reason):
+                switch reason {
+                case .fitsBeforeLater(_, _, let minutesLeft, _), .fitsWindow(_, _, let minutesLeft):
+                    addMinutes(minutesLeft)
+                case .startsAt(let date), .deadline(let date, _, _):
+                    add(RussianText.clock(date, time: time))
+                case .unblocks(let count, _):
+                    add("\(count)")
+                case .deferred(let times):
+                    add("\(times)")
+                case .overdue, .missedDay, .planned, .mainGoalStep, .goalStep, .highPriority, .energyPeak,
+                     .freeTime, .quick, .mostImportant:
+                    continue
+                }
             case .hrvVsUsual, .restingHeartRateVsUsual, .recovery, .loadAdvice, .highLoadYesterday,
                  .dataMissing, .providerUnavailable, .taskDeferred, .dayRating, .calibrationChanged, .nowAction:
                 continue

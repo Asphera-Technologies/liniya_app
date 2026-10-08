@@ -122,29 +122,86 @@ nonisolated struct RuleBasedExplainer: TextRenderer, Explainer {
 
     // MARK: Now
 
-    /// «Сейчас»: почему именно это. Окно называется по тому, чем кончается:
-    /// «До встречи осталось 25 мин.», «До конца рабочего дня осталось 2 ч.».
-    /// Важное, которому окна не хватает: ««Подготовить стратегию» лучше после
-    /// встречи: на неё нужно 1 ч 30 мин.» Начатое: «Начато в 11:40.» Ничего не
-    /// помещается — заголовок «До встречи осталось 10 мин — короткая пауза.».
+    /// «Сейчас»: что и почему — одной короткой фразой (`NowReason`), без
+    /// баллов и уверенностей. Начатое: «Начато в 11:40.» Ничего не
+    /// помещается — заголовок «До встречи осталось 10 мин — короткая пауза.»,
+    /// ниже — что лучше начать после.
     private func now(_ facts: FactReader) -> Explanation {
         if let started = facts.actionStarted {
             let headline = facts.nowAction.map { "Сейчас — \(RussianText.quoted($0.title))." } ?? ""
             return Explanation(headline: headline, body: "Начато в \(facts.clock(started.at)).", explainerID: id)
         }
-        let window = facts.windowUntil.map { windowSentence(kind: $0.kind, title: $0.title, minutes: $0.minutesLeft) }
-        let after = facts.windowUntil.map { afterPhrase(kind: $0.kind, title: $0.title) } ?? "позже"
-
         guard let action = facts.nowAction else {
+            let window = facts.windowUntil.map { windowSentence(kind: $0.kind, title: $0.title, minutes: $0.minutesLeft) }
+            let after = facts.windowUntil.map { afterPhrase(kind: $0.kind, title: $0.title) } ?? "позже"
             let headline = window.map { "\($0) — короткая пауза." } ?? "Сейчас — короткая пауза."
             let body = facts.laterAction.map { "\(RussianText.quoted($0.title)) лучше начать \(after)." } ?? ""
             return Explanation(headline: headline, body: body, explainerID: id)
         }
-        let later = facts.laterAction.map {
-            "\(RussianText.quoted($0.title)) лучше \(after): на неё нужно \(RussianText.duration(minutes: $0.minutesNeeded))."
-        }
-        let body = [window.map { "\($0)." }, later].compactMap { $0 }.joined(separator: " ")
+        let body = facts.nowReason.map { reasonSentence($0, facts) } ?? ""
         return Explanation(headline: "Сейчас — \(RussianText.quoted(action.title)).", body: body, explainerID: id)
+    }
+
+    /// Одна короткая фраза — почему сейчас это. Числа только из причины.
+    private func reasonSentence(_ reason: NowReason, _ facts: FactReader) -> String {
+        switch reason {
+        case .fitsBeforeLater(let kind, let title, let minutes, let later):
+            let lead = windowLead(kind: kind, title: title, minutes: minutes)
+            return "\(lead) — на это хватит, а \(RussianText.quoted(later)) лучше \(afterPhrase(kind: kind, title: title))."
+        case .startsAt(let start):
+            return "Назначена на \(facts.clock(start))."
+        case .overdue:
+            return "Срок уже прошёл — лучше закрыть сейчас."
+        case .missedDay:
+            return "Её день уже прошёл — лучше закрыть сейчас."
+        case .deadline(let at, let isTomorrow, let isHighPriority):
+            let day = isTomorrow ? "завтра" : "сегодня"
+            // Срок вечером — «сегодня вечером», завтра вечером — просто «завтра».
+            let when: String
+            if facts.hour(at) >= 18 {
+                when = isTomorrow ? day : "\(day) вечером"
+            } else {
+                when = "\(day) до \(facts.clock(at))"
+            }
+            return isHighPriority ? "Высокий приоритет, а срок — \(when)." : "Срок — \(when)."
+        case .planned:
+            return "Сейчас её время по плану."
+        case .fitsWindow(let kind, let title, let minutes):
+            return "\(windowLead(kind: kind, title: title, minutes: minutes)) — на эту задачу как раз хватит."
+        case .mainGoalStep:
+            return "Это ближайший шаг по твоей главной цели."
+        case .goalStep(let goal):
+            return "Это шаг к цели \(RussianText.quoted(goal))."
+        case .highPriority:
+            return "Высокий приоритет — лучше не откладывать."
+        case .unblocks(let count, let title):
+            if count == 1, let title { return "Без неё не начать \(RussianText.quoted(title))." }
+            return "Без неё не начать ещё \(count) \(RussianText.plural(count, "задачу", "задачи", "задач"))."
+        case .deferred(let times):
+            return "Её откладывали уже \(times) \(RussianText.plural(times, "раз", "раза", "раз")) — пора закрыть."
+        case .energyPeak:
+            return "Сейчас хорошее время для сложной задачи."
+        case .freeTime:
+            return "У неё нет даты, а свободное время есть сейчас."
+        case .quick:
+            return "Короткая — можно закрыть сразу."
+        case .mostImportant:
+            return "Самое важное из того, что можно сделать сейчас."
+        }
+    }
+
+    /// «До встречи 35 мин» — окно до следующего дела, без «осталось».
+    private func windowLead(kind: CommitmentKind?, title: String?, minutes: Int) -> String {
+        let left = RussianText.duration(minutes: minutes)
+        switch kind {
+        case .meeting?: return "До встречи \(left)"
+        case .workout?: return "До тренировки \(left)"
+        case .meal?: return "До еды \(left)"
+        case .task?, .other?:
+            if let title { return "До \(RussianText.quoted(title)) \(left)" }
+            return "До следующего дела \(left)"
+        case nil: return "До конца рабочего дня \(left)"
+        }
     }
 
     /// «До встречи осталось 25 мин» — без точки.
@@ -346,5 +403,14 @@ nonisolated struct FactReader: Sendable {
     var actionStarted: (at: Date, minutes: Int)? {
         for fact in facts { if case .actionStarted(let at, let minutes) = fact { return (at, minutes) } }
         return nil
+    }
+
+    var nowReason: NowReason? {
+        for fact in facts { if case .nowReason(let reason) = fact { return reason } }
+        return nil
+    }
+
+    func hour(_ date: Date) -> Int {
+        time.timeOfDay(of: date).hour
     }
 }

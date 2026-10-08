@@ -59,6 +59,8 @@ nonisolated enum Fact: Codable, Hashable, Sendable {
     case windowUntil(kind: CommitmentKind?, title: String?, minutesLeft: Int)
     /// Человек уже взялся за действие.
     case actionStarted(at: Date, minutes: Int)
+    /// Почему сейчас именно это действие — одна главная причина.
+    case nowReason(NowReason)
 
     // Feedback
     case dayRating(DayRating)
