@@ -24,6 +24,7 @@ struct WrappingText: UIViewRepresentable {
         let label = UILabel()
         label.numberOfLines = 0
         label.lineBreakMode = .byWordWrapping
+        label.lineBreakStrategy = []
         label.adjustsFontForContentSizeCategory = true
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return label
@@ -31,11 +32,13 @@ struct WrappingText: UIViewRepresentable {
 
     func updateUIView(_ label: UILabel, context: Context) {
         // Без переносов по слогам: UILabel ставит их по-русски сам, и название
-        // задачи в кавычках рвалось бы на «Под-готовить».
+        // задачи в кавычках рвалось на «Под-готовить». Ноль значил бы «как у
+        // системы» — поэтому порог исчезающе малый: переносить, только если
+        // строка заполнена меньше чем на сотую долю процента, то есть никогда.
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
-        paragraph.hyphenationFactor = 0
         paragraph.usesDefaultHyphenation = false
+        paragraph.hyphenationFactor = 0.0001
         label.attributedText = NSAttributedString(string: text, attributes: [
             .font: UIFont.preferredFont(forTextStyle: textStyle),
             .foregroundColor: UIColor(color),
