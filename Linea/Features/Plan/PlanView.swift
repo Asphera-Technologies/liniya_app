@@ -122,7 +122,7 @@ struct PlanView: View {
                             onDelete: { Task { await plan.deleteTask(task) } },
                             caption: task.isDone ? nil : intelligence.plannedStart(for: task.id).map {
                                 InboxReview.plannedCaption($0, time: intelligence.time)
-                            },
+                            } ?? summary(of: task),
                             actions: rowActions(for: task)
                         )
                         if index < inbox.count - 1 { LineaHairline() }
@@ -148,9 +148,7 @@ struct PlanView: View {
                                 onToggle: { Task { await plan.toggleTask(task) } },
                                 onOpen: { editingTask = .edit(task) },
                                 onDelete: { Task { await plan.deleteTask(task) } },
-                                caption: section.day == nil
-                                    ? task.deadline.map { QuickTaskText.deadline($0, time: intelligence.time) }
-                                    : nil,
+                                caption: summary(of: task),
                                 actions: rowActions(for: task)
                             )
                             if index < section.tasks.count - 1 { LineaHairline() }
@@ -170,6 +168,13 @@ struct PlanView: View {
                 appState.openQuickAdd()
             }
         }
+    }
+
+    /// Что у задачи задано: «до 12:00 · ~1 ч 30 мин». День — в заголовке
+    /// раздела, приоритет — справа в строке; ничего не задано — строки нет.
+    private func summary(of task: LineaTask) -> String? {
+        let text = QuickTaskText.summary(of: task, time: intelligence.time, includesDay: false, includesPriority: false)
+        return text.isEmpty ? nil : text
     }
 
     /// Свайп вправо — «Готово», влево — «Перенести», долгое нажатие — меню.

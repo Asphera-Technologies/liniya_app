@@ -71,11 +71,13 @@ final class PlanStore {
 
     /// Adds a new task or updates an existing one (matched by id). A task that
     /// was due and moves later is counted as deferred — the priority engine
-    /// lifts a task that keeps slipping (`TaskDeferral`).
+    /// lifts a task that keeps slipping (`TaskDeferral`). Everything saved here
+    /// is the person's own doing: what they changed becomes theirs, and Linea
+    /// never overwrites it by itself (`TaskOwnership`).
     func saveTask(_ task: LineaTask) async {
         do {
             if let previous = tasks.first(where: { $0.id == task.id }) {
-                try await taskRepository.update(TaskDeferral.counted(previous: previous, updated: task, time: timeProvider()))
+                try await taskRepository.update(edited(previous: previous, updated: task, time: timeProvider()))
             } else {
                 try await taskRepository.add(task)
             }
@@ -94,7 +96,7 @@ final class PlanStore {
         do {
             for task in updated {
                 if let previous = tasks.first(where: { $0.id == task.id }) {
-                    try await taskRepository.update(TaskDeferral.counted(previous: previous, updated: task, time: time))
+                    try await taskRepository.update(edited(previous: previous, updated: task, time: time))
                 } else {
                     try await taskRepository.add(task)
                 }
@@ -104,6 +106,12 @@ final class PlanStore {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Правка человека: поменянное — его, сложность, которую подставляла
+    /// Linea, следует за новым названием, перенос засчитывается.
+    private func edited(previous: LineaTask, updated: LineaTask, time: TimeContext) -> LineaTask {
+        TaskDeferral.counted(previous: previous, updated: TaskOwnership.saved(previous: previous, updated: updated), time: time)
     }
 
     /// Marks a task done/undone. `completedAt` is what lets the plan know the

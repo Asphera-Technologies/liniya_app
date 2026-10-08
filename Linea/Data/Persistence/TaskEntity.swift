@@ -39,6 +39,10 @@ final class TaskEntity {
     var blockedByRaw: String?
     /// Разобрана из «Без даты» и оставлена там; nil — не разбиралась.
     var inboxReviewedAt: Date?
+    /// Параметры, которые задал человек, через запятую (`TaskField`); пустая
+    /// строка — ни одного. nil — задача сохранена раньше, чем Linea стала это
+    /// помнить: всё в ней считается заданным человеком.
+    var userFieldsRaw: String?
 
     init(
         id: UUID,
@@ -57,7 +61,8 @@ final class TaskEntity {
         kindRaw: String? = nil,
         deferralCount: Int? = nil,
         blockedByRaw: String? = nil,
-        inboxReviewedAt: Date? = nil
+        inboxReviewedAt: Date? = nil,
+        userFieldsRaw: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -76,6 +81,7 @@ final class TaskEntity {
         self.deferralCount = deferralCount
         self.blockedByRaw = blockedByRaw
         self.inboxReviewedAt = inboxReviewedAt
+        self.userFieldsRaw = userFieldsRaw
     }
 }
 
@@ -98,7 +104,8 @@ extension TaskEntity {
             kindRaw: task.kindOverride?.rawValue,
             deferralCount: task.deferralCount,
             blockedByRaw: Self.raw(task.blockedBy),
-            inboxReviewedAt: task.inboxReviewedAt
+            inboxReviewedAt: task.inboxReviewedAt,
+            userFieldsRaw: Self.rawFields(task.userFields)
         )
     }
 
@@ -121,7 +128,8 @@ extension TaskEntity {
             kindOverride: kindRaw.flatMap(TaskKind.init(rawValue:)),
             deferralCount: deferralCount ?? 0,
             blockedBy: Self.ids(blockedByRaw),
-            inboxReviewedAt: inboxReviewedAt
+            inboxReviewedAt: inboxReviewedAt,
+            userFields: Self.fields(userFieldsRaw)
         )
     }
 
@@ -142,6 +150,7 @@ extension TaskEntity {
         deferralCount = task.deferralCount
         blockedByRaw = Self.raw(task.blockedBy)
         inboxReviewedAt = task.inboxReviewedAt
+        userFieldsRaw = Self.rawFields(task.userFields)
     }
 
     private static func raw(_ ids: [UUID]) -> String? {
@@ -150,5 +159,14 @@ extension TaskEntity {
 
     private static func ids(_ raw: String?) -> [UUID] {
         (raw ?? "").split(separator: ",").compactMap { UUID(uuidString: String($0)) }
+    }
+
+    /// Поля по порядку объявления — одна и та же задача всегда пишется одинаково.
+    private static func rawFields(_ fields: Set<TaskField>?) -> String? {
+        fields.map { fields in TaskField.allCases.filter(fields.contains).map(\.rawValue).joined(separator: ",") }
+    }
+
+    private static func fields(_ raw: String?) -> Set<TaskField>? {
+        raw.map { Set($0.split(separator: ",").compactMap { TaskField(rawValue: String($0)) }) }
     }
 }

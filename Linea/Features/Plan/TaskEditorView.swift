@@ -469,7 +469,9 @@ struct TaskEditorView: View {
             deferralCount: existing.deferralCount,
             // Удалённые задачи из «Сначала нужно» не тянутся дальше.
             blockedBy: blockedBy.filter { id in plan.tasks.contains { $0.id == id } },
-            inboxReviewedAt: existing.inboxReviewedAt
+            inboxReviewedAt: existing.inboxReviewedAt,
+            // Что поменяно здесь, станет заданным человеком — это решает PlanStore.
+            userFields: existing.userFields
         )
         Task {
             await plan.saveTask(result)

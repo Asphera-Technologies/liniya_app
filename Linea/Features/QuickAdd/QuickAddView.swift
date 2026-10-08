@@ -11,7 +11,9 @@
 //  задачи. Микрофон в строке — надиктовать задачу целиком.
 //
 //  Экран только показывает `QuickAddStore`; что получится из ввода, решает
-//  ядро (`QuickTaskDraft`).
+//  ядро (`QuickTaskDraft`). Когда Linea что-то поняла из слов, под строкой
+//  видно задачу такой, какой она сохранится: «Подготовить КП для клиента» и
+//  «Завтра · до 12:00 · ~1 ч 30 мин · Высокий» — только сказанное и выбранное.
 //
 
 import SwiftUI
@@ -44,6 +46,7 @@ struct QuickAddView: View {
         VStack(alignment: .leading, spacing: 16) {
             header(canSave: resolution.canSave)
             titleField(text: $store.draft.text)
+            understood(resolution)
             chips(resolution)
             status
         }
@@ -145,6 +148,39 @@ struct QuickAddView: View {
         .buttonStyle(.plain)
         .disabled(store.voice == .transcribing)
         .accessibilityLabel(store.voice == .recording ? "Закончить запись" : "Надиктовать задачу")
+    }
+
+    // MARK: Как Linea поняла
+
+    /// Задача так, как она сохранится: название без распознанного и строка
+    /// параметров. Только то, что сказано или выбрано: чего Linea не поняла,
+    /// того здесь нет — значения по умолчанию остаются серыми в чипах.
+    @ViewBuilder
+    private func understood(_ resolution: QuickTaskResolution) -> some View {
+        if resolution.isUnderstood, resolution.canSave {
+            let summary = QuickTaskText.summary(resolution, time: store.time)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(LineaColor.textTertiary)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(resolution.title)
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                        .lineLimit(2)
+                        .accessibilityIdentifier("quickAdd.understood.title")
+                    if !summary.isEmpty {
+                        Text(summary)
+                            .font(LineaFont.caption)
+                            .foregroundStyle(LineaColor.textSecondary)
+                            .accessibilityIdentifier("quickAdd.understood.summary")
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("quickAdd.understood")
+        }
     }
 
     // MARK: Чипы
