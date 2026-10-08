@@ -142,16 +142,20 @@ struct TodayView: View {
                             .foregroundStyle(LineaColor.textTertiary)
                     }
                 } else {
-                    Text(action.headline)
+                    Text(RussianTypography.nonBreaking(action.headline))
                         .font(LineaFont.feature)
                         .foregroundStyle(LineaColor.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(action.headline)
                 }
                 if !action.reason.isEmpty {
-                    Text(action.reason)
+                    // Неразрывные пробелы: иначе «а» в конце строки сбивает
+                    // подсчёт высоты, и причина обрезается многоточием.
+                    Text(RussianTypography.nonBreaking(action.reason))
                         .font(LineaFont.rowTitle)
                         .foregroundStyle(LineaColor.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(action.reason)
                 }
                 if action.option != nil {
                     HStack(spacing: 12) {
