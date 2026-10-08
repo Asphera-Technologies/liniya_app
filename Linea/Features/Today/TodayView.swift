@@ -137,30 +137,27 @@ struct TodayView: View {
                             .font(LineaFont.feature)
                             .foregroundStyle(LineaColor.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
-                            .id(option.title)
                         Text(QuickTaskText.duration(minutes: option.minutes))
                             .font(LineaFont.caption)
                             .foregroundStyle(LineaColor.textTertiary)
                     }
                 } else {
-                    Text(RussianTypography.nonBreaking(action.headline))
-                        .font(LineaFont.feature)
-                        .foregroundStyle(LineaColor.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityLabel(action.headline)
-                        .id(action.headline)
+                    WrappingText(
+                        text: RussianTypography.nonBreaking(action.headline),
+                        textStyle: .title2,
+                        color: LineaColor.textPrimary,
+                        accessibilityText: action.headline
+                    )
                 }
                 if !action.reason.isEmpty {
-                    // `.id` — новый текст меряется заново. Блок живёт, пока
-                    // «Сейчас» меняется, и без этого длинная причина
-                    // оставалась в высоте прежней, короткой, и обрезалась
-                    // многоточием.
-                    Text(RussianTypography.nonBreaking(action.reason))
-                        .font(LineaFont.rowTitle)
-                        .foregroundStyle(LineaColor.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityLabel(action.reason)
-                        .id(action.reason)
+                    // UILabel, а не Text: SwiftUI мерил длинную причину на
+                    // строку короче, чем рисовал, и обрезал её многоточием.
+                    WrappingText(
+                        text: RussianTypography.nonBreaking(action.reason),
+                        textStyle: .body,
+                        color: LineaColor.textSecondary,
+                        accessibilityText: action.reason
+                    )
                 }
                 if action.option != nil {
                     HStack(spacing: 12) {
