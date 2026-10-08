@@ -50,6 +50,10 @@ struct TaskUnderstandingTests {
         let parser = QuickTaskParser()
         #expect(parser.parse("Отчёт до обеда", profile: WowFixture.profile, time: time).deadline == WowFixture.moment(12))
         #expect(parser.parse("Отчёт к обеду", profile: WowFixture.profile, time: time).deadline == WowFixture.moment(12))
+        let adjective = parser.parse("Подготовить КП для клиента к завтрашнему обеду", profile: WowFixture.profile, time: time)
+        #expect(adjective.deadline == WowFixture.moment(12, 0, dayOffset: 1))
+        #expect(adjective.title == "Подготовить КП для клиента")
+        #expect(parser.parse("Отчёт до сегодняшнего вечера", profile: WowFixture.profile, time: time).deadline == WowFixture.moment(18))
         // После полудня «до обеда» без дня — уже завтра.
         let late = parser.parse("Отчёт до обеда", profile: WowFixture.profile, time: WowFixture.time(14))
         #expect(late.deadline == WowFixture.moment(12, 0, dayOffset: 1))

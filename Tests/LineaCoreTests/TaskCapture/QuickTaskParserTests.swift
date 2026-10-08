@@ -268,9 +268,9 @@ struct QuickTaskParserTests {
 
     @Test("Два значения на выбор — Linea не берёт ни одного, слова остаются в названии")
     func alternativesStayEmpty() {
-        let days = parse("Отчёт завтра или послезавтра")
-        #expect(days.day == nil)
-        #expect(days.title == "Отчёт завтра или послезавтра")
+        let twoDays = parse("Отчёт завтра или послезавтра")
+        #expect(twoDays.day == nil)
+        #expect(twoDays.title == "Отчёт завтра или послезавтра")
         let weekdays = parse("Сходить в банк в пятницу или в субботу")
         #expect(weekdays.day == nil)
         #expect(weekdays.title == "Сходить в банк в пятницу или в субботу")
@@ -293,6 +293,17 @@ struct QuickTaskParserTests {
         #expect(send.deadline == nil)
         #expect(send.minutes == 60)
         #expect(send.title == "Отправить завтра или послезавтра до 18:00")
+        // «завтра в 10 или в 11» — выбор времени, день известен; «завтра в 10
+        // или послезавтра» — выбор дня, и время без дня не берётся.
+        let hours = parse("Сделать отчёт завтра в 10 или в 11")
+        #expect(hours.day == .tomorrow)
+        #expect(hours.startTime == nil)
+        #expect(hours.title == "Сделать отчёт в 10 или в 11")
+        let days = parse("Позвонить завтра в 10 или послезавтра")
+        #expect(days.day == nil)
+        #expect(days.startTime == nil)
+        #expect(days.title == "Позвонить завтра в 10 или послезавтра")
+        #expect(parse("Обсудить бюджет в среду в 11 или в 12").day == day(7))
         let mixed = parse("Сдать до 18:00 или завтра")
         #expect(mixed.deadline == nil)
         #expect(mixed.day == nil)

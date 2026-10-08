@@ -208,16 +208,16 @@ nonisolated enum QuickTaskWords {
 
     /// Между «или» и значением: «или в пятницу», «или до 18:00».
     static let alternativeLeads: Set<String> = ["в", "во", "на", "к", "ко", "до"]
-    /// Слова-значения по другую сторону «или»: «послезавтра», «субботу», «час».
-    static let valueWords: Set<String> = [
-        "сегодня", "завтра", "послезавтра", "неделе", "неделю", "выходных", "выходные",
-        "утра", "вечера", "обеда", "обеду", "вечеру", "полдень", "полудня", "конца", "полчаса", "полдня",
+    /// «к завтрашнему обеду», «до сегодняшнего вечера»: через сколько дней.
+    static let dayAdjectives: [String: Int] = [
+        "сегодняшнего": 0, "сегодняшнему": 0, "завтрашнего": 1, "завтрашнему": 1,
     ]
-
-    static func isValueWord(_ word: String) -> Bool {
-        valueWords.contains(word) || weekdays[word] != nil || weekdayAbbreviations[word] != nil
-            || months[word] != nil || CheckInText.isUnit(word) || CheckInText.numberWords[word] != nil
-    }
+    /// Дни по другую сторону «или»: «послезавтра», «на неделе».
+    static let dayWords: Set<String> = ["сегодня", "завтра", "послезавтра", "неделе", "неделю", "выходных", "выходные"]
+    /// Время по другую сторону «или»: «полдень», «до вечера».
+    static let timeWords: Set<String> = ["полдень", "полудня", "утра", "утру", "вечера", "вечеру", "обеда", "обеду"]
+    /// Слова внутри времени: «в 7 вечера», «к 10 часам».
+    static let clockWords: Set<String> = ["утра", "дня", "вечера", "ночи", "час", "часа", "часов", "часам"]
 
     /// Дефис или короткое тире диапазона: «20–30 минут». Длинное тире —
     /// разделитель («Отчёт — 30 минут»), не диапазон.
@@ -304,21 +304,35 @@ nonisolated private struct QuickTaskParseState {
         String(text[tokens[range.lowerBound].range.lowerBound..<tokens[range.upperBound].range.upperBound])
     }
 
+    /// Какого рода значение проверяется на «или».
+    nonisolated enum ValueKind { case day, time, deadline, duration }
+
     /// «завтра или послезавтра», «в 10:00 или в 11:00», «30 минут или час»:
     /// два значения на выбор. Какое из них имелось в виду, Linea не знает,
-    /// поэтому не берёт ни одного — слова остаются в названии. «Завтра, или
-    /// хотя бы начать» — не выбор: за «или» нет второго значения.
-    func isAlternative(_ range: ClosedRange<Int>) -> Bool {
-        let after = skipping(from: range.upperBound + 1, step: 1, leads: false)
-        if word(after) == "или", isValueLike(skipping(from: after + 1, step: 1, leads: true)) { return true }
+    /// поэтому не берёт ни одного — слова остаются в названии. По другую
+    /// сторону «или» должно быть значение того же рода: «завтра в 10 или в 11»
+    /// — выбор времени, а день известен; «завтра в 10 или послезавтра» — выбор
+    /// дня. «Завтра, или хотя бы начать» — не выбор.
+    func isAlternative(_ range: ClosedRange<Int>, of kind: ValueKind) -> Bool {
+        var after = skipping(from: range.upperBound + 1, step: 1, leads: false)
+        // У дня может быть своё время: «завтра в 10 или послезавтра».
+        if kind == .day { after = skippingTime(from: after, step: 1) }
+        if word(after) == "или", isValue(kind, at: skipping(from: after + 1, step: 1, leads: true)) { return true }
+
         let before = skipping(from: range.lowerBound - 1, step: -1, leads: true)
-        return word(before) == "или" && isValueLike(skipping(from: before - 1, step: -1, leads: false))
+        guard word(before) == "или" else { return false }
+        let other = skipping(from: before - 1, step: -1, leads: false)
+        if isValue(kind, at: other) { return true }
+        guard kind == .day else { return false }
+        // «до 18:00 или завтра» — сегодня к шести или завтра; «завтра в 10 или
+        // послезавтра» — со стороны «послезавтра».
+        return isTimeValue(other) || isValue(.day, at: skippingTime(from: other, step: -1))
     }
 
     /// Значение принимается, если это не одно из двух на выбор; иначе его
     /// куски больше не разбираются.
-    mutating func accept(_ range: ClosedRange<Int>) -> Bool {
-        guard isAlternative(range) else { return true }
+    mutating func accept(_ range: ClosedRange<Int>, as kind: ValueKind) -> Bool {
+        guard isAlternative(range, of: kind) else { return true }
         for index in range { blocked[index] = true }
         return false
     }
@@ -335,21 +349,89 @@ nonisolated private struct QuickTaskParseState {
         return index
     }
 
-    /// Похоже на значение параметра: число, время, дата, день, единица
-    /// времени или число словами.
-    private func isValueLike(_ index: Int) -> Bool {
+    /// Первое место в эту сторону после времени: «в 10», «к 7 вечера», «15:00».
+    private func skippingTime(from index: Int, step: Int) -> Int {
+        var index = index
+        var steps = 0
+        while tokens.indices.contains(index), !consumed[index], steps < 5 {
+            let token = tokens[index]
+            let isTimePiece: Bool
+            switch token.kind {
+            case .clock, .number, .pause:
+                isTimePiece = true
+            case .word:
+                isTimePiece = QuickTaskWords.alternativeLeads.contains(token.word) || QuickTaskWords.clockWords.contains(token.word)
+            case .date, .mark, .end:
+                isTimePiece = false
+            }
+            guard isTimePiece else { break }
+            index += step
+            steps += 1
+        }
+        return index
+    }
+
+    /// Значение нужного рода в этом месте. Отложенные альтернативы тоже в
+    /// счёт: «завтра» в «завтра или послезавтра» уже отложено, но оно день.
+    private func isValue(_ kind: ValueKind, at index: Int) -> Bool {
+        switch kind {
+        case .day: return isDayValue(index)
+        case .time: return isTimeValue(index)
+        case .deadline: return isDayValue(index) || isTimeValue(index)
+        case .duration: return isDurationValue(index)
+        }
+    }
+
+    /// «завтра», «пятницу», «эту среду», «15 октября», «15.10».
+    private func isDayValue(_ index: Int) -> Bool {
         guard tokens.indices.contains(index), !consumed[index] else { return false }
+        let next = tokens.indices.contains(index + 1) ? tokens[index + 1].word : ""
         switch tokens[index].kind {
-        case .number, .clock, .date: return true
+        case .date:
+            return true
+        case .number:
+            return QuickTaskWords.months[next] != nil || next == "числа"
         case .word:
             let word = tokens[index].word
-            // «эту пятницу», «следующей неделе» — значение; просто «это» — нет.
+            // «эту пятницу», «следующей неделе» — день; просто «это» — нет.
             if QuickTaskWords.thisWords.contains(word) || QuickTaskWords.nextWords.contains(word) {
-                let next = tokens.indices.contains(index + 1) ? tokens[index + 1].word : ""
                 return QuickTaskWords.weekdays[next] != nil || next == "неделе" || next == "неделю"
             }
-            return QuickTaskWords.isValueWord(word)
-        case .mark, .pause, .end: return false
+            return QuickTaskWords.dayWords.contains(word) || QuickTaskWords.weekdays[word] != nil
+                || QuickTaskWords.weekdayAbbreviations[word] != nil || QuickTaskWords.months[word] != nil
+        case .clock, .mark, .pause, .end:
+            return false
+        }
+    }
+
+    /// «15:00», «11», «полдень», «вечера».
+    private func isTimeValue(_ index: Int) -> Bool {
+        guard tokens.indices.contains(index), !consumed[index] else { return false }
+        switch tokens[index].kind {
+        case .clock:
+            return true
+        case .number(let value):
+            return value >= 0 && value <= 23 && value == value.rounded()
+        case .word:
+            let word = tokens[index].word
+            return QuickTaskWords.timeWords.contains(word) || CheckInText.numberWords[word] != nil
+        case .date, .mark, .pause, .end:
+            return false
+        }
+    }
+
+    /// «45», «час», «полчаса», «полтора».
+    private func isDurationValue(_ index: Int) -> Bool {
+        guard tokens.indices.contains(index), !consumed[index] else { return false }
+        switch tokens[index].kind {
+        case .number:
+            return true
+        case .word:
+            let word = tokens[index].word
+            return CheckInText.isUnit(word) || CheckInText.numberWords[word] != nil
+                || ["полчаса", "полчасика", "полдня"].contains(word)
+        case .clock, .date, .mark, .pause, .end:
+            return false
         }
     }
 
@@ -455,7 +537,7 @@ nonisolated private struct QuickTaskParseState {
             let before = (parse, deadlineTime)
             guard let part = applyDeadline(at: next) else { continue }
             let range = start...lastDeadlineIndex
-            if !accept(range) {
+            if !accept(range, as: .deadline) {
                 // «до пятницы или до субботы» — срока не знаем.
                 (parse, deadlineTime) = before
                 continue
@@ -490,6 +572,13 @@ nonisolated private struct QuickTaskParseState {
             return .deadline
         }
         guard let keyword = word(index) else { return nil }
+        // «к завтрашнему обеду», «до сегодняшнего вечера».
+        if let offset = QuickTaskWords.dayAdjectives[keyword], let next = word(index + 1),
+           let moment = partOfDay(next) {
+            parse.deadline = time.date(on: time.adding(days: offset, to: time.today), at: moment)
+            lastDeadlineIndex = index + 1
+            return .deadline
+        }
         var part = QuickTaskParse.Part.deadline
         switch keyword {
         case "вечера", "вечеру":
@@ -522,6 +611,18 @@ nonisolated private struct QuickTaskParseState {
         return part
     }
 
+    /// Время части дня для срока: «до обеда» — 12:00, «до вечера» — 18:00,
+    /// «до утра» — 10:00, «до конца дня» — конец рабочего дня.
+    private func partOfDay(_ word: String) -> TimeOfDay? {
+        switch word {
+        case "утра", "утру": return TimeOfDay(hour: 10)
+        case "обеда", "обеду": return TimeOfDay(hour: 12)
+        case "вечера", "вечеру": return TimeOfDay(hour: 18)
+        case "дня": return profile.workdayEnd
+        default: return nil
+        }
+    }
+
     private func endOfMonth() -> Date {
         let calendar = time.calendar
         let start = calendar.dateInterval(of: .month, for: time.today)?.end ?? time.adding(days: 30, to: time.today)
@@ -536,27 +637,27 @@ nonisolated private struct QuickTaskParseState {
             guard parse.day == nil else { return }
             guard let first = word(index) else {
                 // «15.10», «15 октября» без предлога.
-                if let (day, last) = dayExpression(at: index, allowAbbreviation: false), accept(index...last) {
+                if let (day, last) = dayExpression(at: index, allowAbbreviation: false), accept(index...last, as: .day) {
                     consume(index...last, as: .day)
                     parse.day = taskDay(for: day)
                 }
                 continue
             }
             if first == "на" || first == "в" || first == "во" {
-                if let (day, last) = dayAfterPreposition(first, at: index + 1), accept(index...last) {
+                if let (day, last) = dayAfterPreposition(first, at: index + 1), accept(index...last, as: .day) {
                     consume(index...last, as: .day)
                     parse.day = day
                 }
                 continue
             }
             if first == "через", let (day, last) = dayAfterThrough(at: index + 1) {
-                if accept(index...last) {
+                if accept(index...last, as: .day) {
                     consume(index...last, as: .day)
                     parse.day = day
                 }
                 continue
             }
-            if let (day, last) = dayExpression(at: index, allowAbbreviation: false), accept(index...last) {
+            if let (day, last) = dayExpression(at: index, allowAbbreviation: false), accept(index...last, as: .day) {
                 consume(index...last, as: .day)
                 parse.day = taskDay(for: day)
             }
@@ -744,11 +845,11 @@ nonisolated private struct QuickTaskParseState {
             guard parse.startTime == nil else { return }
             if let first = word(index), first == "в" || first == "во" || first == "на" {
                 // «на 2 часа» — длительность, поэтому после «на» только «15:00».
-                if let (value, last) = clock(at: index + 1, allowNumber: first != "на", bare: true), accept(index...last) {
+                if let (value, last) = clock(at: index + 1, allowNumber: first != "на", bare: true), accept(index...last, as: .time) {
                     consume(index...last, as: .startTime)
                     parse.startTime = value
                 }
-            } else if case .clock(let value) = tokens[index].kind, accept(index...index) {
+            } else if case .clock(let value) = tokens[index].kind, accept(index...index, as: .time) {
                 consume(index...index, as: .startTime)
                 parse.startTime = value
             }
@@ -827,7 +928,7 @@ nonisolated private struct QuickTaskParseState {
                 while let lead = word(start - 1), QuickTaskWords.durationLeads.contains(lead) { start -= 1 }
             }
             // «30 минут или час» — сколько займёт, не сказано.
-            if !accept(start...end) { continue }
+            if !accept(start...end, as: .duration) { continue }
             consume(start...end, as: .duration)
             parse.minutes = minutes
         }
