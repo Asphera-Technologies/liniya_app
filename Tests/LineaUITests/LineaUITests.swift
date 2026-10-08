@@ -137,14 +137,15 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "12 План: задача без дня со сроком")
     }
 
-    // MARK: - 3. Цель: важность, подсказка, явная связь
+    // MARK: - 3. Цель: важность, подсказка «Похоже, относится к», явная связь
 
     @MainActor
     func test3GoalImportanceAndLinking() throws {
         let app = launch()
         openTab(app, "План", index: 1)
-        createGoal(app, "Запустить MVP Linea", details: "Есть прототип. Хочу выпустить первую версию в TestFlight.")
-        let goalRow = button(app, startingWith: "Запустить MVP Linea")
+        createGoal(app, "Запустить Линия Beta",
+                   details: "Есть прототип приложения, идёт переработка онбординга. Хотим выпустить бету через TestFlight.")
+        let goalRow = button(app, startingWith: "Запустить Линия Beta")
         XCTAssertTrue(goalRow.waitForExistence(timeout: 5), "Цель в плане")
 
         // Важность — в карточке цели.
@@ -155,32 +156,54 @@ final class LineaUITests: XCTestCase {
         app.navigationBars.buttons["Готово"].tap()
         XCTAssertTrue(app.buttons["Высокая"].waitForNonExistence(timeout: 5))
 
+        // Пример заказчика: общих слов с целью нет, а связь Linea видит.
         let field = openQuickAdd(app)
         field.tap()
-        field.typeText("Запустить лендинг")
-        let hint = chip(app, "Похоже, к цели")
-        XCTAssertTrue(hint.waitForExistence(timeout: 5), "Похожая цель подсказывается в чипе")
-        snapshot(app, "14 Подсказка цели")
-        hint.tap()
-        let link = app.buttons["Связать с целью «Запустить MVP Linea»"]
-        XCTAssertTrue(link.waitForExistence(timeout: 5))
-        snapshot(app, "15 Меню цели")
-        link.tap()
-        XCTAssertTrue(chip(app, "Цель: Запустить MVP Linea").waitForExistence(timeout: 5), "Связь ставит человек")
+        field.typeText("Опубликовать сборку в TestFlight")
+        let suggestion = app.staticTexts["goalSuggestion.title"]
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 5), "Linea подсказывает вероятную цель")
+        XCTAssertEqual(suggestion.label, "Запустить Линия Beta")
+        XCTAssertTrue(app.staticTexts["Похоже, относится к:"].exists)
+        XCTAssertTrue(chip(app, "Цель не выбрана").exists, "Подсказка не связывает сама")
+        snapshot(app, "14 Похоже, относится к цели")
+        app.buttons["goalSuggestion.link"].tap()
+        XCTAssertTrue(chip(app, "Цель: Запустить Линия Beta").waitForExistence(timeout: 5), "«Связать» ставит цель")
+        XCTAssertFalse(app.staticTexts["goalSuggestion.title"].exists, "Связано — подсказки больше нет")
+        snapshot(app, "15 Связано")
         app.buttons["Добавить задачу"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: 5))
 
+        // Ничего не нажал — задача спокойно живёт без цели.
+        let ignored = openQuickAdd(app)
+        ignored.tap()
+        ignored.typeText("Проверить онбординг сегодня")
+        XCTAssertTrue(app.staticTexts["goalSuggestion.title"].waitForExistence(timeout: 5), "Онбординг — из рассказа о цели")
+        app.buttons["Добавить задачу"].tap()
+        XCTAssertTrue(ignored.waitForNonExistence(timeout: 5))
+
         let explicit = openQuickAdd(app)
         explicit.tap()
-        explicit.typeText("Подготовить релиз для цели MVP")
-        XCTAssertTrue(chip(app, "Цель: Запустить MVP Linea").waitForExistence(timeout: 5), "«для цели …» связывает сразу")
+        explicit.typeText("Подготовить релиз для цели Beta")
+        XCTAssertTrue(chip(app, "Цель: Запустить Линия Beta").waitForExistence(timeout: 5), "«для цели …» связывает сразу")
         snapshot(app, "16 Цель названа словами")
         app.buttons["Добавить задачу"].tap()
         XCTAssertTrue(explicit.waitForNonExistence(timeout: 5))
 
         openTab(app, "План", index: 1)
         XCTAssertTrue(button(app, startingWith: "Подготовить релиз").waitForExistence(timeout: 5))
+        let check = button(app, startingWith: "Проверить онбординг")
+        XCTAssertTrue(check.waitForExistence(timeout: 5), "Задача без цели — на месте")
         snapshot(app, "17 План с целью")
+
+        // В карточке задачи без цели подсказка та же — и тоже ничего не решает сама.
+        bringAboveCommandBar(check, in: app)
+        check.tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForExistence(timeout: 5))
+        let noGoal = app.buttons.matching(NSPredicate(format: "label == %@ AND isSelected == true", "Без цели")).firstMatch
+        XCTAssertTrue(noGoal.exists, "Задача сохранена без цели")
+        XCTAssertTrue(app.staticTexts["goalSuggestion.title"].exists, "Карточка тоже подсказывает цель")
+        snapshot(app, "17a Карточка: похоже, относится к цели")
+        app.navigationBars["Задача"].buttons["Отмена"].tap()
     }
 
     // MARK: - 4. Карточка: тип задачи и «Сначала нужно»
