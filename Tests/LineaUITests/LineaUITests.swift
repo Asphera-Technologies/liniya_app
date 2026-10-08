@@ -711,7 +711,9 @@ final class LineaUITests: XCTestCase {
     }
 
     /// Строка выше строки ассистента: низ экрана перекрыт ею и вкладками, и
-    /// жест по строке под ними попал бы в них.
+    /// жест по строке под ними попал бы в них. И строка стоит на месте: после
+    /// «Готово» список переставляет задачи с анимацией, а жест по едущей
+    /// строке не срабатывает.
     @MainActor
     private func bringAboveCommandBar(_ element: XCUIElement, in app: XCUIApplication) {
         let bar = app.buttons["Новая задача"].firstMatch
@@ -719,6 +721,21 @@ final class LineaUITests: XCTestCase {
         while element.exists, bar.exists, element.frame.maxY > bar.frame.minY - 12, attempts < 4 {
             app.swipeUp()
             attempts += 1
+        }
+        waitUntilStill(element)
+    }
+
+    /// Ждать, пока рамка элемента не перестанет меняться (до трёх секунд).
+    @MainActor
+    private func waitUntilStill(_ element: XCUIElement, timeout: TimeInterval = 3) {
+        guard element.exists else { return }
+        var last = element.frame
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.3)
+            let current = element.frame
+            if current == last { return }
+            last = current
         }
     }
 
