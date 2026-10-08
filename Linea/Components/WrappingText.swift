@@ -30,9 +30,17 @@ struct WrappingText: UIViewRepresentable {
     }
 
     func updateUIView(_ label: UILabel, context: Context) {
-        label.text = text
-        label.font = UIFont.preferredFont(forTextStyle: textStyle)
-        label.textColor = UIColor(color)
+        // Без переносов по слогам: UILabel ставит их по-русски сам, и название
+        // задачи в кавычках рвалось бы на «Под-готовить».
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.hyphenationFactor = 0
+        paragraph.usesDefaultHyphenation = false
+        label.attributedText = NSAttributedString(string: text, attributes: [
+            .font: UIFont.preferredFont(forTextStyle: textStyle),
+            .foregroundColor: UIColor(color),
+            .paragraphStyle: paragraph,
+        ])
         label.accessibilityLabel = accessibilityText ?? text
     }
 
