@@ -236,8 +236,9 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(now.staticTexts["Ответить на письма"].exists, "До встречи 25 минут — сейчас короткое дело")
         let reason = now.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "лучше после встречи")).firstMatch
         XCTAssertTrue(reason.exists, "Стратегия — после встречи")
-        XCTAssertTrue(reason.label.hasPrefix("До встречи осталось"), reason.label)
-        XCTAssertTrue(reason.label.contains("«Подготовить стратегию» лучше после встречи: на неё нужно 1 ч 30 мин"), reason.label)
+        XCTAssertTrue(reason.label.hasPrefix("До встречи "), reason.label)
+        XCTAssertTrue(reason.label.hasSuffix("— на это хватит, а «Подготовить стратегию» лучше после встречи."), reason.label)
+        XCTAssertFalse(reason.label.dropLast().contains("."), "Причина — одно предложение: \(reason.label)")
         XCTAssertTrue(now.buttons["Начать"].exists)
         scrollTo(now, in: app)
         snapshot(app, "21 Сейчас: короткое дело до встречи")
@@ -258,6 +259,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(now.waitForExistence(timeout: 15))
         XCTAssertTrue(now.staticTexts["Ответить клиенту"].waitForExistence(timeout: 5), "Важное и короткое — первым")
         XCTAssertTrue(now.staticTexts["~15 мин"].exists)
+        XCTAssertTrue(now.staticTexts["Высокий приоритет — лучше не откладывать."].exists, "У рекомендации есть причина")
         scrollTo(now, in: app)
         snapshot(app, "24 Сейчас: одно действие")
 
@@ -272,6 +274,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(chosen.exists)
         chosen.tap()
         XCTAssertTrue(now.staticTexts["Проверить сборку"].waitForExistence(timeout: 5), "Выбранное стало «сейчас»")
+        XCTAssertTrue(now.staticTexts["Короткая — можно закрыть сразу."].exists, "У выбранного — своя причина")
 
         now.buttons["Начать"].tap()
         XCTAssertTrue(now.buttons["Готово"].waitForExistence(timeout: 10), "Начатое — «в работе» с «Готово»")
