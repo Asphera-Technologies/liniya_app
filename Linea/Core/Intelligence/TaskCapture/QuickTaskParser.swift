@@ -95,6 +95,12 @@ nonisolated struct QuickTaskParser: Sendable {
         return state.result()
     }
 
+    /// Строка как есть, только пробелы схлопнуты и первая буква заглавная —
+    /// таким было бы название, если Linea ничего не поняла.
+    static func cleaned(_ text: String) -> String {
+        QuickTaskParseState.cleaned(text)
+    }
+
     /// «сложная», «быстро» в строке — подсказка о сложности; нет таких слов — nil.
     static func demand(in text: String) -> CognitiveDemand? {
         demand(in: CaptureTokenizer.tokens(text))

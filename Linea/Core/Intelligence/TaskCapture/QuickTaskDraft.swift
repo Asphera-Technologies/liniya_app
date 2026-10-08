@@ -166,6 +166,7 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
         result.demandOrigin = parsed.demand == nil ? .assumed : .typed
 
         result.recognized = parsed.recognized
+        result.isUnderstood = !parsed.recognized.isEmpty && result.title != QuickTaskParser.cleaned(text)
         return result
     }
 }
@@ -216,9 +217,10 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
     /// Сколько займёт: сказанное или обычное для типа задачи.
     var estimatedMinutes: Int { minutes ?? kind.typicalMinutes }
 
-    /// Linea что-то поняла из слов строки: вырезала служебное или нашла
-    /// параметры. Тогда экран показывает задачу так, как она сохранится.
-    var isUnderstood: Bool { !recognized.isEmpty }
+    /// Linea что-то поняла из слов строки и вырезала это из названия —
+    /// служебное или параметры. Тогда экран показывает задачу так, как она
+    /// сохранится. «Завтра» без названия — понимать нечего: название то же.
+    var isUnderstood = false
 
     /// Что задал человек: сказал словами или выбрал в чипе. Сказанное
     /// («высокий приоритет») — тоже его, а не догадка Linea; «Без даты» и

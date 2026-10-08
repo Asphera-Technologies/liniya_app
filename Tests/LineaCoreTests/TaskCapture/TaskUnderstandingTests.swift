@@ -248,6 +248,11 @@ struct TaskUnderstandingTests {
         #expect(filler.isUnderstood)
         #expect(filler.title == "Купить хлеб")
         #expect(QuickTaskText.summary(filler, time: time) == "")
+        // Одно «завтра» — название то же, показывать «как поняла» нечего.
+        let bare = resolve(QuickTaskDraft(text: "завтра"))
+        #expect(bare.title == "Завтра")
+        #expect(bare.day == .tomorrow)
+        #expect(!bare.isUnderstood)
     }
 
     @Test("Старая запись дня без отметок человека читается: всё считается заданным им")
