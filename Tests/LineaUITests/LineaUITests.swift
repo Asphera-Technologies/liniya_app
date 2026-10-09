@@ -755,12 +755,23 @@ final class LineaUITests: XCTestCase {
     @MainActor
     private func addTask(_ app: XCUIApplication, _ text: String) {
         let field = openQuickAdd(app)
-        field.tap()
+        focus(field, in: app)
         field.typeText(text)
         let add = app.buttons["Добавить задачу"]
         XCTAssertTrue(add.isEnabled)
         add.tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: 5), "«\(text)» не добавилась")
+    }
+
+    /// Тап по полю, пока не появится клавиатура. Лист сам ставит фокус при
+    /// появлении, и на подтормаживающем симуляторе поле получало его и тут же
+    /// теряло — набор без клавиатуры падает.
+    @MainActor
+    private func focus(_ field: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<3 {
+            field.tap()
+            if app.keyboards.firstMatch.waitForExistence(timeout: 5) { return }
+        }
     }
 
     @MainActor
