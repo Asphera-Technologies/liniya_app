@@ -322,6 +322,29 @@ struct TaskExecutionTests {
         #expect(done.task.actualMinutes == nil, "Не начинали — сколько заняло, неизвестно")
     }
 
+    @Test("Отведённое время вышло, а задача начата — «Сейчас» показывает её в работе, а не «Начать» заново")
+    func overrunStaysStarted() throws {
+        let time = WowFixture.time(10)
+        var tasks = errands
+        let action = try #require(nextAction.run(record: record(tasks, at: time), tasks: tasks, calibration: .default, time: time))
+        let index = try #require(tasks.firstIndex { $0.id == action.taskID })
+        let output = try #require(execution.run(.start, task: tasks[index], record: record(tasks, at: time),
+                                                plannedMinutes: 15, at: time.now))
+        tasks[index] = output.task
+        let day = try #require(output.record)
+        // 15 минут отведено, действие «идёт» до 10:30; в 10:40 Linea снова выбирает её.
+        #expect(day.activeAction(tasks: tasks, at: WowFixture.moment(10, 40)) == nil)
+        let later = try #require(nextAction.run(record: day, tasks: tasks, calibration: .default, time: WowFixture.time(10, 40)))
+        #expect(later.taskID == tasks[index].id)
+        #expect(later.isStarted, "Всё ещё в работе")
+        #expect(later.startedAt == time.now, "Время начала прежнее")
+        #expect(later.facts.contains(.actionStarted(at: time.now, minutes: 15)))
+        #expect(!later.alternatives.contains { $0.taskID == tasks[index].id })
+        // Журнал не считает это новым предложением.
+        #expect(SuggestionLog.tracking(later, newID: id(91), isAlternative: false, in: day, at: WowFixture.moment(10, 40))
+            .suggestions == day.suggestions)
+    }
+
     @Test("В работе одно дело: «Начать» другое снимает с работы прежнее, не откладывая")
     func oneStartedAtATime() throws {
         let time = WowFixture.time(10)

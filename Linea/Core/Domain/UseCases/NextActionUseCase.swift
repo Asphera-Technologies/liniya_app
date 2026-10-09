@@ -71,18 +71,7 @@ nonisolated struct NextActionUseCase: Sendable {
         // Человек уже взялся за действие — оно и есть «сейчас».
         if let active, let title = titles[active.start.taskID] {
             let option = NextAction.Option(taskID: active.start.taskID, title: title, minutes: active.start.minutes)
-            let alternatives = actionable.filter { $0.taskID != option.taskID }
-                .prefix(Self.maxAlternatives)
-                .compactMap { Self.option($0, titles: titles) }
-            let facts: [Fact] = [
-                .nowAction(taskID: option.taskID, title: title),
-                .actionStarted(at: active.at, minutes: active.start.minutes),
-            ]
-            let explanation = render(facts, snapshot: snapshot, time: time)
-            return NextAction(
-                option: option, alternatives: Array(alternatives), laterTaskID: nil, startedAt: active.at,
-                headline: explanation.headline, reason: explanation.body, facts: facts
-            )
+            return started(option, at: active.at, actionable: actionable, titles: titles, snapshot: snapshot, time: time)
         }
 
         // Идёт встреча или рабочий день кончился — советовать нечего.
@@ -94,6 +83,14 @@ nonisolated struct NextActionUseCase: Sendable {
         let best = actionable.first { $0.taskID == preferred }
             ?? actionable.first { $0.taskID == plannedNow }
             ?? actionable.first
+
+        // Отведённое время вышло, а задача всё ещё начата, и Linea снова
+        // выбирает её — она по-прежнему в работе. «Начать» заново сбросило бы
+        // время начала, и «сколько заняло» стало бы неправдой.
+        if let best, let task = tasks.first(where: { $0.id == best.taskID }), task.isOpen,
+           let startedAt = task.startedAt, startedAt <= time.now, let option = Self.option(best, titles: titles) {
+            return started(option, at: startedAt, actionable: actionable, titles: titles, snapshot: snapshot, time: time)
+        }
         let alternatives = actionable.filter { $0.taskID != best?.taskID }
             .prefix(Self.maxAlternatives)
             .compactMap { Self.option($0, titles: titles) }
@@ -145,6 +142,29 @@ nonisolated struct NextActionUseCase: Sendable {
             headline: explanation.headline,
             reason: explanation.body,
             facts: facts
+        )
+    }
+
+    /// Начатое действие: «в работе», «Начато в 10:00.», остальное уместное — в «Другое».
+    private func started(
+        _ option: NextAction.Option,
+        at startedAt: Date,
+        actionable: [PriorityAssessment],
+        titles: [UUID: String],
+        snapshot: ContextSnapshot,
+        time: TimeContext
+    ) -> NextAction {
+        let alternatives = actionable.filter { $0.taskID != option.taskID }
+            .prefix(Self.maxAlternatives)
+            .compactMap { Self.option($0, titles: titles) }
+        let facts: [Fact] = [
+            .nowAction(taskID: option.taskID, title: option.title),
+            .actionStarted(at: startedAt, minutes: option.minutes),
+        ]
+        let explanation = render(facts, snapshot: snapshot, time: time)
+        return NextAction(
+            option: option, alternatives: Array(alternatives), laterTaskID: nil, startedAt: startedAt,
+            headline: explanation.headline, reason: explanation.body, facts: facts
         )
     }
 
