@@ -267,10 +267,10 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "21 Сейчас: короткое дело до встречи")
     }
 
-    // MARK: - 7. Одно действие: «Начать», «Другое», «Готово»
+    // MARK: - 7. Одно действие: «Начать», «Другое», «Завершить»
 
     @MainActor
-    func test7NowStartOtherDone() throws {
+    func test7NowStartOtherFinish() throws {
         let app = launch()
         addTask(app, "Ответить клиенту сегодня 15 минут, важно")
         addTask(app, "Проверить сборку сегодня 15 минут")
@@ -283,6 +283,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(now.staticTexts["Ответить клиенту"].waitForExistence(timeout: 5), "Важное и короткое — первым")
         XCTAssertTrue(now.staticTexts["~15 мин"].exists)
         XCTAssertTrue(now.staticTexts["Высокий приоритет — лучше не откладывать."].exists, "У рекомендации есть причина")
+        XCTAssertTrue(now.buttons["Не сейчас"].exists, "У предложения есть «Не сейчас»")
         scrollTo(now, in: app)
         snapshot(app, "24 Сейчас: одно действие")
 
@@ -300,15 +301,106 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(now.staticTexts["Короткая — можно закрыть сразу."].exists, "У выбранного — своя причина")
 
         now.buttons["Начать"].tap()
-        XCTAssertTrue(now.buttons["Готово"].waitForExistence(timeout: 10), "Начатое — «в работе» с «Готово»")
+        XCTAssertTrue(now.buttons["Завершить"].waitForExistence(timeout: 10), "Начатое — «в работе» с «Завершить»")
+        XCTAssertTrue(now.buttons["Не сейчас"].exists, "Начатое можно отложить")
+        XCTAssertFalse(now.buttons["Другое"].exists, "У начатого «Другое» нет")
         XCTAssertTrue(now.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Начато в")).firstMatch.exists)
         scrollTo(now, in: app)
         snapshot(app, "26 В работе")
 
-        now.buttons["Готово"].tap()
-        XCTAssertTrue(now.buttons["Начать"].waitForExistence(timeout: 10), "После «Готово» — следующее действие")
+        now.buttons["Завершить"].tap()
+        XCTAssertTrue(now.buttons["Начать"].waitForExistence(timeout: 10), "После «Завершить» — следующее действие")
         XCTAssertFalse(now.staticTexts["Проверить сборку"].exists)
         snapshot(app, "27 Следующее действие")
+    }
+
+    // MARK: - 12. Состояния задачи: «Начать», «Не сейчас», «Завершить» везде
+
+    @MainActor
+    func test12StartNotNowFinish() throws {
+        let app = launch()
+        addTask(app, "Ответить клиенту сегодня 15 минут, важно")
+        addTask(app, "Проверить сборку сегодня 15 минут")
+        addTask(app, "Разобрать письмо сегодня 10 минут")
+
+        // «Сейчас»: три действия.
+        openTab(app, "Сегодня", index: 0)
+        let now = nowCard(app)
+        XCTAssertTrue(now.waitForExistence(timeout: 15))
+        XCTAssertTrue(now.staticTexts["Ответить клиенту"].waitForExistence(timeout: 5), "Важное — первым")
+        for action in ["Начать", "Не сейчас", "Другое"] {
+            XCTAssertTrue(now.buttons[action].exists, "У «Сейчас» есть «\(action)»")
+        }
+        scrollTo(now, in: app)
+        snapshot(app, "50 Сейчас: Начать, Не сейчас, Другое")
+
+        // «Не сейчас» — Linea предлагает другое, отложенное ждёт полтора часа.
+        now.buttons["Не сейчас"].tap()
+        XCTAssertTrue(now.staticTexts["Ответить клиенту"].waitForNonExistence(timeout: 10), "После «Не сейчас» — другое дело")
+        XCTAssertTrue(now.buttons["Начать"].waitForExistence(timeout: 5))
+        let started = now.staticTexts["Проверить сборку"].exists ? "Проверить сборку" : "Разобрать письмо"
+        let other = started == "Проверить сборку" ? "Разобрать письмо" : "Проверить сборку"
+        XCTAssertTrue(now.staticTexts[started].exists, "Предложено одно из оставшихся")
+        scrollTo(now, in: app)
+        snapshot(app, "51 Сейчас после «Не сейчас»")
+
+        // «Начать» — в работе: «Завершить» и «Не сейчас», без «Другое».
+        now.buttons["Начать"].tap()
+        XCTAssertTrue(now.buttons["Завершить"].waitForExistence(timeout: 10), "Начатое — с «Завершить»")
+        XCTAssertTrue(now.buttons["Не сейчас"].exists)
+        XCTAssertFalse(now.buttons["Другое"].exists, "У начатого «Другое» нет")
+        XCTAssertTrue(now.staticTexts[started].exists)
+        scrollTo(now, in: app)
+        snapshot(app, "52 Сейчас: в работе")
+
+        // «План»: начатая и отложенная подписаны.
+        openTab(app, "План", index: 1)
+        let deferredRow = button(app, startingWith: "Ответить клиенту")
+        XCTAssertTrue(deferredRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(deferredRow.label.contains("Не сейчас — до "), "Отложенная подписана: \(deferredRow.label)")
+        let startedRow = button(app, startingWith: started)
+        XCTAssertTrue(startedRow.label.contains("В работе с "), "Начатая подписана: \(startedRow.label)")
+        snapshot(app, "53 План: в работе и не сейчас")
+
+        // Карточка начатой: как идёт, «Завершить» — и сколько заняло на самом деле.
+        bringAboveCommandBar(startedRow, in: app)
+        startedRow.tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForExistence(timeout: 5))
+        let status = app.staticTexts["task.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5), "В карточке видно, как идёт задача")
+        XCTAssertTrue(status.label.hasPrefix("В работе с "), status.label)
+        XCTAssertTrue(app.buttons["Не сейчас"].exists)
+        snapshot(app, "54 Карточка: в работе")
+        app.buttons["Завершить"].tap()
+        let done = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "Сделано в [0-9]{1,2}:[0-9]{2} · за [0-9]+ мин"))
+            .firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "Сделано и сколько заняло: \(status.label)")
+        XCTAssertFalse(app.buttons["Завершить"].exists, "Сделанную не завершают второй раз")
+        XCTAssertFalse(app.buttons["Начать"].exists)
+        snapshot(app, "55 Карточка: сделано и сколько заняло")
+        app.navigationBars["Задача"].buttons["Отмена"].tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForNonExistence(timeout: 5))
+
+        // Меню строки: «Начать», у начатой — «Завершить» и «Не сейчас».
+        let otherRow = button(app, startingWith: other)
+        XCTAssertTrue(otherRow.waitForExistence(timeout: 5))
+        bringAboveCommandBar(otherRow, in: app)
+        otherRow.press(forDuration: 1.2)
+        tapMenuItem(app, "Начать")
+        let startedOther = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@", other, "В работе с "))
+            .firstMatch
+        XCTAssertTrue(startedOther.waitForExistence(timeout: 5), "«Начать» из меню")
+        bringAboveCommandBar(startedOther, in: app)
+        startedOther.press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["Завершить"].waitForExistence(timeout: 5), "У начатой в меню — «Завершить»")
+        XCTAssertTrue(app.buttons["Не сейчас"].exists)
+        XCTAssertFalse(app.buttons["Начать"].exists, "Начатую не начинают второй раз")
+        snapshot(app, "56 Меню начатой задачи")
+        tapMenuItem(app, "Не сейчас")
+        let deferredOther = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@", other, "Не сейчас — до "))
+            .firstMatch
+        XCTAssertTrue(deferredOther.waitForExistence(timeout: 5), "«Не сейчас» из меню")
+        snapshot(app, "57 План после «Не сейчас» из меню")
     }
 
     // MARK: - 8. «Без даты»: без вопроса «Когда?», список и разбор
