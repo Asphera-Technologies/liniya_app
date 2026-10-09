@@ -16,7 +16,7 @@ Linea/
 ├── Core/         Foundation-only. Domain models, protocols, use cases, engines, connector logic
 │   ├── Domain/{Models,Protocols,UseCases}
 │   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,Priority,FeedbackEngine,LLM,CheckIn,
-│   │                 Memory,TaskCapture,Classification,Inbox,GoalIntake}
+│   │                 Memory,TaskCapture,Classification,Inbox,GoalIntake,GoalMatcher,Execution}
 │   └── Connectors/   Foundation-only parts of connectors (Nutrition, Calendar)
 ├── Data/         Apple frameworks allowed: SwiftData entities and Local* repositories,
 │                 HealthKit reader, EventKit provider, LLM client (chat), on-device speech (GigaAM, Apple)
@@ -86,8 +86,8 @@ PriorityEngine → importance + action per task (§16): what matters, what fits 
         ↓
 DecisionEngine → DayPlan (time blocks, top-3, recommendations; leftover time — a couple of
                  «Без даты» tasks) + NudgeEngine → Nudges
-               + NextActionUseCase → one NextAction on Today: «Начать» / «Другое» (§17),
-                 always with one short reason (NowReasoner, §22)
+               + NextActionUseCase → one NextAction on Today: «Начать» / «Не сейчас» /
+                 «Другое» (§17), always with one short reason (NowReasoner, §22)
         ↓
 Explainer      → Russian text (rule-based always; on-device LLM optional, validated)
         ↓
@@ -114,6 +114,24 @@ set Linea never overwrites (ADR-031). The likely goal is found by meaning
 Plan open the same sheet. Nothing said about the day — the task goes to «Без
 даты» (ADR-028, §18): no «Когда?», a place is found by the plan or a one-minute
 review.
+
+### Task execution
+
+```text
+«Начать» / «Завершить» («Готово») / «Не сейчас» / «Удалить» / «Вернуть»
+  — «Сейчас», меню строки, карточка задачи, напоминание «Закрываем сейчас»
+        ↓  IntelligenceStore.perform — one entry point for every screen
+TaskExecutionUseCase: TaskLifecycle (startedAt, completedAt + actualMinutes,
+  deferredUntil, cancelledAt) + SuggestionLog (accepted / declined / otherChosen)
+        ↓  the day first, then the task: the replan reads the new day
+DayRecord: suggestions + feedback (actionStarted, taskFinished, taskNotNow,
+  taskCancelled, taskReopened) · PlanStore.saveTasks → replan
+```
+
+The seven states (`TaskStatus`) are derived from these fields, never stored
+(ADR-034, §24). «Сейчас» logs what it suggests only while Today is open, so a
+suggestion means the person saw it. A cancelled task stays in storage but
+`PlanStore.tasks` never returns it.
 
 ### New goal
 
