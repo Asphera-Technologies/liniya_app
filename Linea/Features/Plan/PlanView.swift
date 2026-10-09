@@ -117,12 +117,10 @@ struct PlanView: View {
                     ForEach(Array(inbox.enumerated()), id: \.element.id) { index, task in
                         TaskRow(
                             task: task,
-                            onToggle: { Task { await plan.toggleTask(task) } },
+                            onToggle: { Task { await intelligence.toggleDone(task) } },
                             onOpen: { editingTask = .edit(task) },
-                            onDelete: { Task { await plan.deleteTask(task) } },
-                            caption: task.isDone ? nil : intelligence.plannedStart(for: task.id).map {
-                                InboxReview.plannedCaption($0, time: intelligence.time)
-                            } ?? summary(of: task),
+                            onDelete: { Task { await intelligence.perform(.cancel, on: task) } },
+                            caption: inboxCaption(for: task),
                             actions: rowActions(for: task)
                         )
                         if index < inbox.count - 1 { LineaHairline() }
@@ -145,10 +143,10 @@ struct PlanView: View {
                         ForEach(Array(section.tasks.enumerated()), id: \.element.id) { index, task in
                             TaskRow(
                                 task: task,
-                                onToggle: { Task { await plan.toggleTask(task) } },
+                                onToggle: { Task { await intelligence.toggleDone(task) } },
                                 onOpen: { editingTask = .edit(task) },
-                                onDelete: { Task { await plan.deleteTask(task) } },
-                                caption: summary(of: task),
+                                onDelete: { Task { await intelligence.perform(.cancel, on: task) } },
+                                caption: TaskExecutionText.caption(of: task, time: intelligence.time) ?? summary(of: task),
                                 actions: rowActions(for: task)
                             )
                             if index < section.tasks.count - 1 { LineaHairline() }
@@ -177,10 +175,21 @@ struct PlanView: View {
         return text.isEmpty ? nil : text
     }
 
+    /// Под строкой «Без даты»: в работе или отложена, иначе — когда Linea
+    /// нашла ей время, иначе — что у неё задано. У закрытой — ничего.
+    private func inboxCaption(for task: LineaTask) -> String? {
+        guard !task.isDone else { return nil }
+        let time = intelligence.time
+        if let execution = TaskExecutionText.caption(of: task, time: time) { return execution }
+        if let start = intelligence.plannedStart(for: task.id) { return InboxReview.plannedCaption(start, time: time) }
+        return summary(of: task)
+    }
+
     /// Свайп вправо — «Готово», влево — «Перенести», долгое нажатие — меню.
     private func rowActions(for task: LineaTask) -> TaskRowActions {
         plan.rowActions(
             for: task,
+            intelligence: intelligence,
             onEdit: { editingTask = .edit(task) },
             onReschedule: { rescheduling = task }
         )

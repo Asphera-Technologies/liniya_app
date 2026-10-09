@@ -16,11 +16,17 @@
 //  Duration and «Сложность» are what let Linea match work to the energy the
 //  user actually has today.
 //
+//  Under the title — how the task is going («В работе с 10:12», «Сделано в
+//  11:05 · за 35 мин») and the three actions: «Начать», and for a started
+//  task «Завершить» and «Не сейчас». They act at once, like «Удалить»,
+//  through `IntelligenceStore`; edits are saved by «Готово» on top of them.
+//
 
 import SwiftUI
 
 struct TaskEditorView: View {
     @Environment(PlanStore.self) private var plan
+    @Environment(IntelligenceStore.self) private var intelligence
     @Environment(\.dismiss) private var dismiss
 
     /// The task being edited.
@@ -43,6 +49,8 @@ struct TaskEditorView: View {
     @State private var blockedBy: [UUID]
     /// «Готово» and «Удалить» fire once; a double tap used to save twice.
     @State private var isSaving = false
+    /// «Начать», «Завершить», «Не сейчас» — тоже по одному разу.
+    @State private var isExecuting = false
     @FocusState private var titleFocused: Bool
     @Namespace private var prioritySegments
     @Namespace private var demandSegments
@@ -75,6 +83,7 @@ struct TaskEditorView: View {
                     LineaTextField(placeholder: "Что нужно сделать?", text: $title, axis: .vertical)
                         .focused($titleFocused)
 
+                    executionSection
                     goalSection
                     prioritySection
                     demandSection
@@ -103,6 +112,52 @@ struct TaskEditorView: View {
             }
         }
         .presentationDragIndicator(.visible)
+    }
+
+    /// Задача сейчас: пока карточка открыта, её могли начать или закрыть.
+    private var current: LineaTask {
+        plan.tasks.first { $0.id == existing.id } ?? existing
+    }
+
+    // MARK: Execution
+
+    /// Как идёт задача и что с ней можно сделать прямо сейчас. Сделанную
+    /// возвращают галочкой в списке; здесь — только как всё было.
+    @ViewBuilder
+    private var executionSection: some View {
+        let task = current
+        let status = TaskExecutionText.status(of: task, time: intelligence.time)
+        if status != nil || task.isOpen {
+            VStack(alignment: .leading, spacing: 12) {
+                if let status {
+                    Text(status)
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("task.status")
+                }
+                if task.isOpen {
+                    FlowLayout(spacing: 12) {
+                        if task.startedAt == nil {
+                            LineaOutlineButton(title: "Начать") { execute(.start) }
+                        } else {
+                            LineaOutlineButton(title: "Завершить") { execute(.finish) }
+                            LineaOutlineButton(title: "Не сейчас") { execute(.notNow) }
+                        }
+                    }
+                    .disabled(isExecuting || isSaving)
+                }
+            }
+        }
+    }
+
+    private func execute(_ action: TaskExecutionUseCase.Action) {
+        guard !isExecuting, !isSaving else { return }
+        isExecuting = true
+        Task {
+            await intelligence.perform(action, on: current)
+            isExecuting = false
+        }
     }
 
     // MARK: Goal
@@ -389,12 +444,14 @@ struct TaskEditorView: View {
         }
     }
 
+    /// «Удалить» убирает задачу из планов: её больше нигде не видно, а в
+    /// данных она остаётся отменённой (`TaskLifecycle.cancel`).
     private var deleteButton: some View {
         Button(role: .destructive) {
             guard !isSaving else { return }
             isSaving = true
             Task {
-                await plan.deleteTask(existing)
+                await intelligence.perform(.cancel, on: current)
                 dismiss()
             }
         } label: {
@@ -450,28 +507,21 @@ struct TaskEditorView: View {
         guard !isSaving else { return }
         isSaving = true
         let day = hasDate ? Calendar.current.startOfDay(for: date) : nil
-        let result = LineaTask(
-            id: existing.id,
-            title: trimmedTitle,
-            notes: existing.notes,
-            date: day,
-            priority: priority,
-            isDone: existing.isDone,
-            createdAt: existing.createdAt,
-            deadline: hasDeadline ? moment(deadline, onto: day ?? deadline) : nil,
-            scheduledStart: hasStart ? moment(start, onto: day) : nil,
-            estimatedMinutes: estimatedMinutes,
-            cognitiveDemand: demand,
-            goalID: goalID,
-            completedAt: existing.completedAt,
-            kindOverride: kindOverride,
-            deferralCount: existing.deferralCount,
-            // Удалённые задачи из «Сначала нужно» не тянутся дальше.
-            blockedBy: blockedBy.filter { id in plan.tasks.contains { $0.id == id } },
-            inboxReviewedAt: existing.inboxReviewedAt,
-            // Что поменяно здесь, станет заданным человеком — это решает PlanStore.
-            userFields: existing.userFields
-        )
+        // Поверх свежей версии: «Начать» или «Завершить», нажатые здесь же,
+        // и всё, чего карточка не показывает, сохраняются как есть. Что
+        // поменяно здесь, станет заданным человеком — это решает PlanStore.
+        var result = current
+        result.title = trimmedTitle
+        result.date = day
+        result.priority = priority
+        result.deadline = hasDeadline ? moment(deadline, onto: day ?? deadline) : nil
+        result.scheduledStart = hasStart ? moment(start, onto: day) : nil
+        result.estimatedMinutes = estimatedMinutes
+        result.cognitiveDemand = demand
+        result.goalID = goalID
+        result.kindOverride = kindOverride
+        // Удалённые задачи из «Сначала нужно» не тянутся дальше.
+        result.blockedBy = blockedBy.filter { id in plan.tasks.contains { $0.id == id } }
         Task {
             await plan.saveTask(result)
             dismiss()

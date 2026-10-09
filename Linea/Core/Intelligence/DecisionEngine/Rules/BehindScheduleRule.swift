@@ -41,7 +41,7 @@ nonisolated struct BehindScheduleRule: RendererAwareNudgeRule {
         // `plan.topTaskIDs` is already the day's ranking: the first task that
         // claims a moment keeps it.
         for taskID in plan.topTaskIDs {
-            guard let task = taskByID[taskID], !task.isDone, !alreadyNudged.contains(taskID) else { continue }
+            guard let task = taskByID[taskID], task.isOpen, !alreadyNudged.contains(taskID) else { continue }
             guard let block = plan.blocks.first(where: { $0.kind == .focus && $0.taskID == taskID }) else { continue }
 
             var fireAt = max(block.end.addingTimeInterval(grace), now)

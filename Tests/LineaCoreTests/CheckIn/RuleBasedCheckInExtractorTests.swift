@@ -189,5 +189,15 @@ struct RuleBasedCheckInExtractorTests {
         #expect(relevant.contains(closedToday))
         #expect(relevant.contains(undated))
         #expect(!relevant.contains(tomorrow))
+
+        // Убранные из планов вечером не спрашиваются — ни на сегодня, ни без дня.
+        var cancelledToday = WowFixture.tasks[0]
+        cancelledToday.cancelledAt = WowFixture.moment(11)
+        var cancelledUndated = undated
+        cancelledUndated.cancelledAt = WowFixture.moment(11)
+        let withoutCancelled = CheckInRequest.relevantTasks(
+            from: [cancelledToday] + WowFixture.tasks.dropFirst() + [cancelledUndated], day: WowFixture.today, time: time
+        )
+        #expect(withoutCancelled.map(\.id) == WowFixture.tasks.dropFirst().map(\.id))
     }
 }

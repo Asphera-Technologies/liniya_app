@@ -322,7 +322,14 @@ nonisolated struct DecisionEngine: Sendable {
                         best = (task, minutes, assessment)
                     }
                 }
-                guard let choice = best else { break }
+                guard let choice = best else {
+                    // Nothing can start here, but a «Не сейчас» ends later in
+                    // this window: wait for it instead of giving the window up.
+                    let resumes = remaining.compactMap(\.deferredUntil).filter { $0 > cursor && $0 < window.end }.min()
+                    guard let resumes else { break }
+                    cursor = resumes
+                    continue
+                }
 
                 let end = cursor.addingTimeInterval(TimeInterval(choice.minutes * 60))
                 blocks.append(PlanBlock(

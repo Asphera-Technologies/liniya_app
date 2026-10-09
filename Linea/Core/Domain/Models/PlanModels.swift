@@ -107,6 +107,22 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     /// это помнить: тогда всё в ней считается заданным человеком.
     var userFields: Set<TaskField>?
 
+    // Выполнение (`TaskLifecycle`, состояние — `status(at:)`): что человек
+    // делал с задачей на самом деле.
+    /// «Начать»: когда человек взялся за задачу. «Не сейчас» снимает.
+    var startedAt: Date?
+    /// Сколько задача заняла на самом деле: от «Начать» до «Завершить».
+    /// `nil` — её не начинали или забыли завершить вовремя.
+    var actualMinutes: Int?
+    /// Предложение Linea, которое человек принял, взявшись за задачу или
+    /// закрыв её (`TaskSuggestion`).
+    var suggestionID: UUID?
+    /// «Не сейчас»: до этого момента Linea её не предлагает и не ставит в план.
+    var deferredUntil: Date?
+    /// Человек убрал задачу из планов. Она не показывается, но остаётся в
+    /// данных: отменённое — тоже поведение.
+    var cancelledAt: Date?
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -125,7 +141,12 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         deferralCount: Int = 0,
         blockedBy: [UUID] = [],
         inboxReviewedAt: Date? = nil,
-        userFields: Set<TaskField>? = nil
+        userFields: Set<TaskField>? = nil,
+        startedAt: Date? = nil,
+        actualMinutes: Int? = nil,
+        suggestionID: UUID? = nil,
+        deferredUntil: Date? = nil,
+        cancelledAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -145,6 +166,11 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         self.blockedBy = blockedBy
         self.inboxReviewedAt = inboxReviewedAt
         self.userFields = userFields
+        self.startedAt = startedAt
+        self.actualMinutes = actualMinutes
+        self.suggestionID = suggestionID
+        self.deferredUntil = deferredUntil
+        self.cancelledAt = cancelledAt
     }
 
     /// Мягкое чтение: задачи лежат и в документах дня (`DayRecord`), и
@@ -170,6 +196,11 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         blockedBy = try container.decodeIfPresent([UUID].self, forKey: .blockedBy) ?? []
         inboxReviewedAt = try container.decodeIfPresent(Date.self, forKey: .inboxReviewedAt)
         userFields = try container.decodeIfPresent(Set<TaskField>.self, forKey: .userFields)
+        startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
+        actualMinutes = try container.decodeIfPresent(Int.self, forKey: .actualMinutes)
+        suggestionID = try container.decodeIfPresent(UUID.self, forKey: .suggestionID)
+        deferredUntil = try container.decodeIfPresent(Date.self, forKey: .deferredUntil)
+        cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
     }
 
     // Duration without the user's estimate depends on what the task is —

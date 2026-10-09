@@ -4,9 +4,10 @@
 //
 //  Что можно сделать с задачей прямо в списке, не открывая карточку:
 //  свайп вправо — «Готово» (у закрытой — «Вернуть»), свайп влево —
-//  «Перенести», долгое нажатие — «Изменить», «Привязать к цели», «Изменить
-//  приоритет», «Удалить». Одинаково в «Плане» и в «Дальше» на «Сегодня».
-//  Строка только зовёт обработчики, решают сторы.
+//  «Перенести», долгое нажатие — «Начать» (у начатой — «Завершить» и «Не
+//  сейчас»), «Изменить», «Привязать к цели», «Изменить приоритет»,
+//  «Удалить». Одинаково в «Плане» и в «Дальше» на «Сегодня». Строка только
+//  зовёт обработчики, решают сторы.
 //
 
 import SwiftUI
@@ -15,7 +16,10 @@ import SwiftUI
 struct TaskRowActions {
     /// Цели, к которым можно привязать задачу: активные и та, что уже стоит.
     var goals: [LineaGoal]
+    /// «Готово» у открытой, «Вернуть» у закрытой; у начатой — «Завершить».
     var onDone: () -> Void
+    var onStart: () -> Void
+    var onNotNow: () -> Void
     var onReschedule: () -> Void
     var onEdit: () -> Void
     var onLinkGoal: (UUID?) -> Void
@@ -71,6 +75,22 @@ struct TaskActionsMenu: View {
     let actions: TaskRowActions
 
     var body: some View {
+        // Три действия выполнения: «Начать», а у начатой — «Завершить» и «Не сейчас».
+        if task.isOpen {
+            if task.startedAt == nil {
+                Button(action: actions.onStart) {
+                    Label("Начать", systemImage: "play")
+                }
+            } else {
+                Button(action: actions.onDone) {
+                    Label("Завершить", systemImage: "checkmark")
+                }
+                Button(action: actions.onNotNow) {
+                    Label("Не сейчас", systemImage: "clock.arrow.circlepath")
+                }
+            }
+            Divider()
+        }
         Button(action: actions.onEdit) {
             Label("Изменить", systemImage: "pencil")
         }

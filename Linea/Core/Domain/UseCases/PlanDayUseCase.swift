@@ -185,6 +185,7 @@ nonisolated struct PlanDayUseCase: Sendable {
             plan: plan,
             nudges: nudges,
             feedback: input.existing?.feedback ?? [],
+            suggestions: input.existing?.suggestions ?? [],
             updatedAt: time.now
         )
 

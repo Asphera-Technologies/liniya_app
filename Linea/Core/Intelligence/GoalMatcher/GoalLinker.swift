@@ -55,7 +55,7 @@ nonisolated struct GoalLinker: Sendable {
     /// Не нужна, если цель уже есть или человек сам выбрал «Без цели» — его
     /// решение Linea не переспрашивает.
     func suggestion(for task: LineaTask, goals: [LineaGoal]) -> GoalLink? {
-        guard !task.isDone, task.goalID == nil, task.userFields?.contains(.goal) != true else { return nil }
+        guard task.isOpen, task.goalID == nil, task.userFields?.contains(.goal) != true else { return nil }
         guard let match = matcher.bestMatch(for: task.title, in: goals) else { return nil }
         return GoalLink(goalID: match.goalID, source: .suggested, score: match.score)
     }

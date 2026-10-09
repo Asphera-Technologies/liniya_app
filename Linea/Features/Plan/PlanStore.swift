@@ -8,6 +8,11 @@
 //  mutation it reloads from the repository (the source of truth), which keeps
 //  Today and Plan in sync and stays correct once a remote/sync layer is added.
 //
+//  What happens to a task when the person works on it — «Начать»,
+//  «Завершить», «Не сейчас», «Удалить» — goes through `IntelligenceStore`
+//  (`TaskExecutionUseCase`): it also records the day's feedback and the answer
+//  to Linea's suggestion, then saves the task here.
+//
 
 import Foundation
 import Observation
@@ -18,6 +23,9 @@ final class PlanStore {
     private let taskRepository: TaskRepository
     private let goalRepository: GoalRepository
 
+    /// Задачи человека. Убранных из планов («Удалить», `cancelledAt`) здесь
+    /// нет: для экранов и движков их нет, но в хранилище они остаются —
+    /// отменённое тоже поведение.
     private(set) var tasks: [LineaTask] = []
     private(set) var goals: [LineaGoal] = []
     private(set) var errorMessage: String?
@@ -51,7 +59,7 @@ final class PlanStore {
 
     func load() async {
         do {
-            tasks = try await taskRepository.all()
+            tasks = try await taskRepository.all().filter { $0.cancelledAt == nil }
             goals = try await goalRepository.all()
             errorMessage = nil
             updateWarning()
@@ -114,15 +122,6 @@ final class PlanStore {
         TaskDeferral.counted(previous: previous, updated: TaskOwnership.saved(previous: previous, updated: updated), time: time)
     }
 
-    /// Marks a task done/undone. `completedAt` is what lets the plan know the
-    /// day is on track, so it is stamped here rather than in the UI.
-    func toggleTask(_ task: LineaTask) async {
-        var updated = task
-        updated.isDone.toggle()
-        updated.completedAt = updated.isDone ? Date() : nil
-        await saveTask(updated)
-    }
-
     /// The "переносим" answer to a nudge: move the task to another day and
     /// let the plan rebuild without it.
     func deferTask(_ task: LineaTask, to day: Date) async {
@@ -152,16 +151,6 @@ final class PlanStore {
         var updated = task
         updated.priority = priority
         await saveTask(updated)
-    }
-
-    func deleteTask(_ task: LineaTask) async {
-        do {
-            try await taskRepository.delete(id: task.id)
-            await load()
-            await onPlanInputsChanged?()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
     }
 
     // MARK: - Goal intents

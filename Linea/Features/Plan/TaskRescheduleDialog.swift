@@ -107,21 +107,26 @@ private struct RescheduleDaySheet: View {
 }
 
 extension PlanStore {
-    /// Обработчики строки задачи: закрыть, перенести, изменить, цель,
-    /// приоритет, удалить. «Изменить» и «Перенести» открывает экран.
+    /// Обработчики строки задачи: начать, завершить, не сейчас, перенести,
+    /// изменить, цель, приоритет, удалить. Выполнение — через
+    /// `IntelligenceStore`: он пишет отклик и ответ на предложение Linea.
+    /// «Изменить» и «Перенести» открывает экран.
     func rowActions(
         for task: LineaTask,
+        intelligence: IntelligenceStore,
         onEdit: @escaping () -> Void,
         onReschedule: @escaping () -> Void
     ) -> TaskRowActions {
         TaskRowActions(
             goals: goals.filter { ($0.isActive && !$0.isCompleted) || $0.id == task.goalID },
-            onDone: { Task { await self.toggleTask(task) } },
+            onDone: { Task { await intelligence.toggleDone(task) } },
+            onStart: { Task { await intelligence.perform(.start, on: task) } },
+            onNotNow: { Task { await intelligence.perform(.notNow, on: task) } },
             onReschedule: onReschedule,
             onEdit: onEdit,
             onLinkGoal: { goalID in Task { await self.linkTask(task, toGoal: goalID) } },
             onPriority: { priority in Task { await self.setPriority(priority, of: task) } },
-            onDelete: { Task { await self.deleteTask(task) } }
+            onDelete: { Task { await intelligence.perform(.cancel, on: task) } }
         )
     }
 }

@@ -122,10 +122,10 @@ struct TodayView: View {
 
     // MARK: Now
 
-    /// «Сейчас»: одно действие — что, сколько и почему, [Начать] [Другое].
-    /// «Другое» раскрывает два-три варианта, а не весь список задач. Начатое —
-    /// «в работе» с [Готово]. Причина — одна короткая фраза, готовая в ядре
-    /// (`NowReasoner`): у каждой рекомендации она есть.
+    /// «Сейчас»: одно действие — что, сколько и почему, [Начать] [Не сейчас]
+    /// [Другое]. «Другое» раскрывает два-три варианта, а не весь список задач.
+    /// Начатое — «в работе» с [Завершить] [Не сейчас]. Причина — одна короткая
+    /// фраза, готовая в ядре (`NowReasoner`): у каждой рекомендации она есть.
     @ViewBuilder
     private var nowSection: some View {
         if let action = intelligence.nextAction {
@@ -160,9 +160,11 @@ struct TodayView: View {
                     )
                 }
                 if action.option != nil {
-                    HStack(spacing: 12) {
+                    // Три кнопки на узком экране или крупным шрифтом не влезают
+                    // в строку — переносятся.
+                    FlowLayout(spacing: 12) {
                         if action.isStarted {
-                            LineaOutlineButton(title: "Готово") {
+                            LineaOutlineButton(title: "Завершить") {
                                 Task { await intelligence.finishAction() }
                             }
                         } else {
@@ -170,14 +172,20 @@ struct TodayView: View {
                                 Task { await intelligence.startAction() }
                             }
                         }
-                        if !action.alternatives.isEmpty {
+                        LineaOutlineButton(title: "Не сейчас") {
+                            showsAlternatives = false
+                            Task { await intelligence.notNowAction() }
+                        }
+                        // У начатого «Другое» нет: взяться за другое — «Не
+                        // сейчас» или «Начать» в списке.
+                        if !action.isStarted, !action.alternatives.isEmpty {
                             LineaOutlineButton(title: showsAlternatives ? "Скрыть" : "Другое") {
                                 withAnimation(.snappy) { showsAlternatives.toggle() }
                             }
                         }
                     }
                 }
-                if showsAlternatives, !action.alternatives.isEmpty {
+                if showsAlternatives, !action.isStarted, !action.alternatives.isEmpty {
                     alternativesList(action.alternatives)
                 }
             }
@@ -196,7 +204,7 @@ struct TodayView: View {
             ForEach(options) { option in
                 Button {
                     withAnimation(.snappy) { showsAlternatives = false }
-                    intelligence.chooseAlternative(option)
+                    Task { await intelligence.chooseAlternative(option) }
                 } label: {
                     HStack(spacing: 12) {
                         Text(option.title)
@@ -277,6 +285,7 @@ struct TodayView: View {
     private func rowActions(for task: LineaTask) -> TaskRowActions {
         plan.rowActions(
             for: task,
+            intelligence: intelligence,
             onEdit: { editingTask = .edit(task) },
             onReschedule: { rescheduling = task }
         )

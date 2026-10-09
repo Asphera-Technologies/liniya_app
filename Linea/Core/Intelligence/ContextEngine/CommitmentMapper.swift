@@ -46,7 +46,7 @@ nonisolated struct CommitmentMapper: Sendable {
         // A task the user pinned to a time is a commitment: the planner must
         // not move it, and the nudge must count it as the next obligation.
         for task in tasks {
-            guard let start = task.scheduledStart, !task.isDone, !claimedTasks.contains(task.id) else { continue }
+            guard let start = task.scheduledStart, task.isOpen, !claimedTasks.contains(task.id) else { continue }
             guard day.contains(start) else { continue }
             let end = start.addingTimeInterval(TimeInterval(TaskEstimate.minutes(for: task) * 60))
             result.append(

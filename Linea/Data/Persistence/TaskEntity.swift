@@ -44,6 +44,14 @@ final class TaskEntity {
     /// помнить: всё в ней считается заданным человеком.
     var userFieldsRaw: String?
 
+    // Выполнение (`TaskLifecycle`): что человек делал с задачей на самом деле.
+    var startedAt: Date?
+    var actualMinutes: Int?
+    var suggestionID: UUID?
+    var deferredUntil: Date?
+    /// Убрана из планов («Удалить»): не показывается, но остаётся в данных.
+    var cancelledAt: Date?
+
     init(
         id: UUID,
         title: String,
@@ -62,7 +70,12 @@ final class TaskEntity {
         deferralCount: Int? = nil,
         blockedByRaw: String? = nil,
         inboxReviewedAt: Date? = nil,
-        userFieldsRaw: String? = nil
+        userFieldsRaw: String? = nil,
+        startedAt: Date? = nil,
+        actualMinutes: Int? = nil,
+        suggestionID: UUID? = nil,
+        deferredUntil: Date? = nil,
+        cancelledAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -82,6 +95,11 @@ final class TaskEntity {
         self.blockedByRaw = blockedByRaw
         self.inboxReviewedAt = inboxReviewedAt
         self.userFieldsRaw = userFieldsRaw
+        self.startedAt = startedAt
+        self.actualMinutes = actualMinutes
+        self.suggestionID = suggestionID
+        self.deferredUntil = deferredUntil
+        self.cancelledAt = cancelledAt
     }
 }
 
@@ -105,7 +123,12 @@ extension TaskEntity {
             deferralCount: task.deferralCount,
             blockedByRaw: Self.raw(task.blockedBy),
             inboxReviewedAt: task.inboxReviewedAt,
-            userFieldsRaw: Self.rawFields(task.userFields)
+            userFieldsRaw: Self.rawFields(task.userFields),
+            startedAt: task.startedAt,
+            actualMinutes: task.actualMinutes,
+            suggestionID: task.suggestionID,
+            deferredUntil: task.deferredUntil,
+            cancelledAt: task.cancelledAt
         )
     }
 
@@ -129,7 +152,12 @@ extension TaskEntity {
             deferralCount: deferralCount ?? 0,
             blockedBy: Self.ids(blockedByRaw),
             inboxReviewedAt: inboxReviewedAt,
-            userFields: Self.fields(userFieldsRaw)
+            userFields: Self.fields(userFieldsRaw),
+            startedAt: startedAt,
+            actualMinutes: actualMinutes,
+            suggestionID: suggestionID,
+            deferredUntil: deferredUntil,
+            cancelledAt: cancelledAt
         )
     }
 
@@ -151,6 +179,11 @@ extension TaskEntity {
         blockedByRaw = Self.raw(task.blockedBy)
         inboxReviewedAt = task.inboxReviewedAt
         userFieldsRaw = Self.rawFields(task.userFields)
+        startedAt = task.startedAt
+        actualMinutes = task.actualMinutes
+        suggestionID = task.suggestionID
+        deferredUntil = task.deferredUntil
+        cancelledAt = task.cancelledAt
     }
 
     private static func raw(_ ids: [UUID]) -> String? {

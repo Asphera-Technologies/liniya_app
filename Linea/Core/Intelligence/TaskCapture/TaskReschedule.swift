@@ -46,7 +46,7 @@ nonisolated struct TaskReschedule: Sendable {
     /// Варианты для задачи — кроме того, где она уже стоит. Закрытую задачу
     /// не переносят. «Выбрать дату…» экран добавляет сам.
     func options(for task: LineaTask, profile: UserProfile, time: TimeContext) -> [Option] {
-        guard !task.isDone else { return [] }
+        guard task.isOpen else { return [] }
         let today = time.today
         let tomorrow = time.adding(days: 1, to: today)
         let endOfWeek = TaskDay.endOfWeek(time: time, profile: profile)

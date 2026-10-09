@@ -3,8 +3,10 @@
 //  Linea
 //
 //  Everything the user tells Linea back: the evening rating, the day's report
-//  from the check-in, plan acceptance, nudge responses, manual postponements. Stored with the state at that
-//  moment so the Feedback Engine can relate «Тяжело» to what was predicted.
+//  from the check-in, plan acceptance, nudge responses, manual postponements,
+//  and how tasks were actually done — started, finished with the real
+//  duration, «Не сейчас», cancelled. Stored with the state at that moment so
+//  the Feedback Engine can relate «Тяжело» to what was predicted.
 //
 
 import Foundation
@@ -18,8 +20,30 @@ nonisolated enum FeedbackKind: Codable, Hashable, Sendable {
     case mealLogged(MealKind)
     /// Итог дня: сколько плана случилось на самом деле (см. `CheckInEntry`).
     case dayReport(DayReportSummary)
-    /// «Начать» на действии «Сейчас» (см. `NextAction`).
+    /// «Начать» на действии «Сейчас» (см. `NextAction`) — или на задаче в
+    /// списке и в карточке.
     case actionStarted(ActionStart)
+    /// «Завершить» (или «Готово»): сколько заняло на самом деле.
+    case taskFinished(TaskFinish)
+    /// «Не сейчас»: задача была начата или только предложена.
+    case taskNotNow(taskID: UUID, wasStarted: Bool)
+    /// Задачу убрали из планов.
+    case taskCancelled(taskID: UUID)
+    /// Закрытую задачу вернули: прежнее `taskFinished` больше не правда.
+    /// Журнал только дописывается — так его не сломает пересчёт дня, идущий
+    /// одновременно с ответом человека.
+    case taskReopened(taskID: UUID)
+}
+
+/// Задача сделана: сколько было отведено и сколько ушло на самом деле.
+nonisolated struct TaskFinish: Codable, Hashable, Sendable {
+    let taskID: UUID
+    /// От «Начать» до «Завершить»; `nil` — не начинали или забыли завершить.
+    let actualMinutes: Int?
+    /// Сколько отводил план (оценка с калибровкой).
+    let plannedMinutes: Int
+    /// Предложение Linea, через которое задачу взяли или закрыли.
+    let suggestionID: UUID?
 }
 
 nonisolated struct UserFeedback: Codable, Hashable, Sendable, Identifiable {

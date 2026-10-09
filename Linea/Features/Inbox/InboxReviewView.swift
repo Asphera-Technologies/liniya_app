@@ -143,7 +143,7 @@ struct InboxReviewView: View {
         guard !isWorking else { return }
         isWorking = true
         Task {
-            await plan.deleteTask(task)
+            await intelligence.perform(.cancel, on: task)
             advance()
         }
     }

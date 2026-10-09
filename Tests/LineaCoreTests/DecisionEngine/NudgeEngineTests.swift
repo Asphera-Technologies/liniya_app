@@ -58,6 +58,13 @@ struct NudgeEngineTests {
         #expect(engine.due(context(at: WowFixture.afternoon, tasks: tasks)).isEmpty)
     }
 
+    @Test("Убранные из планов задачи тоже снимают напоминание")
+    func cancelledTasks() {
+        var tasks = WowFixture.tasks
+        for index in tasks.indices { tasks[index].cancelledAt = WowFixture.morning.now }
+        #expect(engine.due(context(at: WowFixture.afternoon, tasks: tasks)).isEmpty)
+    }
+
     @Test("В тихие часы Linea молчит")
     func quietHours() {
         let night = WowFixture.time(23, 30)

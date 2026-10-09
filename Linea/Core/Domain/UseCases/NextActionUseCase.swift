@@ -7,8 +7,10 @@
 //  20 минут: сейчас Linea предложит то, что успеется, а стратегию — после
 //  встречи. Встреча прошла — стратегия снова «сейчас».
 //
-//  Действие и задача — разные сущности: «Начать» пишет в день отклик
-//  `actionStarted`, а задачу не трогает. Пока действие идёт, «Сейчас»
+//  Действие и задача — разные сущности: у действия — момент, окно и
+//  отведённое время. «Начать» (`TaskExecutionUseCase`) пишет в день отклик
+//  `actionStarted`, а задаче ставит `startedAt` — так собираются данные о
+//  том, как человек работает на самом деле. Пока действие идёт, «Сейчас»
 //  показывает его, а план держит его время занятым (`PlanDayUseCase`).
 //
 //  У каждой рекомендации — причина (`NowReasoner`): одна короткая фраза,
@@ -167,37 +169,17 @@ nonisolated struct NextActionUseCase: Sendable {
     /// своё время или её день ещё не настал. О такой «после встречи» не скажешь.
     private static func isOutOfReach(_ limit: ActionLimit) -> Bool {
         switch limit {
-        case .blocked, .fixedTime, .plannedLater, .busy: return true
+        case .blocked, .fixedTime, .plannedLater, .busy, .notNow: return true
         case .shortWindow, .lowEnergy: return false
         }
     }
 
     private func plannedTaskID(in plan: DayPlan?, at moment: Date, tasks: [LineaTask]) -> UUID? {
         guard let plan, plan.status == .accepted else { return nil }
-        let open = Set(tasks.filter { !$0.isDone }.map(\.id))
+        let open = Set(tasks.filter(\.isOpen).map(\.id))
         return plan.blocks.first { block in
             block.kind == .focus && block.start <= moment && moment < block.end
                 && (block.taskID.map { open.contains($0) } ?? false)
         }?.taskID
-    }
-}
-
-/// «Начать» на «Сейчас»: в день пишется, что человек взялся за действие.
-/// Задача не меняется — у действия своя жизнь.
-nonisolated struct StartActionUseCase: Sendable {
-    init() {}
-
-    func run(record: DayRecord, option: NextAction.Option, wasAlternative: Bool, time: TimeContext) -> DayRecord {
-        var record = record
-        record.feedback.append(
-            UserFeedback(
-                at: time.now,
-                kind: .actionStarted(ActionStart(taskID: option.taskID, minutes: option.minutes, wasAlternative: wasAlternative)),
-                energy: record.state?.energy, energyConfidence: record.state?.confidence,
-                loadAdvice: record.state?.loadAdvice, planID: record.plan?.id
-            )
-        )
-        record.updatedAt = time.now
-        return record
     }
 }

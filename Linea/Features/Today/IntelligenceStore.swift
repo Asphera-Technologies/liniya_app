@@ -43,6 +43,13 @@ final class IntelligenceStore {
     private(set) var nextAction: NextAction?
     /// Что человек выбрал в «Другое» — пока задача открыта.
     private var preferredTaskID: UUID?
+    /// Сколько экранов «Сегодня» сейчас открыто: только тогда «Сейчас» видно
+    /// и предложение записывается как показанное (`SuggestionLog`). Счётчик,
+    /// а не флаг: новый экран может появиться раньше, чем уйдёт прежний.
+    private var nowViewers = 0
+    /// Действие с задачей сохраняется: день уже новый, а задачи ещё прежние —
+    /// «Сейчас» по такой смеси не считается.
+    private var executionsInFlight = 0
 
     // MARK: Dependencies
 
@@ -52,6 +59,7 @@ final class IntelligenceStore {
     private let respondUseCase: RespondToNudgeUseCase
     private let ratingUseCase: RecordDayRatingUseCase
     private let nextActionUseCase: NextActionUseCase
+    private let executionUseCase = TaskExecutionUseCase()
     private let records: any DayRecordRepository
     private let calibrations: any CalibrationRepository
     private let profiles: any UserProfileRepository
@@ -174,15 +182,16 @@ final class IntelligenceStore {
         }
     }
 
-    /// Пока день пересчитывался, человек мог оценить день или сохранить итог:
-    /// пересчёт начинал с прочитанной раньше записи и не должен эти ответы
-    /// потерять.
+    /// Пока день пересчитывался, человек мог оценить день, сохранить итог,
+    /// начать или закрыть задачу, а Linea — предложить новое: пересчёт
+    /// начинал с прочитанной раньше записи и не должен это потерять.
     private func mergingFeedback(into record: DayRecord) -> DayRecord {
         guard let current = self.record, current.day == record.day else { return record }
+        var merged = record
+        merged.suggestions = SuggestionLog.merged(record.suggestions, with: current.suggestions)
         let known = Set(record.feedback.map(\.id))
         let newer = current.feedback.filter { !known.contains($0.id) }
-        guard !newer.isEmpty else { return record }
-        var merged = record
+        guard !newer.isEmpty else { return merged }
         merged.feedback = (record.feedback + newer).sorted { $0.at < $1.at }
         if merged.isReviewed { merged.nudges.removeAll { $0.kind == .eveningCheckIn } }
         return merged
@@ -220,7 +229,7 @@ final class IntelligenceStore {
 
         // Типы задач в интерфейсе не видны — журнал показывает, как Linea их поняла.
         let classifier = TaskClassifier()
-        let kinds = Dictionary(grouping: (record.snapshot?.tasks ?? []).filter { !$0.isDone }) { classifier.kind(of: $0).rawValue }
+        let kinds = Dictionary(grouping: (record.snapshot?.tasks ?? []).filter(\.isOpen)) { classifier.kind(of: $0).rawValue }
             .map { "\($0.key) \($0.value.count)" }
             .sorted()
             .joined(separator: ", ")
@@ -288,7 +297,14 @@ final class IntelligenceStore {
             }
             await refresh(reason: .inputsChanged)
         case .replan:
-            await refresh(reason: .inputsChanged)
+            // «Закрываем сейчас» — человек берётся за задачу: она в работе,
+            // как после «Начать». Задача сохраняется — день пересобирается.
+            if case .finishNow(let taskID) = action,
+               let task = planStore.tasks.first(where: { $0.id == taskID }), task.isOpen, task.startedAt == nil {
+                await perform(.start, on: task)
+            } else {
+                await refresh(reason: .inputsChanged)
+            }
         case .rateDay, .none:
             await evaluateNudges(time: time)
         }
@@ -403,7 +419,7 @@ final class IntelligenceStore {
         guard let record else { return }
         let output = checkInUseCase.run(record: record, tasks: planStore.tasks, calibration: calibration, time: time)
         dueNudge = output.due
-        updateNextAction(time: time)
+        await updateNextAction(time: time)
         if let scheduler, plan?.status == .accepted {
             await scheduler.sync(output.scheduled, time: time)
         }
@@ -414,54 +430,128 @@ final class IntelligenceStore {
     /// Пока экран «Сегодня» открыт, «Сейчас» пересчитывается раз в минуту:
     /// началась встреча, закончилось окно — совет меняется сам.
     func keepNextActionFresh() async {
+        nowViewers += 1
+        defer { nowViewers -= 1 }
         while !Task.isCancelled {
-            updateNextAction(time: time)
+            await updateNextAction(time: time)
             try? await Task.sleep(for: .seconds(60))
         }
     }
 
-    private func updateNextAction(time: TimeContext) {
+    /// «Сейчас» заново. Если экран открыт, показанное записывается в журнал
+    /// предложений: та же задача — то же предложение, другая — прежнее
+    /// закрывается без ответа.
+    private func updateNextAction(time: TimeContext) async {
+        guard executionsInFlight == 0 else { return }
         guard let record else {
             nextAction = nil
             return
         }
-        if let preferred = preferredTaskID, planStore.tasks.first(where: { $0.id == preferred })?.isDone ?? true {
+        if let preferred = preferredTaskID, !(planStore.tasks.first(where: { $0.id == preferred })?.isOpen ?? false) {
             preferredTaskID = nil
         }
-        nextAction = nextActionUseCase.run(
+        let action = nextActionUseCase.run(
             record: record, tasks: planStore.tasks, calibration: calibration, time: time, preferred: preferredTaskID
         )
-    }
-
-    /// «Другое» → выбранная задача становится «сейчас».
-    func chooseAlternative(_ option: NextAction.Option) {
-        preferredTaskID = option.taskID
-        updateNextAction(time: time)
-    }
-
-    /// «Начать»: действие пишется в день, задача не меняется. План
-    /// пересобирается и держит время действия занятым.
-    func startAction() async {
-        guard let record, let action = nextAction, let option = action.option, !action.isStarted else { return }
-        let time = self.time
-        let updated = StartActionUseCase().run(
-            record: record, option: option, wasAlternative: option.taskID == preferredTaskID, time: time
-        )
-        apply(updated)
-        do {
-            try await records.save(updated)
-        } catch {
-            LineaLog.plan.error("Начатое действие не записалось: \(error.localizedDescription, privacy: .public)")
+        nextAction = action
+        guard nowViewers > 0, time.isSameDay(record.day, time.now) else { return }
+        let isAlternative = action?.taskID != nil && action?.taskID == preferredTaskID
+        let tracked = SuggestionLog.tracking(action, newID: UUID(), isAlternative: isAlternative, in: record, at: time.now)
+        guard tracked.suggestions != record.suggestions else { return }
+        apply(tracked)
+        // Без названий и причин: в них слова человека.
+        if let open = SuggestionLog.open(in: tracked) {
+            LineaLog.plan.notice("Предложено: из «Другое» \(open.isAlternative, privacy: .public), предложений за день \(tracked.suggestions.count, privacy: .public)")
         }
-        LineaLog.plan.notice("Действие начато: \(option.minutes, privacy: .public) мин, из «Другое»: \(option.taskID == self.preferredTaskID, privacy: .public)")
-        await refresh(reason: .inputsChanged)
+        await save(tracked, failure: "Предложение не записалось")
     }
 
-    /// «Готово» на начатом действии — задача закрыта, «сейчас» — следующее.
+    /// «Другое» → выбранная задача становится «сейчас». Прежнее предложение —
+    /// «выбрано иное»: не отказ и не согласие.
+    func chooseAlternative(_ option: NextAction.Option) async {
+        let time = self.time
+        var answered: DayRecord?
+        if let record, time.isSameDay(record.day, time.now), let current = nextAction?.taskID, nextAction?.isStarted == false {
+            let result = SuggestionLog.responding(.otherChosen, to: current, in: record, at: time.now)
+            if result.suggestionID != nil {
+                apply(result.record)
+                answered = result.record
+            }
+        }
+        preferredTaskID = option.taskID
+        if let answered { await save(answered, failure: "Выбор в «Другое» не записался") }
+        await updateNextAction(time: time)
+    }
+
+    /// «Начать» на «Сейчас».
+    func startAction() async {
+        guard let action = nextAction, let option = action.option, !action.isStarted,
+              let task = planStore.tasks.first(where: { $0.id == option.taskID }) else { return }
+        await perform(.start, on: task, plannedMinutes: option.minutes)
+    }
+
+    /// «Завершить» на начатом действии — задача закрыта, «сейчас» — следующее.
     func finishAction() async {
-        guard let taskID = nextAction?.taskID, let task = planStore.tasks.first(where: { $0.id == taskID }) else { return }
-        preferredTaskID = nil
-        await planStore.toggleTask(task)
+        guard let action = nextAction, let option = action.option,
+              let task = planStore.tasks.first(where: { $0.id == option.taskID }) else { return }
+        await perform(.finish, on: task, plannedMinutes: option.minutes)
+    }
+
+    /// «Не сейчас» на «Сейчас»: предложенное или начатое откладывается на
+    /// полтора часа, Linea предлагает другое.
+    func notNowAction() async {
+        guard let action = nextAction, let option = action.option,
+              let task = planStore.tasks.first(where: { $0.id == option.taskID }) else { return }
+        await perform(.notNow, on: task, plannedMinutes: option.minutes)
+    }
+
+    // MARK: - Выполнение задач
+
+    /// «Начать», «Завершить» («Готово»), «Не сейчас», «Удалить», «Вернуть» —
+    /// откуда бы человек их ни нажал: «Сейчас», строка списка, карточка.
+    /// Задача меняется по правилу ядра (`TaskExecutionUseCase`), в день
+    /// пишется отклик и ответ на предложение Linea, план пересобирается.
+    /// `plannedMinutes` — сколько отводила Linea; по умолчанию — по плану.
+    func perform(_ action: TaskExecutionUseCase.Action, on task: LineaTask, plannedMinutes: Int? = nil) async {
+        let time = self.time
+        // Свежая версия: карточку могли открыть до того, как задачу начали.
+        let current = planStore.tasks.first { $0.id == task.id } ?? task
+        // Запись прошлого дня не трогаем: в неё сегодняшнее не пишется.
+        let day = record.flatMap { time.isSameDay($0.day, time.now) ? $0 : nil }
+        let minutes = plannedMinutes ?? PlanDuration.minutes(for: current, calibration: calibration)
+        guard let output = executionUseCase.run(
+            action, task: current, others: planStore.tasks, record: day, plannedMinutes: minutes, at: time.now
+        ) else {
+            LineaLog.plan.error("Задача: переход \(action.rawValue, privacy: .public) невозможен")
+            return
+        }
+        executionsInFlight += 1
+        // День — раньше задач: пересборка после сохранения задач читает его.
+        if let updated = output.record {
+            apply(updated)
+            await save(updated, failure: "Действие с задачей не записалось в день")
+        }
+        if action == .start || current.id == preferredTaskID { preferredTaskID = nil }
+        let suggestionID = output.task.suggestionID
+        let actual = output.task.actualMinutes.map { "\($0)" } ?? "нет"
+        LineaLog.plan.notice("Задача: \(action.rawValue, privacy: .public), предложение Linea \(suggestionID != nil, privacy: .public), заняло \(actual, privacy: .public) мин, снято с работы \(output.paused.count, privacy: .public)")
+        await planStore.saveTasks([output.task] + output.paused)
+        executionsInFlight -= 1
+        // Пересчёт мог не начаться, если шёл другой: «Сейчас» — по свежим задачам.
+        await updateNextAction(time: self.time)
+    }
+
+    /// Галочка и свайп «Готово» / «Вернуть».
+    func toggleDone(_ task: LineaTask) async {
+        await perform(task.isDone ? .reopen : .finish, on: task)
+    }
+
+    private func save(_ record: DayRecord, failure: String) async {
+        do {
+            try await records.save(record)
+        } catch {
+            LineaLog.plan.error("\(failure, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// A notification action came back while the app was closed.
@@ -515,11 +605,14 @@ final class IntelligenceStore {
 
     /// What is still ahead: everything that has not ended yet, plus tasks that
     /// were due earlier and are still open. A meal that already happened is not
-    /// news; an unfinished task is.
+    /// news; an unfinished task is. A task the person removed («Удалить») is
+    /// gone from the day too, even before the plan is rebuilt.
     var visibleBlocks: [PlanBlock] {
         let now = time.now
+        let taskIDs = Set(planStore.tasks.map(\.id))
         return (plan?.blocks ?? [])
             .filter { block in
+                if let taskID = block.taskID, !taskIDs.contains(taskID) { return false }
                 if block.end > now { return true }
                 return block.taskID != nil && !isDone(block)
             }

@@ -392,28 +392,41 @@ struct NextActionTests {
 
     // MARK: Начатое действие
 
-    @Test("«Начать» пишет отклик в день, задача не меняется")
+    @Test("«Начать» пишет отклик в день, а у задачи — только время начала")
     func startActionRecordsFeedback() throws {
         let time = WowFixture.time(10)
         let action = try #require(run(at: time, tasks: errands))
         let option = try #require(action.option)
-        let record = StartActionUseCase().run(record: Strategy.record(at: time, tasks: errands), option: option,
-                                              wasAlternative: false, time: time)
+        let task = try #require(errands.first { $0.id == option.taskID })
+        let output = try #require(TaskExecutionUseCase().run(
+            .start, task: task, record: Strategy.record(at: time, tasks: errands), plannedMinutes: option.minutes, at: time.now
+        ))
+        let record = try #require(output.record)
         let started = record.feedback.compactMap { item -> ActionStart? in
             if case .actionStarted(let start) = item.kind { return start }
             return nil
         }
         #expect(started == [ActionStart(taskID: option.taskID, minutes: 15, wasAlternative: false)])
+        #expect(output.task.startedAt == time.now)
+        #expect(output.task.status(at: time.now) == .started)
+        // День, срок, приоритет и длительность задачи — прежние.
+        var expected = task
+        expected.startedAt = time.now
+        #expect(output.task == expected)
     }
 
     @Test("Начатое действие — «в работе», пока не закрыто и не вышло время")
     func startedActionIsShown() throws {
         let start = WowFixture.time(10)
         let option = NextAction.Option(taskID: errands[1].id, title: "Проверить сборку", minutes: 15)
-        let record = StartActionUseCase().run(record: Strategy.record(at: start, tasks: errands), option: option,
-                                              wasAlternative: true, time: start)
+        let output = try #require(TaskExecutionUseCase().run(
+            .start, task: errands[1], record: Strategy.record(at: start, tasks: errands), plannedMinutes: 15, at: start.now
+        ))
+        var tasks = errands
+        tasks[1] = output.task
+        let record = try #require(output.record)
 
-        let during = try #require(run(at: WowFixture.time(10, 10), tasks: errands, record: record))
+        let during = try #require(run(at: WowFixture.time(10, 10), tasks: tasks, record: record))
         #expect(during.taskID == option.taskID)
         #expect(during.isStarted)
         #expect(during.startedAt == WowFixture.moment(10))
@@ -422,30 +435,42 @@ struct NextActionTests {
         #expect(during.alternatives.count == NextActionUseCase.maxAlternatives)
 
         // 15 минут отведено: действие живёт до 30 минут, потом — снова выбор.
-        #expect(record.activeAction(tasks: errands, at: WowFixture.moment(10, 29)) != nil)
-        #expect(record.activeAction(tasks: errands, at: WowFixture.moment(10, 31)) == nil)
+        #expect(record.activeAction(tasks: tasks, at: WowFixture.moment(10, 29)) != nil)
+        #expect(record.activeAction(tasks: tasks, at: WowFixture.moment(10, 31)) == nil)
         // Задачу закрыли — действие кончилось.
-        var done = errands
+        var done = tasks
         done[1].isDone = true
         #expect(record.activeAction(tasks: done, at: WowFixture.moment(10, 5)) == nil)
+        // «Не сейчас» — тоже: задача больше не начата.
+        let paused = try #require(TaskExecutionUseCase().run(
+            .notNow, task: tasks[1], record: record, plannedMinutes: 15, at: WowFixture.moment(10, 5)
+        ))
+        var notNow = tasks
+        notNow[1] = paused.task
+        #expect(paused.record?.activeAction(tasks: notNow, at: WowFixture.moment(10, 6)) == nil)
     }
 
     @Test("План держит время начатого действия занятым")
     func startedActionHoldsItsTime() async throws {
         let time = WowFixture.time(10)
         let option = NextAction.Option(taskID: errands[2].id, title: "Разобрать письмо", minutes: 15)
-        let record = StartActionUseCase().run(record: DayRecord(day: WowFixture.today, updatedAt: time.now),
-                                              option: option, wasAlternative: false, time: time)
+        let output = try #require(TaskExecutionUseCase().run(
+            .start, task: errands[2], record: DayRecord(day: WowFixture.today, updatedAt: time.now),
+            plannedMinutes: option.minutes, at: time.now
+        ))
+        var tasks = errands
+        tasks[2] = output.task
+        let record = output.record
         let planDay = PlanDayUseCase(
             contextEngine: ContextEngine(providers: []),
             decisionEngine: PlanFixture.engine(),
             nudgeEngine: PlanFixture.nudgeEngine(),
             explainer: RuleBasedExplainer()
         )
-        let output = await planDay.run(PlanDayUseCase.Input(
-            time: WowFixture.time(10, 5), tasks: errands, goals: [], existing: record, allowsRemoteExplanation: false
+        let day = await planDay.run(PlanDayUseCase.Input(
+            time: WowFixture.time(10, 5), tasks: tasks, goals: [], existing: record, allowsRemoteExplanation: false
         ))
-        let plan = try #require(output.record.plan)
+        let plan = try #require(day.record.plan)
         let held = try #require(plan.blocks.first { $0.taskID == option.taskID })
         #expect(held.kind == .commitment)
         #expect(held.start == WowFixture.moment(10))

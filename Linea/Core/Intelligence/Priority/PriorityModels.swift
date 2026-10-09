@@ -36,7 +36,7 @@ nonisolated struct RecentExecution: Hashable, Sendable {
     static func today(from tasks: [LineaTask], time: TimeContext, classifier: TaskClassifier = TaskClassifier()) -> RecentExecution {
         let day = time.dayInterval(containing: time.now)
         let done = tasks.compactMap { task -> Done? in
-            guard task.isDone, let at = task.completedAt, day.contains(at), at <= time.now else { return nil }
+            guard task.isDone, task.cancelledAt == nil, let at = task.completedAt, day.contains(at), at <= time.now else { return nil }
             return Done(
                 taskID: task.id,
                 kind: classifier.kind(of: task),
@@ -117,6 +117,8 @@ nonisolated enum ActionLimit: Codable, Hashable, Sendable {
     case plannedLater(Date)
     /// Сил сейчас мало для такой сложной задачи.
     case lowEnergy
+    /// Человек сказал «Не сейчас» — до этого момента.
+    case notNow(until: Date)
 
     var isShortWindow: Bool {
         if case .shortWindow = self { return true }

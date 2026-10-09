@@ -44,26 +44,37 @@ nonisolated struct NextAction: Hashable, Sendable {
 }
 
 /// «Начать»: человек взялся за действие. Пишется в день как отклик
-/// (`FeedbackKind.actionStarted`); сама задача при этом не меняется.
+/// (`FeedbackKind.actionStarted`), а у задачи появляется `startedAt`.
 nonisolated struct ActionStart: Codable, Hashable, Sendable {
     let taskID: UUID
     /// Сколько Linea отвела на действие.
     let minutes: Int
     /// Выбрано в «Другое», а не рекомендованное.
     let wasAlternative: Bool
+    /// Предложение Linea, которое человек принял; `nil` — начал сам.
+    var suggestionID: UUID?
+
+    init(taskID: UUID, minutes: Int, wasAlternative: Bool, suggestionID: UUID? = nil) {
+        self.taskID = taskID
+        self.minutes = minutes
+        self.wasAlternative = wasAlternative
+        self.suggestionID = suggestionID
+    }
 }
 
 nonisolated extension DayRecord {
-    /// Начатое действие, которое ещё идёт: задача не закрыта, и с начала
-    /// прошло не больше полутора отведённых длительностей (и хотя бы 15 минут
-    /// сверх отведённого). Новое «Начать» сменяет прежнее.
+    /// Начатое действие, которое ещё идёт: задача начата и не закрыта, и с
+    /// начала прошло не больше полутора отведённых длительностей (и хотя бы
+    /// 15 минут сверх отведённого). Новое «Начать» сменяет прежнее, «Не
+    /// сейчас» снимает (у задачи больше нет `startedAt`).
     func activeAction(tasks: [LineaTask], at moment: Date) -> (start: ActionStart, at: Date)? {
         let started = feedback.compactMap { item -> (start: ActionStart, at: Date)? in
             if case .actionStarted(let start) = item.kind { return (start, item.at) }
             return nil
         }
         guard let last = started.max(by: { $0.at < $1.at }), last.at <= moment else { return nil }
-        guard let task = tasks.first(where: { $0.id == last.start.taskID }), !task.isDone else { return nil }
+        guard let task = tasks.first(where: { $0.id == last.start.taskID }), task.isOpen,
+              task.startedAt != nil else { return nil }
         let allowed = max(Double(last.start.minutes) * 1.5, Double(last.start.minutes + 15))
         return moment.timeIntervalSince(last.at) <= allowed * 60 ? last : nil
     }

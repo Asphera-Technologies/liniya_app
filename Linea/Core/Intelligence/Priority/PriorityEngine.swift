@@ -159,11 +159,16 @@ nonisolated struct PriorityEngine: Sendable {
         let (importance, importanceFactors) = self.importance(of: task, at: moment, context: context)
         let needed = PlanDuration.minutes(for: task, calibration: context.calibration)
         var limits: [ActionLimit] = []
-        var gate = task.isDone ? 0.0 : 1.0
+        var gate = task.isOpen ? 1.0 : 0.0
 
         if let blocker = context.dependencies.openBlockers(of: task.id, assumingDone: done).first {
             gate = 0
             limits.append(.blocked(by: blocker))
+        }
+        // «Не сейчас»: до этого момента задачу не предлагают и не ставят в план.
+        if let until = task.deferredUntil, until > moment {
+            gate = 0
+            limits.append(.notNow(until: until))
         }
         if let start = task.scheduledStart {
             let opens = start.addingTimeInterval(-TimeInterval(Self.fixedLeadMinutes * 60))
@@ -277,7 +282,7 @@ nonisolated struct PriorityEngine: Sendable {
         var picked: [LineaTask] = []
         var undated: [LineaTask] = []
 
-        for task in snapshot.tasks where !task.isDone {
+        for task in snapshot.tasks where task.isOpen {
             if let date = task.date, time.startOfDay(date) <= today {
                 picked.append(task)
                 continue

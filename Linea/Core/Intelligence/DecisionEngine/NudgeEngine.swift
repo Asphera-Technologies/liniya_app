@@ -54,13 +54,14 @@ nonisolated struct NudgeEngine: Sendable {
     /// Nudges whose moment has come and whose cancel condition has not fired.
     func due(_ context: NudgeContext) -> [Nudge] {
         let now = context.time.now
-        let doneTaskIDs = Set(context.snapshot.tasks.filter(\.isDone).map(\.id))
+        // Сделанная или убранная из планов задача — спрашивать о ней поздно.
+        let closedTaskIDs = Set(context.snapshot.tasks.filter { !$0.isOpen }.map(\.id))
         let rated = context.feedback.contains { $0.dayRating != nil }
         return nudges(context).filter { nudge in
             guard nudge.fireAt <= now else { return false }
             return !nudge.cancelWhen.contains { condition in
                 switch condition {
-                case .taskDone(let id): return doneTaskIDs.contains(id)
+                case .taskDone(let id): return closedTaskIDs.contains(id)
                 case .dayRated: return rated
                 case .planSuperseded: return context.plan.status == .superseded
                 }

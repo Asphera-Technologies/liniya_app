@@ -63,7 +63,7 @@ nonisolated struct InboxReview: Sendable {
 
     /// Во входящих — открытая задача без дня, срока и своего времени.
     static func isInInbox(_ task: LineaTask) -> Bool {
-        !task.isDone && task.date == nil && task.deadline == nil && task.scheduledStart == nil
+        task.isOpen && task.date == nil && task.deadline == nil && task.scheduledStart == nil
     }
 
     /// Входящие, давние — первыми.

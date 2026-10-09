@@ -141,8 +141,10 @@ nonisolated struct CheckInRequest: Sendable {
 
     /// Задачи, о которых вечером имеет смысл спрашивать: всё запланированное
     /// на этот день, просроченное, закрытое сегодня и немного задач без дня.
-    /// Порядок стабильный — по нему модели выдаются номера задач.
+    /// Убранные из планов — не спрашиваются. Порядок стабильный — по нему
+    /// модели выдаются номера задач.
     static func relevantTasks(from tasks: [LineaTask], day: Date, time: TimeContext, limit: Int = 30) -> [LineaTask] {
+        let tasks = tasks.filter { $0.cancelledAt == nil }
         let dayStart = time.startOfDay(day)
         let dayInterval = time.dayInterval(containing: dayStart)
 

@@ -18,7 +18,7 @@ nonisolated struct TaskDependencies: Sendable {
     private let waiting: [UUID: [UUID]]
 
     init(tasks: [LineaTask]) {
-        let open = tasks.filter { !$0.isDone }
+        let open = tasks.filter(\.isOpen)
         let openIDs = Set(open.map(\.id))
         var edges: [UUID: [UUID]] = [:]
         for task in open.sorted(by: DecisionEngine.chronological) {
@@ -56,7 +56,7 @@ nonisolated struct TaskDependencies: Sendable {
     static func canBlock(_ taskID: UUID, by blockerID: UUID, in tasks: [LineaTask]) -> Bool {
         guard taskID != blockerID else { return false }
         var edges: [UUID: [UUID]] = [:]
-        for task in tasks where !task.isDone { edges[task.id] = task.blockedBy }
+        for task in tasks where task.isOpen { edges[task.id] = task.blockedBy }
         return !reaches(from: blockerID, to: taskID, edges: edges)
     }
 
