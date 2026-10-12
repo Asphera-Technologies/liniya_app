@@ -220,8 +220,10 @@ nonisolated enum GoalProgressText {
 
     /// Свои действия в карточке цели: задачи, последнее, за 30 дней.
     static func contributionLines(_ contribution: GoalContribution, time: TimeContext) -> [(label: String, value: String)] {
-        var tasks = "\(contribution.closedTasks) закрыто"
-        if contribution.openTasks > 0 { tasks += separator + "\(contribution.openTasks) открыто" }
+        var parts: [String] = []
+        if contribution.closedTasks > 0 { parts.append("\(contribution.closedTasks) закрыто") }
+        if contribution.openTasks > 0 { parts.append("\(contribution.openTasks) открыто") }
+        let tasks = parts.isEmpty ? "пока нет" : parts.joined(separator: separator)
         return [
             ("Мои задачи", tasks),
             ("Последнее действие", contribution.lastActionAt.map { moment($0, time: time) } ?? "пока не было"),

@@ -117,6 +117,12 @@ struct TeamGoalTests {
         #expect(GoalProgressText.contributionSummary(own, time: time) == "Моя часть: 4 действия за 30 дней")
         let lines = GoalProgressText.contributionLines(own, time: time)
         #expect(lines.map(\.value) == ["4 закрыто · 1 открыто", "вчера", "4 действия"])
+        let fresh = GoalProgressEngine().progress(of: unknown, tasks: [], time: time)
+        let empty = try #require(fresh.contribution)
+        #expect(GoalProgressText.contributionLines(empty, time: time).map(\.value)
+                == ["пока нет", "пока не было", "ни одного действия"])
+        let openOnly = try #require(GoalProgressEngine().progress(of: unknown, tasks: myTasks(closed: 0, open: 2), time: time).contribution)
+        #expect(GoalProgressText.contributionLines(openOnly, time: time).first?.value == "2 открыто")
     }
 
     @Test("У своей цели задачи — значимые действия цели, вклада отдельно нет")

@@ -141,7 +141,7 @@ struct GoalSupportTests {
         #expect(window.date == time.today)
         #expect(window.estimatedMinutes == 30)
         #expect(window.goalID == betaID)
-        #expect(window.priority == .important)
+        #expect(window.priority == .normal, "Окно — мягкая поддержка, обязательства дня оно не вытесняет")
         #expect(window.scheduledStart == nil, "Место найдёт план")
         #expect(window.userFields == [.day, .duration, .goal], "Человек согласился — это его поля")
 

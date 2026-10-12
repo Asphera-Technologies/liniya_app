@@ -9,7 +9,9 @@
 //  команды — «Окно для своей части: …», а не вся работа компании.
 //
 //  Человек согласился на день, полчаса и цель — это его поля, Linea их сама
-//  не перезапишет (`TaskOwnership`).
+//  не перезапишет (`TaskOwnership`). Приоритет — средний: окно — мягкая
+//  поддержка и не вытесняет обязательства дня; выше его поднимает связь с
+//  важной целью (§16).
 //
 
 import Foundation
@@ -20,7 +22,7 @@ nonisolated enum GoalWindow {
             id: id,
             title: GoalStepScope.of(goal).windowTitle,
             date: time.startOfDay(offer.day),
-            priority: goal.priority == .low ? .normal : goal.priority,
+            priority: .normal,
             createdAt: time.now,
             estimatedMinutes: offer.minutes,
             cognitiveDemand: .normal,
