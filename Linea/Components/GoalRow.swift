@@ -31,7 +31,7 @@ struct GoalRow: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(LineaColor.textTertiary)
                 }
-                bar
+                GoalProgressBar(progress: progress)
                 Text(caption)
                     .font(LineaFont.caption)
                     .foregroundStyle(LineaColor.textTertiary)
@@ -42,20 +42,6 @@ struct GoalRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    private var bar: some View {
-        switch progress.bar {
-        case .fraction(let value)?:
-            DashProgress(progress: value)
-        case .steps(let done, let total)?:
-            // Этапы без весов — отрезками: каждый отрезок — этап, а не проценты.
-            DashProgress(progress: Double(done) / Double(max(total, 1)), segments: min(max(total, 1), 12),
-                         valueDescription: GoalProgressText.milestones(done: done, total: total))
-        case nil:
-            EmptyView()
-        }
     }
 
     /// Прогресс и срок: «18 из 50 пользователей · 36% · до 15 окт».
