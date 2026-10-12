@@ -149,6 +149,25 @@ nonisolated struct GoalUnderstanding: Hashable, Sendable {
 
     var canCreate: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
+    /// После «Изменить»: тип, сфера, числа, этапы, стадии — заново из
+    /// исправленных слов. Выбранное человеком в чипах остаётся.
+    func restructured(methodChosen: Bool, classifier: GoalClassifier = GoalClassifier()) -> GoalUnderstanding {
+        var result = self
+        let story = [details, currentState, targetState].compactMap { $0 }.joined(separator: ". ")
+        result.kind = classifier.classify(title: title, details: story).kind
+        if !isScopeChosen { result.scope = classifier.scope(title: title, details: story) }
+        result.owner = classifier.owner(title: title, details: story)
+        let structure = GoalStructure.derive(title: title, currentState: currentState, successCriteria: successCriteria)
+        result.metrics = structure.metrics
+        result.milestones = structure.milestones
+        if !methodChosen {
+            result.method = GoalStructure.method(kind: result.kind, metrics: structure.metrics, milestones: structure.milestones)
+        }
+        result.stages = GoalStages.suggested(kind: result.kind, title: title, details: story)
+        result.stage = GoalStages.current(kind: result.kind, title: title, details: story, currentState: currentState)
+        return result
+    }
+
     /// Цель, которую создают «Создать цель» и «Всё верно». Этапы и числа
     /// получают id от цели: у двух целей они не совпадут.
     func goal(id: UUID, createdAt: Date, time: TimeContext) -> LineaGoal {

@@ -115,9 +115,14 @@ nonisolated enum GoalProgressText {
 
     /// Срок цели коротко — для строки в «Плане»: «до 15 окт».
     static func shortDeadline(_ date: Date, time: TimeContext) -> String {
+        "до " + shortDate(date, time: time)
+    }
+
+    /// «15 окт»; другой год — «15 окт 2027».
+    static func shortDate(_ date: Date, time: TimeContext) -> String {
         let parts = time.calendar.dateComponents([.day, .month, .year], from: date)
         let month = RussianText.monthsShort[((parts.month ?? 1) - 1 + 12) % 12]
-        var text = "до \(parts.day ?? 1) \(month)"
+        var text = "\(parts.day ?? 1) \(month)"
         if let year = parts.year, year != time.calendar.component(.year, from: time.now) {
             text += " \(year)"
         }
@@ -132,7 +137,8 @@ nonisolated enum GoalProgressText {
         if progress.isCompleted { return "Выполнено" }
         switch progress.method {
         case .metric:
-            guard let metric = progress.metrics.first else { return "Число не задано" }
+            // Число без цели (только что добавленное) — ещё не число.
+            guard let metric = progress.metrics.first, metric.target != metric.start else { return "Число не задано" }
             return withPercent(self.metric(metric), progress.value)
         case .milestones:
             guard progress.milestonesTotal > 0 else { return "Этапы не заданы" }

@@ -123,8 +123,47 @@ nonisolated struct QuickGoalResolution: Hashable, Sendable {
     }
 }
 
+/// Быстрые сроки в чипе цели; остальное — «Выбрать дату…».
+nonisolated enum GoalDeadlineOption: CaseIterable, Hashable, Sendable {
+    case inAMonth
+    case inThreeMonths
+    case endOfYear
+
+    var title: String {
+        switch self {
+        case .inAMonth: return "Через месяц"
+        case .inThreeMonths: return "Через 3 месяца"
+        case .endOfYear: return "До конца года"
+        }
+    }
+
+    /// День срока.
+    func date(time: TimeContext) -> Date {
+        let calendar = time.calendar
+        let today = time.today
+        switch self {
+        case .inAMonth:
+            return calendar.date(byAdding: .month, value: 1, to: today).map(time.startOfDay) ?? time.adding(days: 30, to: today)
+        case .inThreeMonths:
+            return calendar.date(byAdding: .month, value: 3, to: today).map(time.startOfDay) ?? time.adding(days: 91, to: today)
+        case .endOfYear:
+            var components = DateComponents()
+            components.year = calendar.component(.year, from: today) + 1
+            components.month = 1
+            components.day = 1
+            let next = calendar.date(from: components).map(time.startOfDay) ?? time.adding(days: 365, to: today)
+            return time.adding(days: -1, to: next)
+        }
+    }
+}
+
 /// Подписи быстрой цели. Здесь, а не в экране, — их проверяют тесты.
 nonisolated enum QuickGoalText {
+    /// Пункт быстрого срока: «Через месяц · 9 окт».
+    static func deadlineOption(_ option: GoalDeadlineOption, time: TimeContext) -> String {
+        "\(option.title)\(GoalProgressText.separator)\(GoalProgressText.shortDate(option.date(time: time), time: time))"
+    }
+
     /// Как Linea поняла строку — только сказанное и выбранное: «до 15
     /// октября · Высокая». Значений по умолчанию здесь нет.
     static func summary(_ resolution: QuickGoalResolution, time: TimeContext) -> String {

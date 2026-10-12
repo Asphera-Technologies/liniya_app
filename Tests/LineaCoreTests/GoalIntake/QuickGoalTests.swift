@@ -314,6 +314,33 @@ struct QuickGoalTests {
         #expect(goal.metrics.first?.id != resolution.understanding.metrics.first?.id, "У этапов и чисел цели — свои id")
     }
 
+    @Test("После «Изменить» этапы, числа и стадия — из исправленных слов; выбранный в чипе метод остаётся")
+    func restructuredAfterEdit() {
+        var understanding = RuleBasedGoalAnalyzer().understand(GoalIntakeInput(title: "Выпустить Линия в TestFlight"),
+                                                               profile: profile, time: time)
+        #expect(understanding.milestones.isEmpty)
+        understanding.successCriteria = ["Сборка опубликована в TestFlight", "Подключить 50 тестировщиков"]
+        understanding.currentState = "Прототип готов, раздали бету тестировщикам."
+        let edited = understanding.restructured(methodChosen: false)
+        #expect(edited.milestones.map(\.title) == ["Сборка опубликована в TestFlight"])
+        #expect(edited.metrics.map(\.unit) == ["тестировщиков"])
+        #expect(edited.method == .hybrid)
+        #expect(edited.stage == "Тестирование")
+
+        var manual = understanding
+        manual.method = .manual
+        #expect(manual.restructured(methodChosen: true).method == .manual)
+    }
+
+    @Test("Быстрые сроки в чипе: через месяц, через 3 месяца, до конца года")
+    func deadlineOptions() {
+        #expect(GoalDeadlineOption.inAMonth.date(time: time) == day(10, 9))
+        #expect(GoalDeadlineOption.inThreeMonths.date(time: time) == day(12, 9))
+        #expect(GoalDeadlineOption.endOfYear.date(time: time) == day(12, 31))
+        #expect(QuickGoalText.deadlineOption(.inAMonth, time: time) == "Через месяц · 9 окт")
+        #expect(QuickGoalText.deadlineOption(.endOfYear, time: time) == "До конца года · 31 дек")
+    }
+
     @Test("Пустая строка цель не создаёт")
     func emptyLine() {
         #expect(!resolve(QuickGoalDraft(text: "   ")).canCreate)
