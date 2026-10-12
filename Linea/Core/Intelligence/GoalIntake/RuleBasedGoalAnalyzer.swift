@@ -24,9 +24,11 @@ import Foundation
 
 nonisolated struct RuleBasedGoalAnalyzer: GoalAnalyzing {
     let parser: QuickTaskParser
+    let classifier: GoalClassifier
 
-    init(parser: QuickTaskParser = QuickTaskParser()) {
+    init(parser: QuickTaskParser = QuickTaskParser(), classifier: GoalClassifier = GoalClassifier()) {
         self.parser = parser
+        self.classifier = classifier
     }
 
     func analyze(_ input: GoalIntakeInput, profile: UserProfile, time: TimeContext) async -> GoalUnderstanding {
@@ -34,7 +36,10 @@ nonisolated struct RuleBasedGoalAnalyzer: GoalAnalyzing {
     }
 
     func understand(_ input: GoalIntakeInput, profile: UserProfile, time: TimeContext) -> GoalUnderstanding {
-        let title = Self.title(input.title)
+        // Строка цели — как у быстрой задачи: срок и важность уходят из
+        // названия, «хочу» и «цель:» — тоже.
+        let line = GoalLineParser.parse(input.title, profile: profile, time: time, parser: parser)
+        let title = line.title
 
         var current: [String] = []
         var target: [String] = []
@@ -71,14 +76,33 @@ nonisolated struct RuleBasedGoalAnalyzer: GoalAnalyzing {
             question = .start
         }
 
+        // Модель состояния: тип, сфера, чья цель, чем мерить путь и стадии —
+        // всё из сказанного, ничего сверх.
+        let currentState = Self.paragraph(currentTexts)
+        let successCriteria = Self.unique(criteria)
+        let story = Self.details(input)
+        let kind = classifier.classify(title: title, details: story).kind
+        let structure = GoalStructure.derive(title: title, currentState: currentState, successCriteria: successCriteria)
+
         return GoalUnderstanding(
             title: title,
-            currentState: Self.paragraph(currentTexts),
+            currentState: currentState,
             targetState: Self.paragraph(targetTexts.isEmpty ? criteria : targetTexts),
-            successCriteria: Self.unique(criteria),
-            deadline: deadline(in: target + [input.title], profile: profile, time: time),
-            details: Self.details(input),
-            question: question
+            successCriteria: successCriteria,
+            deadline: line.deadline ?? deadline(in: target, profile: profile, time: time),
+            details: story,
+            question: question,
+            priority: line.priority ?? .normal,
+            isPrioritySaid: line.priority != nil,
+            isTitleUnderstood: line.isUnderstood,
+            kind: kind,
+            scope: classifier.scope(title: title, details: story),
+            owner: classifier.owner(title: title, details: story),
+            method: GoalStructure.method(kind: kind, metrics: structure.metrics, milestones: structure.milestones),
+            metrics: structure.metrics,
+            milestones: structure.milestones,
+            stages: GoalStages.suggested(kind: kind, title: title, details: story),
+            stage: GoalStages.current(kind: kind, title: title, details: story, currentState: currentState)
         )
     }
 
@@ -159,10 +183,12 @@ nonisolated struct RuleBasedGoalAnalyzer: GoalAnalyzing {
 
     // MARK: - Срок
 
-    /// Срок из того, что сказано о результате: «к 1 декабря», «до 25 числа».
+    /// Срок из того, что сказано о результате: «к 1 декабря», «до конца
+    /// года», «к лету» — сроки цели, как в строке цели.
     func deadline(in texts: [String], profile: UserProfile, time: TimeContext) -> Date? {
         for text in texts {
-            if let deadline = parser.parse(text, profile: profile, time: time).deadline, deadline > time.now {
+            if let deadline = GoalLineParser.parse(text, profile: profile, time: time, parser: parser).deadline,
+               deadline >= time.today {
                 return deadline
             }
         }

@@ -95,6 +95,23 @@ nonisolated struct QuickTaskParser: Sendable {
         return state.result()
     }
 
+    /// Строка цели: срок и важность. Длительности и времени начала у цели
+    /// нет: «Пробежать марафон за 4 часа» — это не 4 часа работы, а
+    /// «за 3 месяца» — срок. Сроки цели длиннее, чем у задачи: «до конца
+    /// года», «в декабре», «к лету» (`GoalLineParser`).
+    func parseGoal(_ text: String, profile: UserProfile = .default, time: TimeContext) -> QuickTaskParse {
+        var state = QuickTaskParseState(text: text, profile: profile, time: time)
+        state.stripFillers()
+        state.stripGoalFillers()
+        state.matchGoalPriority()
+        state.matchPriority()
+        state.matchGoalHorizons()
+        state.matchDeadlines()
+        state.matchDays()
+        state.keepTimesOfUnknownDay()
+        return state.result()
+    }
+
     /// Строка как есть, только пробелы схлопнуты и первая буква заглавная —
     /// таким было бы название, если Linea ничего не поняла.
     static func cleaned(_ text: String) -> String {
@@ -227,7 +244,8 @@ nonisolated enum QuickTaskWords {
 // MARK: - Разбор
 
 /// Состояние одного разбора: какие куски строки уже стали параметрами.
-nonisolated private struct QuickTaskParseState {
+/// Правила строки цели (`GoalLineParser`) — в своём файле, поверх него же.
+nonisolated struct QuickTaskParseState {
     let text: String
     let profile: UserProfile
     let time: TimeContext
@@ -399,6 +417,7 @@ nonisolated private struct QuickTaskParseState {
             }
             return QuickTaskWords.dayWords.contains(word) || QuickTaskWords.weekdays[word] != nil
                 || QuickTaskWords.weekdayAbbreviations[word] != nil || QuickTaskWords.months[word] != nil
+                || GoalLineWords.isPeriodWord(word)
         case .clock, .mark, .pause, .end:
             return false
         }

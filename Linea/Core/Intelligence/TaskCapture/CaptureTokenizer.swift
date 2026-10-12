@@ -134,6 +134,26 @@ nonisolated enum CaptureTokenizer {
                 return CaptureToken(kind: .number(value), word: "\(first).\(fraction)", range: start..<end)
             }
         }
-        return CaptureToken(kind: .number(Double(first) ?? 0), word: first, range: start..<afterFirst)
+        // «15-го октября», «к 1-му», «25-е число»: окончание порядкового
+        // числа — часть числа, а не тире и слово.
+        let end = ordinalEnding(in: text, after: afterFirst) ?? afterFirst
+        return CaptureToken(kind: .number(Double(first) ?? 0), word: first, range: start..<end)
+    }
+
+    /// Окончания чисел после дефиса: «-го», «-е», «-му», «-ое», а ещё «2-х»,
+    /// «5-ти».
+    static let ordinalEndings: Set<String> = [
+        "го", "ого", "его", "е", "ое", "ее", "й", "ый", "ий", "му", "ому", "ему", "м", "ым", "им", "ом", "я", "ая", "ю", "ую",
+        "х", "ти", "ми",
+    ]
+
+    /// Где кончается «-го» после числа; nil — дальше не окончание.
+    private static func ordinalEnding(in text: String, after index: String.Index) -> String.Index? {
+        guard index < text.endIndex, text[index] == "-" else { return nil }
+        let letters = text.index(after: index)
+        var end = letters
+        while end < text.endIndex, text[end].isLetter { end = text.index(after: end) }
+        guard end > letters, ordinalEndings.contains(RussianWords.normalized(String(text[letters..<end]))) else { return nil }
+        return end
     }
 }
