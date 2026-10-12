@@ -40,7 +40,11 @@ struct GoalEditorView: View {
     /// Веса этапов видны, если они уже есть или человек их включил.
     @State private var showsWeights: Bool
     @State private var isEditingStages = false
+    /// «За какую часть отвечаешь ты?» — у цели команды или компании.
+    @State private var ownerScope: String
     @Namespace private var prioritySegments
+    @Namespace private var ownerSegments
+    @Namespace private var sharedSegments
     /// «Готово» and «Удалить» fire once.
     @State private var isSaving = false
 
@@ -55,6 +59,7 @@ struct GoalEditorView: View {
         _hasDueDate = State(initialValue: existing.endDate != nil)
         _dueDate = State(initialValue: existing.endDate ?? Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date())
         _showsWeights = State(initialValue: existing.milestones.contains { $0.weight != nil })
+        _ownerScope = State(initialValue: existing.ownerScope ?? "")
     }
 
     private var time: TimeContext { plan.time }
@@ -64,6 +69,9 @@ struct GoalEditorView: View {
         var goal = draft
         goal.currentState = Self.text(currentState)
         goal.endDate = hasDueDate ? time.startOfDay(dueDate) : nil
+        // Часть и свои числа остаются, даже если цель стала своей: вернёшь
+        // «От команды» — они на месте. У своей цели они просто не считаются.
+        goal.ownerScope = Self.text(ownerScope)
         return goal
     }
 
@@ -80,13 +88,23 @@ struct GoalEditorView: View {
                                 .accessibilityIdentifier("goal.card.caption")
                         }
                     }
-                    GoalProgressEditor(goal: $draft, progress: plan.progress(for: edited), time: time,
-                                       showsWeights: $showsWeights)
+                    ownershipSection
+                    // Общая цель и своя часть — разные показатели: задачи
+                    // человека общий прогресс не двигают (ADR-038).
+                    GoalProgressEditor(
+                        goal: $draft, progress: plan.progress(for: edited), time: time, showsWeights: $showsWeights,
+                        title: draft.scope.isShared ? "Общая цель" : "Прогресс",
+                        note: draft.scope.isShared
+                            ? "Что ты знаешь о результате всей \(draft.scope == .company ? "компании" : "команды"). Твои задачи его не двигают."
+                            : nil
+                    )
+                    if draft.scope.isShared {
+                        contributionSection
+                    }
                     stateSection
                     resultSection
                     dueDateSection
                     prioritySection
-                    belongingSection
                     togglesSection
                     kindSection
                     deleteButton
@@ -275,43 +293,85 @@ struct GoalEditorView: View {
         }
     }
 
-    // MARK: Сфера и чья цель
+    // MARK: Чья цель
 
-    private var belongingSection: some View {
-        let automaticScope = classifier.scope(title: draft.title, details: GoalClassifier.story(of: edited))
-        let scope = draft.scopeOverride ?? automaticScope
-        return VStack(spacing: 0) {
-            Menu {
-                Button { draft.scopeOverride = nil } label: {
-                    option("Как решит Linea: \(automaticScope.title.lowercased())", isSelected: draft.scopeOverride == nil)
-                }
-                Divider()
-                ForEach(GoalScope.allCases, id: \.self) { option in
-                    Button { draft.scopeOverride = option } label: {
-                        self.option(option.title, isSelected: draft.scopeOverride == option)
+    /// «Эта цель зависит только от тебя или от команды?» — и если от
+    /// команды, то какой: команды или всей компании.
+    private var ownershipSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel(text: "Чья цель")
+            Text("Эта цель зависит только от тебя или от команды?")
+                .font(LineaFont.rowTitle)
+                .foregroundStyle(LineaColor.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            LineaSegmentedControl(
+                options: [GoalScope.personal.choiceTitle, GoalScope.team.choiceTitle],
+                selection: Binding(
+                    get: { draft.scope.isShared ? 1 : 0 },
+                    set: { index in
+                        withAnimation(.snappy) { draft.scope = index == 0 ? .personal : (draft.scope.isShared ? draft.scope : .team) }
                     }
-                }
-            } label: {
-                menuRow("Сфера", value: scope.title, isMuted: draft.scopeOverride == nil)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Сфера: \(scope.title)")
+                ),
+                namespace: ownerSegments
+            )
             .accessibilityIdentifier("goal.scope")
-            LineaHairline()
+            if draft.scope.isShared {
+                LineaSegmentedControl(
+                    options: ["Команда", "Вся компания"],
+                    selection: Binding(
+                        get: { draft.scope == .company ? 1 : 0 },
+                        set: { draft.scope = $0 == 1 ? .company : .team }
+                    ),
+                    namespace: sharedSegments
+                )
+                .accessibilityIdentifier("goal.scope.shared")
+            }
+        }
+    }
 
-            Menu {
-                ForEach(GoalOwnerScope.allCases, id: \.self) { owner in
-                    Button { draft.ownerScope = owner } label: {
-                        option(owner.title, isSelected: draft.ownerScope == owner)
+    // MARK: Моя часть
+
+    /// Вклад человека — отдельно от общей цели: его часть, свои числа и
+    /// свои действия (`personal_contribution_progress`).
+    private var contributionSection: some View {
+        let contribution = plan.progress(for: edited).contribution
+        return VStack(alignment: .leading, spacing: 14) {
+            SectionLabel(text: "Моя часть", trailing: contribution?.value.map(GoalProgressText.percent))
+            VStack(alignment: .leading, spacing: 10) {
+                Text("За какую часть отвечаешь ты?")
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textSecondary)
+                LineaTextField(placeholder: "Я отвечаю за продажи крупным клиентам…", text: $ownerScope,
+                               axis: .vertical, font: LineaFont.rowTitle, identifier: "goal.part")
+                    .lineLimit(1...6)
+                Text("Linea предлагает шаги и окна только в этой части, а не во всей работе.")
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let contribution {
+                VStack(spacing: 0) {
+                    ForEach(GoalProgressText.contributionLines(contribution, time: time), id: \.label) { line in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(line.label)
+                                .font(LineaFont.rowTitle)
+                                .foregroundStyle(LineaColor.textSecondary)
+                            Spacer(minLength: 8)
+                            Text(line.value)
+                                .font(LineaFont.rowValue)
+                                .foregroundStyle(LineaColor.textPrimary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        .padding(.vertical, 10)
+                        LineaHairline()
                     }
                 }
-            } label: {
-                menuRow("Чья цель", value: draft.ownerScope.title, isMuted: false)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("goal.contribution")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Чья цель: \(draft.ownerScope.title)")
-            .accessibilityIdentifier("goal.owner")
-            LineaHairline()
+            GoalMetricsEditor(metrics: $draft.contributionMetrics, firstAddTitle: "Моё число",
+                              nextAddTitle: "Ещё своё число", unitPlaceholder: "Что считаю я: клиентов, сделок",
+                              identifier: "goal.contribution")
         }
     }
 
@@ -446,6 +506,9 @@ struct GoalEditorView: View {
             }
             .filter { !$0.title.isEmpty }
         result.metrics = draft.metrics.filter { metric in
+            !(metric.unit.trimmingCharacters(in: .whitespaces).isEmpty && metric.target == metric.start)
+        }
+        result.contributionMetrics = draft.contributionMetrics.filter { metric in
             !(metric.unit.trimmingCharacters(in: .whitespaces).isEmpty && metric.target == metric.start)
         }
         if result.isCompleted { result.progress = 1 }

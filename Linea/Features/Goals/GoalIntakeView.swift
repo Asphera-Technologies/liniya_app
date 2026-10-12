@@ -19,6 +19,7 @@ struct GoalIntakeView: View {
     @FocusState private var focus: Field?
     /// Быстрая цель — невысокий лист по содержимому, как у быстрой задачи.
     @State private var quickHeight: CGFloat = 260
+    @Namespace private var ownerSegments
 
     private enum Field: Hashable {
         case title, details, answer
@@ -116,6 +117,27 @@ struct GoalIntakeView: View {
     private func ask(_ question: GoalQuestion) -> some View {
         @Bindable var store = store
         return VStack(alignment: .leading, spacing: 16) {
+            if question.topic == .owner {
+                // Linea увидела в словах команду или компанию — и спрашивает,
+                // так ли это, прежде чем спросить про свою часть.
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Эта цель зависит только от тебя или от команды?")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    LineaSegmentedControl(
+                        options: [GoalScope.personal.choiceTitle, GoalScope.team.choiceTitle],
+                        selection: Binding(
+                            get: { 1 },
+                            set: { index in
+                                if index == 0 { Task { await store.answerPersonal() } }
+                            }
+                        ),
+                        namespace: ownerSegments
+                    )
+                    .accessibilityIdentifier("goal.owner.scope")
+                }
+            }
             Text(question.text)
                 .font(LineaFont.feature)
                 .foregroundStyle(LineaColor.textPrimary)
@@ -156,6 +178,9 @@ struct GoalIntakeView: View {
                             .accessibilityIdentifier("goal.review.summary")
                     }
                 }
+                if understanding.scope.isShared {
+                    part("Моя часть", understanding.ownerScope, identifier: "goal.review.part")
+                }
                 part("Сейчас", understanding.currentState, identifier: "goal.review.current")
                 part("Результат", understanding.targetState, identifier: "goal.review.target")
                 progressPart(understanding)
@@ -188,11 +213,13 @@ struct GoalIntakeView: View {
         }
     }
 
-    /// Срок и важность — как у быстрой цели: «до 15 октября · Высокая».
+    /// Срок, важность и чья цель — как у быстрой цели: «до 15 октября ·
+    /// Высокая · цель компании».
     private func reviewSummary(_ understanding: GoalUnderstanding) -> String {
         var parts: [String] = []
         if let deadline = understanding.deadline { parts.append(GoalProgressText.deadline(deadline, time: store.time)) }
         if understanding.isPrioritySaid { parts.append(LineaGoal.importanceTitle(understanding.priority)) }
+        if understanding.scope.isShared { parts.append("цель \(understanding.scope.title.lowercased())") }
         return parts.joined(separator: GoalProgressText.separator)
     }
 
@@ -244,6 +271,9 @@ struct GoalIntakeView: View {
                 SectionLabel(text: "Цель")
                 LineaTextField(placeholder: "Чего хочешь достичь", text: $store.edits.title, axis: .vertical,
                                identifier: "goal.edit.title")
+            }
+            if store.understanding?.scope.isShared == true {
+                editField("Моя часть", placeholder: "За какую часть отвечаешь ты", text: $store.edits.ownerScope)
             }
             editField("Сейчас", placeholder: "С чего начинаем", text: $store.edits.currentState)
             editField("Результат", placeholder: "Что будет, когда цель достигнута", text: $store.edits.targetState)

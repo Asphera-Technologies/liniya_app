@@ -20,6 +20,10 @@ struct GoalProgressEditor: View {
     let time: TimeContext
     /// Веса этапов видны, если они уже есть или человек их включил.
     @Binding var showsWeights: Bool
+    /// «Прогресс»; у цели команды или компании — «Общая цель».
+    var title = "Прогресс"
+    /// Под заголовком: у общей цели — что её прогресс не из задач человека.
+    var note: String? = nil
 
     /// Этап, который сейчас набирают: «+ этап» и ввод сразу ставят курсор в новый.
     @FocusState private var focusedMilestone: UUID?
@@ -29,11 +33,17 @@ struct GoalProgressEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Прогресс")
+                Text(title)
                     .font(LineaFont.sectionLabel)
                     .foregroundStyle(LineaColor.textSecondary)
                 Spacer(minLength: 8)
                 methodMenu
+            }
+            if let note {
+                Text(note)
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if !(goal.progressMethod == .qualitative && !goal.isCompleted) {
                 Text(GoalProgressText.summary(progress, time: time))
@@ -45,12 +55,12 @@ struct GoalProgressEditor: View {
             }
             switch goal.progressMethod {
             case .metric:
-                metricsEditor(limit: 1)
+                GoalMetricsEditor(metrics: $goal.metrics, limit: 1)
             case .milestones:
                 milestonesEditor(progress)
             case .hybrid:
                 milestonesEditor(progress)
-                metricsEditor(limit: nil)
+                GoalMetricsEditor(metrics: $goal.metrics)
             case .manual:
                 manualSelector
             case .qualitative:
@@ -213,74 +223,6 @@ struct GoalProgressEditor: View {
             set: { value in
                 guard let index = goal.milestones.firstIndex(where: { $0.id == id }) else { return }
                 goal.milestones[index] = value
-            }
-        )
-    }
-
-    // MARK: Числа
-
-    @ViewBuilder
-    private func metricsEditor(limit: Int?) -> some View {
-        let shown = limit.map { Array(goal.metrics.prefix($0)) } ?? goal.metrics
-        VStack(alignment: .leading, spacing: 18) {
-            ForEach(shown) { metric in
-                metricRow(metric, removable: limit == nil)
-            }
-            if limit == nil || goal.metrics.isEmpty {
-                Button {
-                    withAnimation(.snappy) {
-                        goal.metrics.append(GoalMetric(id: UUID(), unit: "", target: 0))
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus")
-                            .font(.footnote.weight(.medium))
-                        Text(goal.metrics.isEmpty ? "Что считаем" : "Ещё число")
-                            .font(LineaFont.rowTitle)
-                    }
-                    .foregroundStyle(LineaColor.textTertiary)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("goal.metric.add")
-            }
-        }
-    }
-
-    private func metricRow(_ metric: GoalMetric, removable: Bool) -> some View {
-        let binding = metricBinding(metric.id)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .bottom, spacing: 12) {
-                LineaTextField(placeholder: "Что считаем: пользователей, км, ₽", text: binding.unit, font: LineaFont.rowTitle,
-                               identifier: "goal.metric.unit")
-                if removable {
-                    Button {
-                        withAnimation(.snappy) { goal.metrics.removeAll { $0.id == metric.id } }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(LineaColor.textTertiary)
-                            .padding(.bottom, 12)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Убрать число")
-                }
-            }
-            // Значение меняется на каждый символ: «18» и сразу «Готово» — сохранится 18.
-            HStack(alignment: .top, spacing: 16) {
-                LineaNumberField(label: "Было", value: binding.start, identifier: "goal.metric.start")
-                LineaNumberField(label: "Сейчас", value: binding.current, identifier: "goal.metric.current")
-                LineaNumberField(label: "Цель", value: binding.target, identifier: "goal.metric.target")
-            }
-        }
-    }
-
-    private func metricBinding(_ id: UUID) -> Binding<GoalMetric> {
-        Binding(
-            get: { goal.metrics.first { $0.id == id } ?? GoalMetric(id: id, unit: "", target: 0) },
-            set: { value in
-                guard let index = goal.metrics.firstIndex(where: { $0.id == id }) else { return }
-                goal.metrics[index] = value
             }
         )
     }

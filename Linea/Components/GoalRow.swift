@@ -7,6 +7,9 @@
 //  пользователей · 36%», «2 из 5 этапов», «В процессе», «Разработка ·
 //  последнее продвижение — вчера», and the deadline. The bar is there only
 //  for a number or for milestones; a goal without percentages gets none.
+//  A team or company goal (ADR-038) says so first — «Компания · 3,2 млн из
+//  5 млн ₽ · 64%» — and shows the person's own part on a separate line:
+//  «Моя часть: 2 из 5 enterprise-клиентов · 40%». Two different numbers.
 //
 
 import SwiftUI
@@ -37,6 +40,13 @@ struct GoalRow: View {
                     .foregroundStyle(LineaColor.textTertiary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+                if let contribution = progress.contribution, !goal.isCompleted {
+                    Text(GoalProgressText.contributionSummary(contribution, time: time))
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.vertical, 14)
             .contentShape(Rectangle())
@@ -44,9 +54,11 @@ struct GoalRow: View {
         .buttonStyle(.plain)
     }
 
-    /// Прогресс и срок: «18 из 50 пользователей · 36% · до 15 окт».
+    /// Прогресс и срок: «18 из 50 пользователей · 36% · до 15 окт»; у общей
+    /// цели впереди — чья она: «Компания · …».
     private var caption: String {
         var text = GoalProgressText.summary(progress, time: time)
+        if let label = GoalProgressText.scopeLabel(goal.scope) { text = label + GoalProgressText.separator + text }
         if !goal.isCompleted, let end = goal.endDate {
             text += GoalProgressText.separator + GoalProgressText.shortDeadline(end, time: time)
         }

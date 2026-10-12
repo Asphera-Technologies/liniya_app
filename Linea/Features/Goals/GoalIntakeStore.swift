@@ -36,6 +36,13 @@ final class GoalIntakeStore {
         case edit
     }
 
+    /// Куда идёт надиктованное в быстрой цели: в строку или в «За какую часть
+    /// отвечаешь ты?».
+    enum DictationTarget: Equatable {
+        case line
+        case part
+    }
+
     /// Правка «Я поняла цель так»: признаки — по одному на строку.
     struct Edits: Equatable {
         var title = ""
@@ -44,6 +51,8 @@ final class GoalIntakeStore {
         var criteria = ""
         var hasDeadline = false
         var deadline = Date()
+        /// Своя часть общей цели.
+        var ownerScope = ""
     }
 
     /// Быстрая цель: строка и выбор в чипах. Выбор живёт и в подробном
@@ -59,8 +68,9 @@ final class GoalIntakeStore {
     private(set) var isThinking = false
     private(set) var isSaving = false
 
-    /// Голос: рассказ о цели или ответ на вопрос.
+    /// Голос: строка, своя часть, рассказ о цели или ответ на вопрос.
     let dictation: VoiceDictation
+    private(set) var dictationTarget: DictationTarget = .line
 
     private var answers: [GoalQuestion.Topic: String] = [:]
     private var skipped: Set<GoalQuestion.Topic> = []
@@ -123,6 +133,7 @@ final class GoalIntakeStore {
         understanding = nil
         edits = Edits()
         step = .quick
+        dictationTarget = .line
         isThinking = false
         isSaving = false
         goalID = UUID()
@@ -148,8 +159,15 @@ final class GoalIntakeStore {
         draft.method = method
     }
 
+    /// «От меня» / «От команды» / «От компании».
     func chooseScope(_ scope: GoalScope) {
         draft.scope = scope
+    }
+
+    /// Микрофон у строки или у «За какую часть отвечаешь ты?».
+    func toggleDictation(for target: DictationTarget) {
+        if dictation.phase == .idle { dictationTarget = target }
+        dictation.toggle()
     }
 
     /// «Создать цель»: цель — такая, как её видно под строкой и в чипах.
@@ -161,7 +179,7 @@ final class GoalIntakeStore {
         dictation.cancel()
         let goal = resolution.goal(id: goalID, createdAt: time.now, time: time)
         await planStore.saveGoal(goal)
-        LineaLog.plan.notice("Быстрая цель: срок \(goal.endDate == nil ? "нет" : "есть", privacy: .public), тип \(resolution.understanding.kind.rawValue, privacy: .public), прогресс \(goal.progressMethod.rawValue, privacy: .public)\(resolution.methodOrigin == .chosen ? " (выбран)" : "", privacy: .public), сфера \(resolution.understanding.scope.rawValue, privacy: .public)")
+        LineaLog.plan.notice("Быстрая цель: срок \(goal.endDate == nil ? "нет" : "есть", privacy: .public), тип \(resolution.understanding.kind.rawValue, privacy: .public), прогресс \(goal.progressMethod.rawValue, privacy: .public)\(resolution.methodOrigin == .chosen ? " (выбран)" : "", privacy: .public), чья \(goal.scope.rawValue, privacy: .public), своя часть \(goal.ownPart == nil ? "нет" : "есть", privacy: .public)")
         return true
     }
 
@@ -190,6 +208,15 @@ final class GoalIntakeStore {
         await analyze()
     }
 
+    /// «От меня» на вопросе о своей части: цель своя, части нет.
+    func answerPersonal() async {
+        guard case .question(let question) = step, question.topic == .owner, !isThinking else { return }
+        draft.scope = .personal
+        answer = ""
+        dictation.reset()
+        await analyze()
+    }
+
     /// «Пропустить»: этот вопрос больше не задаём.
     func skipQuestion() async {
         guard case .question(let question) = step, !isThinking else { return }
@@ -208,7 +235,8 @@ final class GoalIntakeStore {
             targetState: understanding.targetState ?? "",
             criteria: understanding.successCriteria.joined(separator: "\n"),
             hasDeadline: understanding.deadline != nil,
-            deadline: understanding.deadline ?? time.adding(days: 30, to: time.today)
+            deadline: understanding.deadline ?? time.adding(days: 30, to: time.today),
+            ownerScope: understanding.ownerScope ?? ""
         )
         step = .edit
     }
@@ -226,6 +254,7 @@ final class GoalIntakeStore {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         understanding.deadline = edits.hasDeadline ? edits.deadline : nil
+        if understanding.scope.isShared { understanding.ownerScope = Self.text(edits.ownerScope) }
         // Поправленные слова — новые этапы, числа и стадия.
         self.understanding = understanding.restructured(methodChosen: draft.method != nil)
         step = .review
@@ -248,7 +277,8 @@ final class GoalIntakeStore {
     private func analyze() async {
         isThinking = true
         dictation.cancel()
-        let input = GoalIntakeInput(title: title, details: details, answers: answers, skipped: skipped)
+        // Выбор «чья цель» и своя часть из быстрой цели — тоже в разбор.
+        let input = draft.input(details: details, answers: answers, skipped: skipped, title: title)
         let analyzed = await analyzer.analyze(input, profile: profileProvider(), time: time)
         // Выбранное в чипах быстрой цели сильнее сказанного в рассказе.
         let result = draft.resolution(of: analyzed).understanding
@@ -265,6 +295,8 @@ final class GoalIntakeStore {
     private func appendSpoken(_ spoken: String) {
         guard !spoken.isEmpty else { return }
         switch step {
+        case .quick where dictationTarget == .part:
+            draft.ownerScope = Self.joined(draft.ownerScope, spoken)
         case .quick:
             draft.text = Self.joined(draft.text, spoken)
         case .describe:

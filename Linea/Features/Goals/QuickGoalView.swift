@@ -6,9 +6,10 @@
 //  вопрос — «Чего хочешь достичь?». Строка «Выпустить Линия в TestFlight до
 //  15-го октября» сразу видна такой, какой станет целью: «Выпустить Линия в
 //  TestFlight», «до 15 октября». Под ней — чипы самого важного, как у задачи:
-//  срок, важность, как считать прогресс, сфера. Серый чип — решила Linea,
-//  чёрный — сказано или выбрано. «Создать цель» — и всё; «Рассказать
-//  подробнее» — что уже есть и как поймём, что получилось.
+//  срок, важность, как считать прогресс, чья цель. Серый чип — решила Linea,
+//  чёрный — сказано или выбрано. У цели команды или компании — «За какую
+//  часть отвечаешь ты?» текстом или голосом (ADR-038). «Создать цель» — и
+//  всё; «Рассказать подробнее» — что уже есть и как поймём, что получилось.
 //
 //  Экран только показывает `GoalIntakeStore`; что получится из строки,
 //  решает ядро (`QuickGoalDraft`).
@@ -35,6 +36,7 @@ struct QuickGoalView: View {
             line(text: $store.draft.text)
             understood(resolution)
             chips(resolution)
+            ownPart(resolution)
             status
             actions
         }
@@ -102,11 +104,12 @@ struct QuickGoalView: View {
     }
 
     private var micButton: some View {
-        Button {
-            store.dictation.toggle()
+        let phase = store.dictationTarget == .line ? store.dictation.phase : .idle
+        return Button {
+            store.toggleDictation(for: .line)
         } label: {
             Group {
-                switch store.dictation.phase {
+                switch phase {
                 case .idle:
                     Image(systemName: "mic")
                         .foregroundStyle(LineaColor.textSecondary)
@@ -120,12 +123,12 @@ struct QuickGoalView: View {
             }
             .font(.body.weight(.medium))
             .frame(width: 40, height: 40)
-            .background(Circle().fill(store.dictation.phase == .recording ? LineaColor.ink : LineaColor.fill))
+            .background(Circle().fill(phase == .recording ? LineaColor.ink : LineaColor.fill))
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .disabled(store.dictation.phase == .transcribing)
-        .accessibilityLabel(store.dictation.phase == .recording ? "Закончить запись" : "Надиктовать цель")
+        .disabled(store.dictation.phase == .transcribing || (store.dictation.phase != .idle && store.dictationTarget != .line))
+        .accessibilityLabel(phase == .recording ? "Закончить запись" : "Надиктовать цель")
     }
 
     // MARK: Как Linea поняла
@@ -162,8 +165,8 @@ struct QuickGoalView: View {
 
     // MARK: Чипы
 
-    /// Срок, важность, прогресс, сфера — не больше четырёх, как у задачи. Не
-    /// влезли в ширину — переносятся на вторую строку.
+    /// Срок, важность, прогресс, чья цель — не больше четырёх, как у задачи.
+    /// Не влезли в ширину — переносятся на вторую строку.
     private func chips(_ resolution: QuickGoalResolution) -> some View {
         FlowLayout(spacing: 8) {
             deadlineChip(resolution)
@@ -232,18 +235,82 @@ struct QuickGoalView: View {
         .accessibilityLabel("Прогресс: \(title)")
     }
 
+    /// Чья цель: «От меня», «От команды», «От компании». Команду и компанию
+    /// Linea видит в словах («выручку компании») — чип чёрный.
     private func scopeChip(_ resolution: QuickGoalResolution) -> some View {
         let scope = resolution.understanding.scope
         return Menu {
             ForEach(GoalScope.allCases, id: \.self) { option in
                 Button { store.chooseScope(option) } label: {
-                    choice(option.title, isSelected: scope == option)
+                    choice(option.choiceTitle, isSelected: scope == option)
                 }
             }
         } label: {
-            TaskChip(systemImage: "square.grid.2x2", title: scope.title, isMuted: resolution.scopeOrigin == .assumed)
+            TaskChip(systemImage: Self.icon(for: scope), title: scope.choiceTitle,
+                     isMuted: resolution.scopeOrigin == .assumed)
         }
-        .accessibilityLabel("Сфера: \(scope.title)")
+        .accessibilityLabel("Чья цель: \(scope.choiceTitle)")
+    }
+
+    static func icon(for scope: GoalScope) -> String {
+        switch scope {
+        case .personal: return "person"
+        case .team: return "person.2"
+        case .company: return "building.2"
+        }
+    }
+
+    // MARK: Своя часть
+
+    /// У цели команды или компании — за какую часть отвечает сам человек:
+    /// шаги и окна Linea будет предлагать только в ней.
+    @ViewBuilder
+    private func ownPart(_ resolution: QuickGoalResolution) -> some View {
+        @Bindable var store = store
+        let phase = store.dictationTarget == .part ? store.dictation.phase : .idle
+        if resolution.understanding.scope.isShared {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("За какую часть отвечаешь ты?")
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textSecondary)
+                TextField("Я отвечаю за продажи крупным клиентам…", text: $store.draft.ownerScope, axis: .vertical)
+                    .font(LineaFont.rowTitle)
+                    .foregroundStyle(LineaColor.textPrimary)
+                    .tint(LineaColor.ink)
+                    .lineLimit(1...3)
+                    .accessibilityIdentifier("goal.part")
+                LineaHairline()
+                Button {
+                    isFocused = false
+                    store.toggleDictation(for: .part)
+                } label: {
+                    HStack(spacing: 6) {
+                        switch phase {
+                        case .idle:
+                            Image(systemName: "mic")
+                            Text("Рассказать")
+                        case .recording:
+                            Image(systemName: "stop.fill")
+                            Text("Закончить запись")
+                        case .transcribing:
+                            ProgressView().controlSize(.small)
+                            Text("Распознаю…")
+                        }
+                    }
+                    .font(LineaFont.caption)
+                    .foregroundStyle(phase == .recording ? LineaColor.onInk : LineaColor.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Capsule(style: .continuous).fill(phase == .recording ? LineaColor.ink : LineaColor.fill))
+                    .contentShape(Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(store.dictation.phase == .transcribing || (store.dictation.phase != .idle && store.dictationTarget != .part))
+                .accessibilityIdentifier("goal.part.voice")
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("goal.ownPart")
+        }
     }
 
     @ViewBuilder
