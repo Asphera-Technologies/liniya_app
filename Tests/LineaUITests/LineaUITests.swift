@@ -564,7 +564,8 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(chip(app, "Срок: до 15 окт").exists)
         XCTAssertTrue(chip(app, "Важность: Средняя").exists)
         XCTAssertTrue(chip(app, "Прогресс: Этапы").exists, "Тип цели — проект: прогресс этапами")
-        XCTAssertTrue(chip(app, "Сфера: Работа").exists)
+        XCTAssertTrue(chip(app, "Чья цель: От меня").exists, "Своя цель — без вопроса о своей части")
+        XCTAssertFalse(field(app, "goal.part").exists)
         snapshot(app, "41 Быстрая цель: как Linea поняла")
 
         // Самое важное — чипами, как у задачи.
@@ -661,6 +662,117 @@ final class LineaUITests: XCTestCase {
         app.navigationBars["Цель"].buttons["Готово"].tap()
         XCTAssertTrue(waitForLabel(row, containing: "Почти готово"), "Строка цели: \(row.label)")
         snapshot(app, "50 План: почти готово")
+    }
+
+    // MARK: - 15. Цель компании: общий прогресс и своя часть отдельно
+
+    @MainActor
+    func test15CompanyGoal() throws {
+        let app = launch()
+        openTab(app, "План", index: 1)
+        app.buttons["plan.addGoal"].tap()
+        let line = field(app, "goal.line")
+        XCTAssertTrue(line.waitForExistence(timeout: 5))
+        focus(line, in: app)
+        line.typeText("Довести выручку компании до 5 млн ₽ в месяц")
+        XCTAssertTrue(chip(app, "Чья цель: От компании").waitForExistence(timeout: 5), "Компанию Linea видит в словах")
+        let part = field(app, "goal.part")
+        XCTAssertTrue(part.waitForExistence(timeout: 5), "У цели компании — «За какую часть отвечаешь ты?»")
+        XCTAssertTrue(app.staticTexts["За какую часть отвечаешь ты?"].exists)
+        XCTAssertTrue(app.buttons["goal.part.voice"].exists, "Свою часть можно рассказать голосом")
+        focus(part, in: app)
+        part.typeText("Новые enterprise-клиенты и ключевые переговоры")
+        snapshot(app, "51 Цель компании: своя часть")
+        app.buttons["goal.create"].tap()
+        XCTAssertTrue(line.waitForNonExistence(timeout: 5))
+
+        let row = button(app, startingWith: "Довести выручку компании")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains("Компания · 0 из 5 млн ₽ · 0%"), "Строка цели: \(row.label)")
+        XCTAssertTrue(row.label.contains("Моя часть: действий пока нет"), "Строка цели: \(row.label)")
+
+        // Общая цель — то, что человек знает о выручке компании; своя часть —
+        // его число. Это два разных показателя.
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Цель"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Эта цель зависит только от тебя или от команды?"].exists)
+        XCTAssertTrue(app.staticTexts["Общая цель"].exists)
+        XCTAssertTrue(app.staticTexts["Моя часть"].exists)
+        XCTAssertEqual(field(app, "goal.part").value as? String, "Новые enterprise-клиенты и ключевые переговоры")
+        let total = field(app, "goal.metric.current")
+        focus(total, in: app)
+        total.replaceText("3200000")
+        let summary = app.staticTexts["goal.progress.summary"]
+        XCTAssertTrue(waitForLabel(summary, "3,2 млн из 5 млн ₽ · 64%"), "Общая цель: \(summary.label)")
+        let addOwn = app.buttons["goal.contribution.add"]
+        scrollTo(addOwn, in: app)
+        addOwn.tap()
+        let ownUnit = field(app, "goal.contribution.unit")
+        XCTAssertTrue(ownUnit.waitForExistence(timeout: 5))
+        focus(ownUnit, in: app)
+        ownUnit.typeText("enterprise-клиентов")
+        let ownTarget = field(app, "goal.contribution.target")
+        focus(ownTarget, in: app)
+        ownTarget.replaceText("5")
+        let ownCurrent = field(app, "goal.contribution.current")
+        focus(ownCurrent, in: app)
+        ownCurrent.replaceText("2")
+        snapshot(app, "52 Общая цель и моя часть")
+        app.navigationBars["Цель"].buttons["Готово"].tap()
+        XCTAssertTrue(waitForLabel(row, containing: "Компания · 3,2 млн из 5 млн ₽ · 64%"), "Строка цели: \(row.label)")
+        XCTAssertTrue(row.label.contains("Моя часть: 2 из 5 enterprise-клиентов · 40%"), "Строка цели: \(row.label)")
+        snapshot(app, "53 План: цель компании и моя часть")
+    }
+
+    // MARK: - 16. Баланс дня: окно для важной цели среди текущих дел
+
+    @MainActor
+    func test16DayBalance() throws {
+        let app = launch()
+        openTab(app, "План", index: 1)
+        app.buttons["plan.addGoal"].tap()
+        let line = field(app, "goal.line")
+        XCTAssertTrue(line.waitForExistence(timeout: 5))
+        focus(line, in: app)
+        line.typeText("Запустить Линия Beta")
+        chip(app, "Важность").tap()
+        tapMenuItem(app, "Высокая")
+        XCTAssertTrue(chip(app, "Важность: Высокая").waitForExistence(timeout: 5))
+        app.buttons["goal.create"].tap()
+        XCTAssertTrue(line.waitForNonExistence(timeout: 5))
+
+        // Пример заказчика: обязательства и быт, ни одного шага к цели.
+        addTask(app, "Отправить договор клиенту сегодня 15 минут")
+        addTask(app, "Оплатить интернет сегодня 15 минут")
+        addTask(app, "Купить продукты сегодня 15 минут")
+        addTask(app, "Разобрать почту сегодня 15 минут")
+
+        openTab(app, "Сегодня", index: 0)
+        let offer = app.descendants(matching: .any).matching(identifier: "today.goalOffer").firstMatch
+        XCTAssertTrue(offer.waitForExistence(timeout: 15), "Linea замечает состав дня")
+        scrollTo(offer, in: app)
+        XCTAssertTrue(offer.staticTexts["Сегодня много текущих дел."].exists)
+        XCTAssertTrue(offer.staticTexts["Хочешь оставить небольшое окно для цели «Запустить Линия Beta»?"].exists)
+        XCTAssertEqual(app.staticTexts["today.goalOffer.detail"].label,
+                       "1 обязательство · 2 бытовых дела · 1 другое дело · 0 шагов к целям")
+        XCTAssertTrue(offer.buttons["Не сегодня"].exists)
+        snapshot(app, "54 Баланс дня: окно для цели")
+
+        offer.buttons["Оставить 30 минут"].tap()
+        let done = app.descendants(matching: .any).matching(identifier: "today.goalOffer.done").firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 10), "Linea подтверждает окно")
+        XCTAssertTrue(done.label.hasPrefix("Оставила 30 минут для цели «Запустить Линия Beta»"), "Подтверждение: \(done.label)")
+        snapshot(app, "55 Окно оставлено")
+
+        openTab(app, "План", index: 1)
+        let window = button(app, startingWith: "Окно для цели «Запустить Линия Beta»")
+        XCTAssertTrue(window.waitForExistence(timeout: 5), "Окно — задача к цели на сегодня")
+        snapshot(app, "56 План: окно для цели")
+
+        // Ответили — в этот день больше не спрашиваем.
+        openTab(app, "Сегодня", index: 0)
+        XCTAssertTrue(nowCard(app).waitForExistence(timeout: 10))
+        XCTAssertFalse(offer.exists, "После ответа вопрос не повторяется")
     }
 
     // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
