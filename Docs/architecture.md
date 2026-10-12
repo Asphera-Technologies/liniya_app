@@ -16,7 +16,8 @@ Linea/
 ├── Core/         Foundation-only. Domain models, protocols, use cases, engines, connector logic
 │   ├── Domain/{Models,Protocols,UseCases}
 │   ├── Intelligence/{ContextEngine,StateEngine,DecisionEngine,Priority,FeedbackEngine,LLM,CheckIn,
-│   │                 Memory,TaskCapture,Classification,Inbox,GoalIntake,GoalMatcher,Execution}
+│   │                 Memory,TaskCapture,Classification,Inbox,GoalIntake,GoalMatcher,GoalProgress,
+│   │                 Execution}
 │   └── Connectors/   Foundation-only parts of connectors (Nutrition, Calendar)
 ├── Data/         Apple frameworks allowed: SwiftData entities and Local* repositories,
 │                 HealthKit reader, EventKit provider, LLM client (chat), on-device speech (GigaAM, Apple)
@@ -136,15 +137,38 @@ suggestion means the person saw it. A cancelled task stays in storage but
 ### New goal
 
 ```text
-«Чего хочешь достичь?» + «Расскажи подробнее» (текст или голос: VoiceDictation)
-        ↓  GoalAnalyzing (RuleBasedGoalAnalyzer — правила на телефоне)
-GoalUnderstanding: название, «Сейчас», «Результат», признаки, срок, вопрос?
-        ↓  вопрос — один за раз, можно пропустить
-«Я поняла цель так» → «Изменить» / «Всё верно» → PlanStore.saveGoal
+«Чего хочешь достичь?» — одна строка (набрана / надиктована: VoiceDictation)
+        ↓  GoalLineParser (QuickTaskParser в режиме цели): название, срок, важность
+        ↓  GoalClassifier: тип цели (goal_type), сфера, чья цель
+        ↓  GoalStructure: числа, этапы, метод прогресса, стадии
+QuickGoalResolution → «✦ название · до 15 октября» + чипы (срок, важность,
+        прогресс, сфера; чип сильнее сказанного)
+        ↓  «Создать цель»                        ↓  «Рассказать подробнее» (по желанию)
+PlanStore.saveGoal ← «Всё верно» ← «Я поняла цель так» ← вопрос? ← рассказ
+        ↓  GoalRevision: время пересмотра, продвижения — только вперёд
 ```
 
-The goal exists only after «Всё верно» (ADR-029, §19); breaking it into steps,
-when it appears, starts there.
+A goal is created from one line, like a task (ADR-035, §25); the story,
+the clarifying question and «Я поняла цель так» (ADR-029, §19) are optional.
+Linea classifies the goal type and picks the progress method and the stages
+from it; the person changes them with chips and in the goal card.
+
+### Goal state and progress
+
+```text
+LineaGoal: «Сейчас», «Результат», признаки, стадия и стадии, этапы, числа,
+           метод прогресса, сфера, чья цель, время пересмотра, журнал
+        ↓  GoalProgressEngine (+ задачи цели — только для «значимых действий»)
+GoalProgress: value (процент, только честный), completion (для важности
+              задач), этапы, числа, стадия, последнее продвижение, действия за 30 дней
+        ↓  GoalProgressText
+строка цели в «Плане» · карточка цели · TaskScorer.goalAlignment
+```
+
+Progress is computed, never stored (ADR-037, §27): a number or weighted
+milestones give a percentage; milestones without weights, a manual report
+or a qualitative goal never do. Closed tasks never move a goal's
+percentage. The goal card edits a fresh copy of the goal (ADR-036, §26).
 
 ### Evening check-in and memory
 
