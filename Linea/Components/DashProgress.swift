@@ -3,7 +3,9 @@
 //  Linea
 //
 //  The segmented dash progress indicator used on goals: a row of short bars,
-//  filled in ink up to the goal's progress and faded for the remainder.
+//  filled in ink up to the goal's progress and faded for the remainder. For
+//  milestones without weights every bar is a milestone, and VoiceOver reads
+//  «2 из 5 этапов» instead of a percentage.
 //
 
 import SwiftUI
@@ -12,6 +14,8 @@ struct DashProgress: View {
     /// Progress from 0...1.
     let progress: Double
     var segments: Int = 8
+    /// What VoiceOver reads; by default — the percentage.
+    var valueDescription: String? = nil
 
     private var filledCount: Int {
         let clamped = min(max(progress, 0), 1)
@@ -28,6 +32,6 @@ struct DashProgress: View {
         }
         .accessibilityElement()
         .accessibilityLabel("Прогресс")
-        .accessibilityValue("\(Int((min(max(progress, 0), 1)) * 100)) процентов")
+        .accessibilityValue(valueDescription ?? "\(Int((min(max(progress, 0), 1)) * 100)) процентов")
     }
 }

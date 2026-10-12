@@ -3,10 +3,10 @@
 //  Linea
 //
 //  The Plan screen: a Week/Month scope toggle, a date navigator, real goals
-//  with dash progress, and real date-grouped tasks — all persisted locally via
-//  `PlanStore` (SwiftData behind repositories). Tapping a row edits it; the
-//  add rows create (a task through quick capture: a title is enough); the
-//  checkbox toggles; the × deletes.
+//  with honest progress (by their method), and real date-grouped tasks — all
+//  persisted locally via `PlanStore` (SwiftData behind repositories). Tapping
+//  a row edits it; the add rows create (a task or a goal through quick
+//  capture: one line is enough); the checkbox toggles; the × deletes.
 //
 
 import SwiftUI
@@ -68,7 +68,7 @@ struct PlanView: View {
         .taskRescheduleDialog($rescheduling)
         .sheet(item: $editingGoal) { target in
             switch target {
-            // Новая цель — сначала понять, потом создать.
+            // Новая цель — одной строкой, как задача; подробнее — по желанию.
             case .new: GoalIntakeView()
             case .edit(let goal): GoalEditorView(existing: goal)
             }
@@ -85,7 +85,9 @@ struct PlanView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(plan.goals.enumerated()), id: \.element.id) { index, goal in
-                        GoalRow(goal: goal) { editingGoal = .edit(goal) }
+                        GoalRow(goal: goal, progress: plan.progress(for: goal), time: plan.time) {
+                            editingGoal = .edit(goal)
+                        }
                         if index < plan.goals.count - 1 { LineaHairline() }
                     }
                 }

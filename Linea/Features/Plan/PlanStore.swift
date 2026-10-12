@@ -155,12 +155,17 @@ final class PlanStore {
 
     // MARK: - Goal intents
 
+    /// Сохранение цели — всегда дело человека, значит, он её пересмотрел:
+    /// время пересмотра — сейчас, а что он сдвинул вперёд (этап, число,
+    /// стадию), попадает в журнал продвижений (`GoalRevision`).
     func saveGoal(_ goal: LineaGoal) async {
         do {
-            if goals.contains(where: { $0.id == goal.id }) {
-                try await goalRepository.update(goal)
+            let previous = goals.first { $0.id == goal.id }
+            let saved = GoalRevision.saved(previous: previous, updated: goal, time: timeProvider())
+            if previous != nil {
+                try await goalRepository.update(saved)
             } else {
-                try await goalRepository.add(goal)
+                try await goalRepository.add(saved)
             }
             await load()
             await onPlanInputsChanged?()
@@ -184,13 +189,14 @@ final class PlanStore {
         goals.filter { $0.isActive && !$0.isCompleted }
     }
 
-    /// Progress derived from linked tasks when there are any, so a goal moves
-    /// on its own; the manual slider stays the source otherwise.
-    func derivedProgress(for goal: LineaGoal) -> Double? {
-        let linked = tasks.filter { $0.goalID == goal.id }
-        guard !linked.isEmpty else { return nil }
-        return Double(linked.filter(\.isDone).count) / Double(linked.count)
+    /// Прогресс цели — по её методу (`GoalProgressEngine`). Закрытые задачи
+    /// цели процент не двигают: они — значимые действия и последнее
+    /// продвижение. Один расчёт для строки в «Плане» и карточки цели.
+    func progress(for goal: LineaGoal) -> GoalProgress {
+        GoalProgressEngine().progress(of: goal, tasks: tasks, time: timeProvider())
     }
+
+    var time: TimeContext { timeProvider() }
 
     // MARK: - Derived: Today
 

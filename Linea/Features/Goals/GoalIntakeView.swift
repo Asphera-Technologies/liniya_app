@@ -2,13 +2,13 @@
 //  GoalIntakeView.swift
 //  Linea
 //
-//  «Новая цель»: сначала Linea понимает цель, потом цель создаётся.
-//    1. «Чего хочешь достичь?» — единственное обязательное поле; ниже
-//       «Расскажи подробнее» текстом или «Рассказать голосом».
-//    2. Если без этого цель не понять — один вопрос, его можно пропустить.
-//    3. «Я поняла цель так»: название, «Сейчас», «Результат» — «Всё верно»
-//       или «Изменить».
-//  Понимает ядро (`GoalAnalyzing`), экран только показывает.
+//  «Новая цель». Сначала — быстрая цель (`QuickGoalView`): одна строка,
+//  чипы, «Создать цель» (ADR-035). По желанию — «Рассказать подробнее»:
+//    1. «Чего хочешь достичь?» и «Расскажи подробнее» текстом или голосом;
+//    2. если без этого цель не понять — один вопрос, его можно пропустить;
+//    3. «Я поняла цель так»: название, срок, «Сейчас», «Результат», как
+//       считать прогресс — «Всё верно» или «Изменить».
+//  Понимает ядро (`QuickGoalDraft`, `GoalAnalyzing`), экран только показывает.
 //
 
 import SwiftUI
@@ -17,18 +17,38 @@ struct GoalIntakeView: View {
     @Environment(GoalIntakeStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focus: Field?
+    /// Быстрая цель — невысокий лист по содержимому, как у быстрой задачи.
+    @State private var quickHeight: CGFloat = 260
 
     private enum Field: Hashable {
         case title, details, answer
     }
 
     var body: some View {
+        ZStack {
+            if store.step == .quick {
+                QuickGoalView(onClose: { dismiss() }, onCreated: { dismiss() }, onHeight: { quickHeight = $0 })
+            } else {
+                flow
+            }
+        }
+        .background(LineaColor.background.ignoresSafeArea())
+        .presentationDetents(store.step == .quick ? [.height(max(quickHeight, 220))] : [.large])
+        .presentationDragIndicator(store.step == .quick ? .hidden : .visible)
+        .interactiveDismissDisabled(store.dictation.phase != .idle || !(store.step == .quick || store.step == .describe))
+        .onAppear { store.begin() }
+        .onDisappear { store.end() }
+    }
+
+    /// Подробно: рассказ, вопрос, «Я поняла цель так», «Изменить».
+    private var flow: some View {
         @Bindable var store = store
 
-        NavigationStack {
+        return NavigationStack {
             ScrollView {
                 Group {
                     switch store.step {
+                    case .quick: EmptyView()
                     case .describe: describe
                     case .question(let question): ask(question)
                     case .review: review
@@ -51,18 +71,11 @@ struct GoalIntakeView: View {
                 }
             }
         }
-        .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(store.dictation.phase != .idle || store.step != .describe)
-        .onAppear {
-            store.begin()
-            focus = .title
-        }
-        .onDisappear { store.end() }
     }
 
     private var navigationTitle: String {
         switch store.step {
-        case .describe: return "Новая цель"
+        case .quick, .describe: return "Новая цель"
         case .question: return "Уточню одно"
         case .review, .edit: return "Новая цель"
         }
@@ -94,6 +107,8 @@ struct GoalIntakeView: View {
                 voiceStatus
             }
         }
+        // Из быстрой цели название уже есть — сразу к рассказу.
+        .onAppear { focus = store.title.isEmpty ? .title : .details }
     }
 
     // MARK: 2. Вопрос
@@ -133,14 +148,17 @@ struct GoalIntakeView: View {
                         .foregroundStyle(LineaColor.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("goal.review.title")
-                    if let deadline = understanding.deadline {
-                        Text("Срок — \(RussianText.shortDay(deadline, time: store.time).lowercased())")
+                    let summary = reviewSummary(understanding)
+                    if !summary.isEmpty {
+                        Text(summary)
                             .font(LineaFont.caption)
                             .foregroundStyle(LineaColor.textSecondary)
+                            .accessibilityIdentifier("goal.review.summary")
                     }
                 }
                 part("Сейчас", understanding.currentState, identifier: "goal.review.current")
                 part("Результат", understanding.targetState, identifier: "goal.review.target")
+                progressPart(understanding)
                 let extra = extraCriteria(understanding)
                 if !extra.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
@@ -167,6 +185,47 @@ struct GoalIntakeView: View {
                 .foregroundStyle(text == nil ? LineaColor.textTertiary : LineaColor.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier)
+        }
+    }
+
+    /// Срок и важность — как у быстрой цели: «до 15 октября · Высокая».
+    private func reviewSummary(_ understanding: GoalUnderstanding) -> String {
+        var parts: [String] = []
+        if let deadline = understanding.deadline { parts.append(GoalProgressText.deadline(deadline, time: store.time)) }
+        if understanding.isPrioritySaid { parts.append(LineaGoal.importanceTitle(understanding.priority)) }
+        return parts.joined(separator: GoalProgressText.separator)
+    }
+
+    /// Как Linea будет считать прогресс — и что она для этого нашла в словах:
+    /// этапы, числа, стадию.
+    private func progressPart(_ understanding: GoalUnderstanding) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel(text: "Прогресс", trailing: understanding.method.title)
+            if understanding.method == .milestones || understanding.method == .hybrid {
+                ForEach(understanding.milestones) { milestone in
+                    Text("○ \(milestone.title)")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if understanding.method == .metric || understanding.method == .hybrid {
+                ForEach(understanding.metrics) { metric in
+                    Text(GoalProgressText.metric(metric))
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                }
+            }
+            if let stage = understanding.stage {
+                Text("Стадия — \(stage)")
+                    .font(LineaFont.rowTitle)
+                    .foregroundStyle(LineaColor.textPrimary)
+                    .accessibilityIdentifier("goal.review.stage")
+            }
+            Text(understanding.method.explanation)
+                .font(LineaFont.caption)
+                .foregroundStyle(LineaColor.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -221,6 +280,8 @@ struct GoalIntakeView: View {
     private var actions: some View {
         VStack(spacing: 10) {
             switch store.step {
+            case .quick:
+                EmptyView()
             case .describe:
                 LineaPrimaryButton(title: "Продолжить", fillsWidth: true) {
                     Task { await store.proceed() }
