@@ -148,9 +148,10 @@ final class LineaUITests: XCTestCase {
         let goalRow = button(app, startingWith: "Запустить Линия Beta")
         XCTAssertTrue(goalRow.waitForExistence(timeout: 5), "Цель в плане")
 
-        // Важность — в карточке цели.
+        // Важность — в карточке цели, ниже прогресса и того, где цель сейчас.
         goalRow.tap()
         XCTAssertTrue(app.buttons["Высокая"].waitForExistence(timeout: 5), "В карточке цели есть «Важность»")
+        scrollTo(app.buttons["Высокая"], in: app)
         app.buttons["Высокая"].tap()
         snapshot(app, "13 Карточка цели: важность")
         app.navigationBars.buttons["Готово"].tap()
@@ -461,21 +462,23 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "33 План после разбора")
     }
 
-    // MARK: - 9. Новая цель: сначала понять, потом создать
+    // MARK: - 9. Новая цель подробно: «Рассказать подробнее», понять, потом создать
 
     @MainActor
     func test9GoalIntake() throws {
         let app = launch()
         openTab(app, "План", index: 1)
         app.buttons["plan.addGoal"].tap()
+        let line = field(app, "goal.line")
+        XCTAssertTrue(line.waitForExistence(timeout: 5), "«+ Цель» открывает быструю цель")
+        focus(line, in: app)
+        line.typeText("Запустить закрытую beta Linea")
+        app.buttons["goal.more"].tap()
         let title = field(app, "goal.title")
-        XCTAssertTrue(title.waitForExistence(timeout: 5), "«+ Цель» открывает «Новая цель»")
-        XCTAssertTrue(app.staticTexts["Чего хочешь достичь?"].exists)
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "«Рассказать подробнее» открывает рассказ")
+        XCTAssertEqual(title.value as? String, "Запустить закрытую beta Linea", "Строка стала названием")
         XCTAssertTrue(app.staticTexts["Что уже сделано, где ты сейчас и что будет означать, что цель достигнута?"].exists)
         XCTAssertTrue(app.buttons["goal.voice"].exists, "Можно рассказать голосом")
-        XCTAssertFalse(app.buttons["goal.continue"].isEnabled, "Без названия продолжать нечего")
-        title.tap()
-        title.typeText("Запустить закрытую beta Linea")
         let details = field(app, "goal.details")
         details.tap()
         details.typeText("У нас уже есть рабочий прототип приложения. Сейчас идёт переработка задач и онбординга. "
@@ -491,6 +494,8 @@ final class LineaUITests: XCTestCase {
                        "Уже есть рабочий прототип приложения. Идёт переработка задач и онбординга.")
         XCTAssertEqual(app.staticTexts["goal.review.target"].label,
                        "Приложение доступно через TestFlight и подключить 50 тестировщиков.")
+        XCTAssertEqual(app.staticTexts["goal.review.stage"].label, "Стадия — Разработка", "Прототип и переработка — разработка")
+        XCTAssertTrue(element(app, labelContaining: "0 из 50 тестировщиков").exists, "Число цели — из рассказа")
         snapshot(app, "35 Я поняла цель так")
 
         app.buttons["goal.change"].tap()
@@ -502,12 +507,14 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(app.buttons["goal.confirm"].waitForNonExistence(timeout: 5), "«Всё верно» создаёт цель")
         XCTAssertTrue(button(app, startingWith: "Запустить закрытую beta Linea").waitForExistence(timeout: 5), "Цель в плане")
 
-        // Одна строка — Linea задаёт один вопрос, потом следующий.
+        // Подробно, но без рассказа — Linea задаёт один вопрос, потом следующий.
         app.buttons["plan.addGoal"].tap()
-        let short = field(app, "goal.title")
+        let short = field(app, "goal.line")
         XCTAssertTrue(short.waitForExistence(timeout: 5))
-        short.tap()
+        focus(short, in: app)
         short.typeText("Запустить продукт")
+        app.buttons["goal.more"].tap()
+        XCTAssertTrue(field(app, "goal.title").waitForExistence(timeout: 5))
         app.buttons["goal.continue"].tap()
         let resultQuestion = app.staticTexts["Как поймём, что цель достигнута?"]
         XCTAssertTrue(resultQuestion.waitForExistence(timeout: 5), "Не хватает результата — Linea спрашивает")
@@ -526,11 +533,134 @@ final class LineaUITests: XCTestCase {
         app.buttons["goal.confirm"].tap()
         XCTAssertTrue(button(app, startingWith: "Запустить продукт").waitForExistence(timeout: 5))
 
-        // Карточка цели хранит, как Linea её поняла.
+        // Карточка цели хранит, как Linea её поняла: этапы и числа, стадия.
         button(app, startingWith: "Запустить закрытую beta Linea").tap()
         XCTAssertTrue(app.navigationBars["Цель"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Результат"].exists)
+        XCTAssertEqual(app.buttons["goal.method"].label, "Как считать прогресс: Этапы и числа")
+        XCTAssertEqual(app.buttons["goal.stage"].label, "Стадия: Разработка")
         snapshot(app, "39 Карточка цели: как Linea её поняла")
+    }
+
+    // MARK: - 13. Быстрая цель: пример заказчика
+
+    @MainActor
+    func test13QuickGoal() throws {
+        let app = launch()
+        openTab(app, "План", index: 1)
+        app.buttons["plan.addGoal"].tap()
+        let line = field(app, "goal.line")
+        XCTAssertTrue(line.waitForExistence(timeout: 5), "«+ Цель» открывает быструю цель")
+        XCTAssertFalse(app.buttons["goal.create"].isEnabled, "Без строки создавать нечего")
+        XCTAssertFalse(app.staticTexts["Расскажи подробнее"].exists, "Не форма — один вопрос")
+        snapshot(app, "40 Быстрая цель: один вопрос")
+
+        focus(line, in: app)
+        line.typeText("Выпустить Линия в TestFlight до 15-го октября")
+        let understood = app.staticTexts["goal.understood.title"]
+        XCTAssertTrue(understood.waitForExistence(timeout: 5), "Linea показывает, как поняла строку")
+        XCTAssertEqual(understood.label, "Выпустить Линия в TestFlight")
+        XCTAssertTrue(app.staticTexts["goal.understood.summary"].label.hasPrefix("до 15 октября"))
+        XCTAssertTrue(chip(app, "Срок: до 15 окт").exists)
+        XCTAssertTrue(chip(app, "Важность: Средняя").exists)
+        XCTAssertTrue(chip(app, "Прогресс: Этапы").exists, "Тип цели — проект: прогресс этапами")
+        XCTAssertTrue(chip(app, "Сфера: Работа").exists)
+        snapshot(app, "41 Быстрая цель: как Linea поняла")
+
+        // Самое важное — чипами, как у задачи.
+        chip(app, "Важность").tap()
+        tapMenuItem(app, "Высокая")
+        XCTAssertTrue(chip(app, "Важность: Высокая").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["goal.understood.summary"].label.hasSuffix("Высокая"))
+        snapshot(app, "42 Быстрая цель: важность чипом")
+
+        app.buttons["goal.create"].tap()
+        XCTAssertTrue(line.waitForNonExistence(timeout: 5), "«Создать цель» создаёт цель и закрывает лист")
+        let row = button(app, startingWith: "Выпустить Линия в TestFlight")
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "Цель в плане")
+        XCTAssertTrue(row.label.contains("Этапы не заданы"), "Процента нет: этапов ещё нет")
+        XCTAssertTrue(row.label.contains("до 15 окт"))
+        snapshot(app, "43 Быстрая цель в плане")
+
+        // В карточке — стадии запуска продукта и время пересмотра.
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Цель"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["goal.stage"].label, "Стадия: не выбрана", "О том, где цель сейчас, не сказано")
+        app.buttons["goal.stage"].tap()
+        tapMenuItem(app, "Разработка")
+        XCTAssertTrue(app.buttons["goal.stage"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["goal.stage"].label, "Стадия: Разработка")
+        XCTAssertTrue(app.staticTexts["goal.card.caption"].label.contains("обновлена сегодня"))
+        snapshot(app, "44 Карточка цели: стадия")
+        app.navigationBars["Цель"].buttons["Готово"].tap()
+        XCTAssertTrue(app.navigationBars["Цель"].waitForNonExistence(timeout: 5))
+    }
+
+    // MARK: - 14. Прогресс цели: число, этапы, без процентов, отмечаю сам
+
+    @MainActor
+    func test14GoalProgress() throws {
+        let app = launch()
+        openTab(app, "План", index: 1)
+        createQuickGoal(app, "Получить 50 пользователей")
+        let row = button(app, startingWith: "Получить 50 пользователей")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains("0 из 50 пользователей · 0%"), "Измеримая цель — число с целью: \(row.label)")
+
+        // Изменение числа обновляет прогресс.
+        row.tap()
+        let current = field(app, "goal.metric.current")
+        XCTAssertTrue(current.waitForExistence(timeout: 5), "У числа — «Сейчас»")
+        focus(current, in: app)
+        current.replaceText("18")
+        let summary = app.staticTexts["goal.progress.summary"]
+        XCTAssertTrue(waitForLabel(summary, "18 из 50 пользователей · 36%"), "Прогресс: \(summary.label)")
+        snapshot(app, "45 Число: 18 из 50 — 36%")
+        app.navigationBars["Цель"].buttons["Готово"].tap()
+        XCTAssertTrue(waitForLabel(row, containing: "18 из 50 пользователей · 36%"), "Строка цели: \(row.label)")
+        snapshot(app, "46 План: 18 из 50 — 36%")
+
+        // Этапы: закрытие этапа обновляет прогресс, без весов процента нет.
+        row.tap()
+        XCTAssertTrue(app.buttons["goal.method"].waitForExistence(timeout: 5))
+        app.buttons["goal.method"].tap()
+        tapMenuItem(app, "Этапы")
+        XCTAssertTrue(waitForLabel(summary, "Этапы не заданы"))
+        addMilestone(app, "Core loop")
+        addMilestone(app, "Onboarding")
+        let toggle = app.buttons.matching(identifier: "goal.milestone.toggle").firstMatch
+        toggle.tap()
+        XCTAssertTrue(waitForLabel(summary, "1 из 2 этапов"), "Без весов — «1 из 2 этапов», без процента: \(summary.label)")
+        snapshot(app, "47 Этапы: закрыт один")
+        app.navigationBars["Цель"].buttons["Готово"].tap()
+        XCTAssertTrue(waitForLabel(row, containing: "1 из 2 этапов"), "Строка цели: \(row.label)")
+        XCTAssertFalse(row.label.contains("%"), "Процента нет")
+
+        // Без процентов: стадия, последнее продвижение, действия за 30 дней.
+        row.tap()
+        XCTAssertTrue(app.buttons["goal.method"].waitForExistence(timeout: 5))
+        app.buttons["goal.method"].tap()
+        tapMenuItem(app, "Без процентов")
+        let qualitative = app.descendants(matching: .any).matching(identifier: "goal.qualitative").firstMatch
+        XCTAssertTrue(qualitative.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Последнее продвижение"].exists)
+        XCTAssertTrue(app.staticTexts["сегодня"].exists, "Этап закрыт сегодня — это продвижение")
+        snapshot(app, "48 Без процентов")
+        app.navigationBars["Цель"].buttons["Готово"].tap()
+        XCTAssertTrue(waitForLabel(row, containing: "продвижение — сегодня"), "Строка цели: \(row.label)")
+        XCTAssertFalse(row.label.contains("%"), "Без процентов — и в «Плане»")
+
+        // Отмечаю сам: слова вместо процента.
+        row.tap()
+        XCTAssertTrue(app.buttons["goal.method"].waitForExistence(timeout: 5))
+        app.buttons["goal.method"].tap()
+        tapMenuItem(app, "Отмечаю сам")
+        app.buttons["goal.manual.almostDone"].tap()
+        XCTAssertTrue(waitForLabel(summary, "Почти готово"))
+        snapshot(app, "49 Отмечаю сам")
+        app.navigationBars["Цель"].buttons["Готово"].tap()
+        XCTAssertTrue(waitForLabel(row, containing: "Почти готово"), "Строка цели: \(row.label)")
+        snapshot(app, "50 План: почти готово")
     }
 
     // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
@@ -856,14 +986,59 @@ final class LineaUITests: XCTestCase {
         }
     }
 
-    /// «+ Цель» → название и рассказ → «Я поняла цель так» → «Всё верно».
+    /// «+ Цель» → строка → «Создать цель».
+    @MainActor
+    private func createQuickGoal(_ app: XCUIApplication, _ text: String) {
+        app.buttons["plan.addGoal"].tap()
+        let line = field(app, "goal.line")
+        XCTAssertTrue(line.waitForExistence(timeout: 5), "Быстрая цель не открылась")
+        focus(line, in: app)
+        line.typeText(text)
+        app.buttons["goal.create"].tap()
+        XCTAssertTrue(line.waitForNonExistence(timeout: 5), "Цель «\(text)» не создалась")
+    }
+
+    /// «+ Этап» в карточке цели и его название.
+    @MainActor
+    private func addMilestone(_ app: XCUIApplication, _ title: String) {
+        let add = app.buttons["goal.milestone.add"]
+        scrollTo(add, in: app)
+        add.tap()
+        let fields = app.descendants(matching: .any).matching(identifier: "goal.milestone.title")
+            .matching(NSPredicate(format: "elementType == %d OR elementType == %d",
+                                  XCUIElement.ElementType.textField.rawValue, XCUIElement.ElementType.textView.rawValue))
+        let field = fields.element(boundBy: max(fields.count - 1, 0))
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Новый этап не появился")
+        focus(field, in: app)
+        field.typeText(title)
+    }
+
+    /// Подпись стала такой (или содержит текст) за несколько секунд.
+    @MainActor
+    private func waitForLabel(_ element: XCUIElement, _ label: String? = nil, containing text: String? = nil,
+                              timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists {
+                if let label, element.label == label { return true }
+                if let text, element.label.contains(text) { return true }
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        return false
+    }
+
+    /// «+ Цель» → строка → «Рассказать подробнее» → рассказ → «Я поняла цель
+    /// так» → «Всё верно».
     @MainActor
     private func createGoal(_ app: XCUIApplication, _ title: String, details: String) {
         app.buttons["plan.addGoal"].tap()
-        let titleInput = field(app, "goal.title")
-        XCTAssertTrue(titleInput.waitForExistence(timeout: 5), "«Новая цель» не открылась")
-        titleInput.tap()
-        titleInput.typeText(title)
+        let line = field(app, "goal.line")
+        XCTAssertTrue(line.waitForExistence(timeout: 5), "«Новая цель» не открылась")
+        focus(line, in: app)
+        line.typeText(title)
+        app.buttons["goal.more"].tap()
+        XCTAssertTrue(field(app, "goal.title").waitForExistence(timeout: 5), "«Рассказать подробнее» не открылось")
         let detailsInput = field(app, "goal.details")
         detailsInput.tap()
         detailsInput.typeText(details)
