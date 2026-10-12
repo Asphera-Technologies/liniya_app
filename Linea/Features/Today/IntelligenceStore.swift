@@ -38,6 +38,9 @@ final class IntelligenceStore {
     private(set) var providerStatuses: [ProviderID: ProviderStatus] = [:]
     private(set) var userProfile: UserProfile = .default
     private(set) var isRefreshing = false
+    /// Пересчёт попросили, пока шёл другой: задачи, цели или профиль могли
+    /// уже поменяться — после текущего пересчёта будет ещё один.
+    private var needsAnotherRefresh = false
     private(set) var errorMessage: String?
     /// «Сейчас»: что разумнее всего делать в эту минуту — с готовым текстом.
     private(set) var nextAction: NextAction?
@@ -130,11 +133,23 @@ final class IntelligenceStore {
 
     // MARK: - Refresh
 
+    /// Пересчитать день. Если пересчёт уже идёт, просьба не теряется: раньше
+    /// задача, добавленная, пока на старте читалась история Apple Health, не
+    /// попадала в план и «Сейчас» до следующего изменения.
     func refresh(reason: RefreshReason) async {
-        guard !isRefreshing else { return }
+        guard !isRefreshing else {
+            needsAnotherRefresh = true
+            return
+        }
         isRefreshing = true
         defer { isRefreshing = false }
+        repeat {
+            needsAnotherRefresh = false
+            await refreshOnce()
+        } while needsAnotherRefresh
+    }
 
+    private func refreshOnce() async {
         let time = self.time
         await memory?.loadIfNeeded()
         do {
