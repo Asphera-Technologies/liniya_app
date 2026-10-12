@@ -46,14 +46,12 @@
 
 ## Установка
 
-Всё как в `Docs/testing-round-2.md`, раздел «Установка», только версия — в
-отдельной ветке, пока её не влили в `main`. Все четыре пункта — в одной ветке
-(в ней же всё из раундов 3 и 4):
+Всё как в `Docs/testing-round-2.md`, раздел «Установка». Отдельной ветки
+больше нет — все четыре пункта, как и всё из раундов 3 и 4, влиты в `main`:
 
 ```bash
 cd liniya_app
-git fetch
-git checkout feature/ios-task-states
+git checkout main
 git pull
 ```
 

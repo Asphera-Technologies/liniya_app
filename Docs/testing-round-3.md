@@ -30,13 +30,12 @@
 
 ## Установка
 
-Всё как в `Docs/testing-round-2.md`, раздел «Установка», только версия — в
-отдельной ветке, пока её не влили в `main`:
+Всё как в `Docs/testing-round-2.md`, раздел «Установка». Отдельной ветки
+больше нет — всё влито в `main`:
 
 ```bash
 cd liniya_app
-git fetch
-git checkout feature/ios-quick-task-priority
+git checkout main
 git pull
 ```
 
