@@ -40,6 +40,7 @@ struct TodayView: View {
                 briefSection
                 mainToday
                 nowSection
+                goalOfferSection
                 timeline
                 inboxOffer
 
@@ -60,6 +61,7 @@ struct TodayView: View {
         }
         .task { await intelligence.refresh(reason: .appeared) }
         .task { await intelligence.keepNextActionFresh() }
+        .onDisappear { intelligence.clearGoalOfferConfirmation() }
         .refreshable { await intelligence.refresh(reason: .manual) }
         .sheet(item: $editingTask) { target in
             TaskEditorView(existing: target.task)
@@ -223,6 +225,62 @@ struct TodayView: View {
                 .accessibilityLabel("\(option.title), \(QuickTaskText.duration(minutes: option.minutes))")
                 if option.id != options.last?.id { LineaHairline() }
             }
+        }
+    }
+
+    // MARK: Goals
+
+    /// Мягкая поддержка целей — вопрос, а не упрёк: окно для цели среди
+    /// текущих дел или цель, которая давно не двигалась. Тексты — из ядра
+    /// (`GoalBalance`, `GoalAttention`).
+    @ViewBuilder
+    private var goalOfferSection: some View {
+        if let confirmation = intelligence.goalOfferConfirmation {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LineaColor.textSecondary)
+                    .accessibilityHidden(true)
+                Text(confirmation)
+                    .font(LineaFont.rowTitle)
+                    .foregroundStyle(LineaColor.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("today.goalOffer.done")
+        } else if let offer = intelligence.goalOffer {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Цели")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(offer.observation)
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(offer.question)
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let detail = offer.detail {
+                    Text(detail)
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("today.goalOffer.detail")
+                }
+                FlowLayout(spacing: 12) {
+                    LineaOutlineButton(title: offer.acceptTitle) {
+                        Task { await intelligence.answerGoalOffer(offer, accepted: true) }
+                    }
+                    .accessibilityIdentifier("goalOffer.accept")
+                    LineaOutlineButton(title: offer.declineTitle) {
+                        Task { await intelligence.answerGoalOffer(offer, accepted: false) }
+                    }
+                    .accessibilityIdentifier("goalOffer.decline")
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("today.goalOffer")
         }
     }
 

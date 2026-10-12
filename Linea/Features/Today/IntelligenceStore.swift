@@ -44,6 +44,8 @@ final class IntelligenceStore {
     private(set) var errorMessage: String?
     /// «Сейчас»: что разумнее всего делать в эту минуту — с готовым текстом.
     private(set) var nextAction: NextAction?
+    /// Что ответила Linea на «Оставить 30 минут» или «Да» — пока открыт «Сегодня».
+    private(set) var goalOfferConfirmation: String?
     /// Что человек выбрал в «Другое» — пока задача открыта.
     private var preferredTaskID: UUID?
     /// Сколько экранов «Сегодня» сейчас открыто: только тогда «Сейчас» видно
@@ -518,6 +520,50 @@ final class IntelligenceStore {
         guard let action = nextAction, let option = action.option,
               let task = planStore.tasks.first(where: { $0.id == option.taskID }) else { return }
         await perform(.notNow, on: task, plannedMinutes: option.minutes)
+    }
+
+    // MARK: - Поддержка целей
+
+    /// Окно для цели среди текущих дел (баланс дня) — или вопрос о цели,
+    /// которая давно не двигалась. Одна карточка за раз; после ответа — тишина.
+    var goalOffer: GoalOffer? {
+        guard goalOfferConfirmation == nil else { return nil }
+        let time = self.time
+        let profile = record?.snapshot?.profile ?? userProfile
+        if let balance = GoalBalance().offer(tasks: planStore.tasks, goals: planStore.goals, record: record,
+                                             profile: profile, config: config, time: time) {
+            return balance
+        }
+        return GoalAttention().offer(goals: planStore.goals, tasks: planStore.tasks, record: record, time: time)
+    }
+
+    /// Ответ на предложение: согласие ставит небольшое окно — задачу к цели
+    /// на 30 минут; «Не сегодня» — тишина до завтра; «Пока нет» — неделя.
+    func answerGoalOffer(_ offer: GoalOffer, accepted: Bool) async {
+        let time = self.time
+        guard let goal = planStore.goals.first(where: { $0.id == offer.goalID }) else { return }
+        let taskID = accepted ? UUID() : nil
+        let answer = GoalOfferAnswer(kind: offer.kind, goalID: goal.id, answer: accepted ? .accepted : .declined, taskID: taskID)
+        // День — раньше задачи: пересчёт после сохранения задачи читает его.
+        if let record, time.isSameDay(record.day, time.now) {
+            let answered = record.answering(answer, at: time.now)
+            apply(answered)
+            await save(answered, failure: "Ответ на предложение для цели не записался")
+        }
+        LineaLog.plan.notice("Поддержка цели: \(offer.kind.rawValue, privacy: .public), ответ \(answer.answer.rawValue, privacy: .public)")
+        if let taskID {
+            await planStore.saveTask(GoalWindow.task(for: goal, offer: offer, id: taskID, time: time))
+            goalOfferConfirmation = offer.kind == .balance
+                ? GoalSupportText.balanceAccepted(offer, plannedAt: plannedStart(for: taskID), time: self.time)
+                : GoalSupportText.returnAccepted(offer)
+        } else if offer.kind == .returnAttention {
+            await planStore.snoozeAttention(of: goal.id, until: GoalAttention.snoozed(until: time))
+        }
+    }
+
+    /// «Сегодня» закрыт — подтверждение больше не нужно.
+    func clearGoalOfferConfirmation() {
+        goalOfferConfirmation = nil
     }
 
     // MARK: - Выполнение задач

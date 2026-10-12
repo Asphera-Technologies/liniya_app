@@ -174,6 +174,20 @@ final class PlanStore {
         }
     }
 
+    /// «Пока нет» на «Хочешь найти для неё небольшое окно завтра?»: Linea
+    /// отступает. Это ответ на вопрос, а не пересмотр цели — время пересмотра
+    /// не меняется, план не пересобирается.
+    func snoozeAttention(of goalID: UUID, until moment: Date) async {
+        guard var goal = goals.first(where: { $0.id == goalID }) else { return }
+        goal.attentionSnoozedUntil = moment
+        do {
+            try await goalRepository.update(goal)
+            await load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func deleteGoal(_ goal: LineaGoal) async {
         do {
             try await goalRepository.delete(id: goal.id)
