@@ -42,6 +42,17 @@ nonisolated enum GoalProgressText {
         return (value < 0 && (whole > 0 || hundredths > 0) ? "-" : "") + text
     }
 
+    /// Число, которое человек набрал: «18», «2,5», «300 000». Пусто или не
+    /// число — nil.
+    static func parseNumber(_ text: String) -> Double? {
+        let cleaned = text
+            .replacingOccurrences(of: groupSeparator, with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: ",", with: ".")
+        guard !cleaned.isEmpty, let value = Double(cleaned), value.isFinite else { return nil }
+        return value
+    }
+
     /// Разряды — от пяти цифр: «1000», но «10 000».
     static func grouped(_ value: Int) -> String {
         let digits = String(value)

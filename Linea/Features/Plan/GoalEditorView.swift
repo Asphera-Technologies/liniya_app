@@ -270,12 +270,8 @@ struct GoalEditorView: View {
                 .accessibilityIdentifier("goal.milestone.title")
 
             if showsWeights {
-                TextField("вес", value: binding.weight, format: .number)
-                    .keyboardType(.decimalPad)
-                    .font(LineaFont.rowValue)
-                    .multilineTextAlignment(.trailing)
+                LineaNumberField(label: "Вес", value: binding.weight, placeholder: "—", identifier: "goal.milestone.weight")
                     .frame(width: 56)
-                    .accessibilityLabel("Вес этапа «\(milestone.title)»")
             }
 
             Button {
@@ -352,27 +348,12 @@ struct GoalEditorView: View {
                     .accessibilityLabel("Убрать число")
                 }
             }
+            // Значение меняется на каждый символ: «18» и сразу «Готово» — сохранится 18.
             HStack(alignment: .top, spacing: 16) {
-                numberField("Было", value: binding.start, identifier: "goal.metric.start")
-                numberField("Сейчас", value: binding.current, identifier: "goal.metric.current")
-                numberField("Цель", value: binding.target, identifier: "goal.metric.target")
+                LineaNumberField(label: "Было", value: binding.start, identifier: "goal.metric.start")
+                LineaNumberField(label: "Сейчас", value: binding.current, identifier: "goal.metric.current")
+                LineaNumberField(label: "Цель", value: binding.target, identifier: "goal.metric.target")
             }
-        }
-    }
-
-    private func numberField(_ label: String, value: Binding<Double>, identifier: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(LineaFont.caption)
-                .foregroundStyle(LineaColor.textSecondary)
-            TextField("0", value: value, format: .number)
-                .keyboardType(.decimalPad)
-                .font(LineaFont.rowTitle)
-                .foregroundStyle(LineaColor.textPrimary)
-                .tint(LineaColor.ink)
-                .accessibilityLabel(label)
-                .accessibilityIdentifier(identifier)
-            LineaHairline()
         }
     }
 
