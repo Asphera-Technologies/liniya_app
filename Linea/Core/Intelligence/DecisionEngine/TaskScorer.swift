@@ -87,7 +87,9 @@ nonisolated struct TaskScorer: Sendable {
     }
 
     /// Насколько задача двигает активную цель. Чем ближе срок цели, тем выше;
-    /// почти достигнутая цель тянет чуть слабее — ей осталось немного.
+    /// почти достигнутая цель тянет чуть слабее — ей осталось немного. Сколько
+    /// осталось — по методу цели (`GoalProgressEngine.completion`); цель без
+    /// процентов («развить личный бренд») не ослабевает.
     func goalAlignment(task: LineaTask, snapshot: ContextSnapshot, at slotStart: Date, time: TimeContext) -> Double {
         guard let goalID = task.goalID else { return 0 }
         guard let goal = snapshot.goals.first(where: { $0.id == goalID }) else { return 0 }
@@ -103,7 +105,7 @@ nonisolated struct TaskScorer: Sendable {
             // Срок не задан: цель важна ровно, без гонки.
             base = 0.7
         }
-        return StateMath.clamp(base * (1 - 0.3 * goal.progress))
+        return StateMath.clamp(base * (1 - 0.3 * (GoalProgressEngine.completion(of: goal) ?? 0)))
     }
 
     /// Сколько дней до срока цели считается «горит».

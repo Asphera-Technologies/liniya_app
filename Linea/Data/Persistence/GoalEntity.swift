@@ -35,6 +35,24 @@ final class GoalEntity {
     /// Признаки успеха, по одному на строку.
     var successCriteriaRaw: String?
 
+    // Модель состояния и прогресс (ADR-036, ADR-037). Всё необязательное —
+    // lightweight-миграция; nil у прежних целей: «Отмечаю сам» из слайдера.
+    /// Стадии цели, по одной на строку.
+    var stagesRaw: String?
+    var stage: String?
+    /// Этапы, числа и журнал продвижений — JSON (`DocumentCoding`): у них
+    /// вложенная структура, а запросов внутрь нет.
+    var milestonesData: Data?
+    var metricsData: Data?
+    var progressLogData: Data?
+    var progressMethodRaw: String?
+    var manualStateRaw: String?
+    var ownerScopeRaw: String?
+    /// Тип и сфера, которые выбрал человек; nil — как решит Linea.
+    var kindOverrideRaw: String?
+    var scopeOverrideRaw: String?
+    var lastReviewedAt: Date?
+
     init(
         id: UUID,
         title: String,
@@ -49,7 +67,18 @@ final class GoalEntity {
         details: String? = nil,
         currentState: String? = nil,
         targetState: String? = nil,
-        successCriteriaRaw: String? = nil
+        successCriteriaRaw: String? = nil,
+        stagesRaw: String? = nil,
+        stage: String? = nil,
+        milestonesData: Data? = nil,
+        metricsData: Data? = nil,
+        progressLogData: Data? = nil,
+        progressMethodRaw: String? = nil,
+        manualStateRaw: String? = nil,
+        ownerScopeRaw: String? = nil,
+        kindOverrideRaw: String? = nil,
+        scopeOverrideRaw: String? = nil,
+        lastReviewedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -65,6 +94,17 @@ final class GoalEntity {
         self.currentState = currentState
         self.targetState = targetState
         self.successCriteriaRaw = successCriteriaRaw
+        self.stagesRaw = stagesRaw
+        self.stage = stage
+        self.milestonesData = milestonesData
+        self.metricsData = metricsData
+        self.progressLogData = progressLogData
+        self.progressMethodRaw = progressMethodRaw
+        self.manualStateRaw = manualStateRaw
+        self.ownerScopeRaw = ownerScopeRaw
+        self.kindOverrideRaw = kindOverrideRaw
+        self.scopeOverrideRaw = scopeOverrideRaw
+        self.lastReviewedAt = lastReviewedAt
     }
 }
 
@@ -83,7 +123,18 @@ extension GoalEntity {
             details: goal.details,
             currentState: goal.currentState,
             targetState: goal.targetState,
-            successCriteriaRaw: Self.raw(goal.successCriteria)
+            successCriteriaRaw: Self.raw(goal.successCriteria),
+            stagesRaw: Self.raw(goal.stages),
+            stage: goal.stage,
+            milestonesData: Self.encoded(goal.milestones),
+            metricsData: Self.encoded(goal.metrics),
+            progressLogData: Self.encoded(goal.progressLog),
+            progressMethodRaw: goal.progressMethod.rawValue,
+            manualStateRaw: goal.manualState?.rawValue,
+            ownerScopeRaw: goal.ownerScope.rawValue,
+            kindOverrideRaw: goal.kindOverride?.rawValue,
+            scopeOverrideRaw: goal.scopeOverride?.rawValue,
+            lastReviewedAt: goal.lastReviewedAt
         )
     }
 
@@ -101,7 +152,18 @@ extension GoalEntity {
             details: details,
             currentState: currentState,
             targetState: targetState,
-            successCriteria: Self.lines(successCriteriaRaw)
+            successCriteria: Self.lines(successCriteriaRaw),
+            stages: Self.lines(stagesRaw),
+            stage: stage,
+            milestones: Self.decoded([GoalMilestone].self, from: milestonesData) ?? [],
+            metrics: Self.decoded([GoalMetric].self, from: metricsData) ?? [],
+            progressMethod: progressMethodRaw.flatMap(GoalProgressMethod.init(rawValue:)) ?? .manual,
+            manualState: manualStateRaw.flatMap(GoalManualState.init(rawValue:)),
+            ownerScope: ownerScopeRaw.flatMap(GoalOwnerScope.init(rawValue:)) ?? .personal,
+            kindOverride: kindOverrideRaw.flatMap(GoalKind.init(rawValue:)),
+            scopeOverride: scopeOverrideRaw.flatMap(GoalScope.init(rawValue:)),
+            progressLog: Self.decoded([GoalProgressEvent].self, from: progressLogData) ?? [],
+            lastReviewedAt: lastReviewedAt
         )
     }
 
@@ -117,6 +179,33 @@ extension GoalEntity {
         currentState = goal.currentState
         targetState = goal.targetState
         successCriteriaRaw = Self.raw(goal.successCriteria)
+        applyState(goal)
+    }
+
+    /// Модель состояния и прогресс.
+    private func applyState(_ goal: LineaGoal) {
+        stagesRaw = Self.raw(goal.stages)
+        stage = goal.stage
+        milestonesData = Self.encoded(goal.milestones)
+        metricsData = Self.encoded(goal.metrics)
+        progressLogData = Self.encoded(goal.progressLog)
+        progressMethodRaw = goal.progressMethod.rawValue
+        manualStateRaw = goal.manualState?.rawValue
+        ownerScopeRaw = goal.ownerScope.rawValue
+        kindOverrideRaw = goal.kindOverride?.rawValue
+        scopeOverrideRaw = goal.scopeOverride?.rawValue
+        lastReviewedAt = goal.lastReviewedAt
+    }
+
+    private static func encoded<Value: Encodable>(_ values: [Value]) -> Data? {
+        guard !values.isEmpty else { return nil }
+        return try? DocumentCoding.encoder().encode(values)
+    }
+
+    /// Не прочиталось — пусто, а не потерянная цель.
+    private static func decoded<Value: Decodable>(_ type: Value.Type, from data: Data?) -> Value? {
+        guard let data else { return nil }
+        return try? DocumentCoding.decoder().decode(type, from: data)
     }
 
     private static func raw(_ lines: [String]) -> String? {

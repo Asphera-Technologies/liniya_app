@@ -216,11 +216,13 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     }
 }
 
-/// A personal goal with coarse progress.
+/// Цель: желаемый результат и то, где человек сейчас относительно него.
 nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
     var title: String
-    /// Progress from 0...1.
+    /// Прежний ручной прогресс (слайдер), 0…1. Новые цели его не используют:
+    /// прогресс считает `GoalProgressEngine` по методу цели. У целей,
+    /// созданных раньше, из него следует состояние «Отмечаю сам».
     var progress: Double
     var isCompleted: Bool
     var createdAt: Date
@@ -247,6 +249,35 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// Как поймём, что получилось: проверяемые признаки.
     var successCriteria: [String]
 
+    // Модель состояния (ADR-036): где человек относительно цели.
+    /// Стадии этой цели по порядку. Свои у каждой цели: у запуска
+    /// приложения — «Исследование → Разработка → … → Рост», у личного
+    /// бренда — другие. Предлагает Linea, человек правит.
+    var stages: [String]
+    /// Текущая крупная стадия; nil — не выбрана.
+    var stage: String?
+    /// Крупные этапы — для прогресса по этапам.
+    var milestones: [GoalMilestone]
+    /// Числа цели — для прогресса по числу.
+    var metrics: [GoalMetric]
+    /// Как считать прогресс. Выбирает Linea при создании, человек меняет.
+    var progressMethod: GoalProgressMethod
+    /// Где цель по словам человека (`manual`). nil у целей, созданных со
+    /// слайдером: тогда состояние следует из прежнего `progress`.
+    var manualState: GoalManualState?
+    /// Чья цель. По умолчанию — своя.
+    var ownerScope: GoalOwnerScope
+    /// Тип, который выбрал человек; nil — как решит Linea (`GoalClassifier`).
+    var kindOverride: GoalKind?
+    /// Сфера, которую выбрал человек; nil — как решит Linea.
+    var scopeOverride: GoalScope?
+    /// Продвижения человека: этапы, числа, стадии (`GoalRevision`).
+    var progressLog: [GoalProgressEvent]
+    /// Когда человек последний раз пересматривал цель: создал, сохранил
+    /// карточку, сдвинул прогресс. nil — цель сохранена раньше, чем Linea
+    /// стала это помнить.
+    var lastReviewedAt: Date?
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -260,7 +291,18 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         details: String? = nil,
         currentState: String? = nil,
         targetState: String? = nil,
-        successCriteria: [String] = []
+        successCriteria: [String] = [],
+        stages: [String] = [],
+        stage: String? = nil,
+        milestones: [GoalMilestone] = [],
+        metrics: [GoalMetric] = [],
+        progressMethod: GoalProgressMethod = .manual,
+        manualState: GoalManualState? = nil,
+        ownerScope: GoalOwnerScope = .personal,
+        kindOverride: GoalKind? = nil,
+        scopeOverride: GoalScope? = nil,
+        progressLog: [GoalProgressEvent] = [],
+        lastReviewedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -275,6 +317,17 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         self.currentState = currentState
         self.targetState = targetState
         self.successCriteria = successCriteria
+        self.stages = stages
+        self.stage = stage
+        self.milestones = milestones
+        self.metrics = metrics
+        self.progressMethod = progressMethod
+        self.manualState = manualState
+        self.ownerScope = ownerScope
+        self.kindOverride = kindOverride
+        self.scopeOverride = scopeOverride
+        self.progressLog = progressLog
+        self.lastReviewedAt = lastReviewedAt
     }
 
     /// Мягкое чтение, как у задачи: цели лежат и в документах дня.
@@ -295,6 +348,19 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         currentState = try container.decodeIfPresent(String.self, forKey: .currentState)
         targetState = try container.decodeIfPresent(String.self, forKey: .targetState)
         successCriteria = try container.decodeIfPresent([String].self, forKey: .successCriteria) ?? []
+        // Модель состояния — мягче остального: незнакомое значение из будущей
+        // версии не должно стоить человеку цели, а дню — его записи.
+        stages = (try? container.decodeIfPresent([String].self, forKey: .stages)) ?? []
+        stage = try? container.decodeIfPresent(String.self, forKey: .stage)
+        milestones = (try? container.decodeIfPresent([GoalMilestone].self, forKey: .milestones)) ?? []
+        metrics = (try? container.decodeIfPresent([GoalMetric].self, forKey: .metrics)) ?? []
+        progressMethod = (try? container.decodeIfPresent(GoalProgressMethod.self, forKey: .progressMethod)) ?? .manual
+        manualState = try? container.decodeIfPresent(GoalManualState.self, forKey: .manualState)
+        ownerScope = (try? container.decodeIfPresent(GoalOwnerScope.self, forKey: .ownerScope)) ?? .personal
+        kindOverride = try? container.decodeIfPresent(GoalKind.self, forKey: .kindOverride)
+        scopeOverride = try? container.decodeIfPresent(GoalScope.self, forKey: .scopeOverride)
+        progressLog = (try? container.decodeIfPresent([GoalProgressEvent].self, forKey: .progressLog)) ?? []
+        lastReviewedAt = try? container.decodeIfPresent(Date.self, forKey: .lastReviewedAt)
     }
 
     /// «Низкая / Средняя / Высокая» — важность цели в женском роде.
@@ -323,10 +389,15 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// Soft limit from the brief: 1–3 active goals.
     static let recommendedActiveLimit = 3
 
-    /// Quiet status line shown under the goal (e.g. "Выполнено", "50%").
-    var statusText: String {
-        if isCompleted { return "Выполнено" }
-        return "\(Int((progress * 100).rounded()))%"
+    /// Где цель по словам человека: выбранное состояние, а у цели, созданной
+    /// со слайдером, — из прежнего прогресса.
+    var reportedState: GoalManualState {
+        manualState ?? GoalManualState.from(legacyProgress: progress)
+    }
+
+    /// Следующий незакрытый этап — «следующий рубеж».
+    var nextMilestone: GoalMilestone? {
+        milestones.first { !$0.isDone }
     }
 }
 
