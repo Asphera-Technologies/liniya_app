@@ -35,8 +35,8 @@ struct QuickGoalTests {
         #expect(understanding.deadline == day(10, 15))
         #expect(understanding.kind == .project)
         #expect(understanding.method == .milestones)
-        #expect(understanding.scope == .work)
-        #expect(understanding.owner == .personal)
+        #expect(understanding.scope == .personal)
+        #expect(understanding.ownerScope == nil)
         #expect(understanding.stages == ["Исследование", "Разработка", "Подготовка запуска", "Тестирование", "Запуск", "Рост"])
         #expect(understanding.stage == nil, "О том, где цель сейчас, не сказано — стадия не выбрана")
         #expect(understanding.milestones.isEmpty, "Название этапом не бывает")
@@ -56,7 +56,7 @@ struct QuickGoalTests {
         #expect(goal.priority == .normal)
         #expect(goal.progressMethod == .milestones)
         #expect(goal.stages.count == 6)
-        #expect(goal.scopeOverride == nil, "Сферу Linea решила сама — она не хранится")
+        #expect(goal.scope == .personal)
         #expect(goal.kindOverride == nil)
         #expect(goal.lastReviewedAt == time.now)
         #expect(goal.isActive)
@@ -148,23 +148,19 @@ struct QuickGoalTests {
         #expect(classifier.classify(title: "Английский", details: "Хочу выучить для работы").kind == .skill)
     }
 
-    @Test("Сфера (scope) и чья цель (owner_scope)")
-    func scopesAndOwners() {
+    @Test("Чья цель (scope): моя, команды, компании — по словам")
+    func scopes() {
         let classifier = GoalClassifier()
-        #expect(classifier.scope(title: "Выпустить Линия в TestFlight") == .work)
-        #expect(classifier.scope(title: "Пробежать полумарафон") == .health)
-        #expect(classifier.scope(title: "Выучить испанский") == .learning)
-        #expect(classifier.scope(title: "Накопить на подушку", details: "300 тысяч рублей") == .finance)
-        #expect(classifier.scope(title: "Больше времени с детьми") == .relationships)
-        #expect(classifier.scope(title: "Сделать ремонт на кухне") == .personal)
-        #expect(classifier.scope(title: "Разобраться с налогами") == .personal)
-        #expect(classifier.scope(title: "Выучить английский для работы с клиентами") == .work)
-
-        #expect(classifier.owner(title: "Запустить продукт всей командой") == .team)
-        #expect(classifier.owner(title: "Сделать ремонт вместе с женой") == .shared)
-        #expect(classifier.owner(title: "Съездить в отпуск всей семьёй") == .shared)
-        #expect(classifier.owner(title: "Выпустить Линия в TestFlight") == .personal)
-        #expect(classifier.owner(title: "Позвонить другу") == .personal)
+        #expect(classifier.scope(title: "Довести выручку компании до 5 млн ₽ в месяц") == .company)
+        #expect(classifier.scope(title: "Довести выручку до 5 млн ₽") == .company, "Выручка — цель компании")
+        #expect(classifier.scope(title: "Запустить продукт всей командой") == .team)
+        #expect(classifier.scope(title: "Закрыть квартал", details: "Вместе с коллегами из отдела продаж") == .team)
+        #expect(classifier.scope(title: "Сделать ремонт вместе с женой") == .team, "Семья и партнёр — тоже команда")
+        #expect(classifier.scope(title: "Съездить в отпуск всей семьёй") == .team)
+        #expect(classifier.scope(title: "Выпустить Линия в TestFlight") == .personal)
+        #expect(classifier.scope(title: "Сделать фирменный стиль") == .personal, "«Фирменный» — не фирма")
+        #expect(classifier.scope(title: "Организовать свадьбу") == .personal)
+        #expect(classifier.scope(title: "Позвонить другу") == .personal)
     }
 
     // MARK: Числа, этапы, метод
@@ -203,7 +199,7 @@ struct QuickGoalTests {
         #expect(understanding.metrics.first?.target == 50)
         #expect(understanding.metrics.first?.current == 0)
         #expect(understanding.stage == "Разработка", "«Прототип», «переработка» — разработка")
-        #expect(understanding.scope == .work)
+        #expect(understanding.scope == .personal)
         #expect(understanding.kind == .project)
     }
 
@@ -284,7 +280,8 @@ struct QuickGoalTests {
         draft.deadline = .at(day(11, 1))
         draft.priority = .low
         draft.method = .hybrid
-        draft.scope = .personal
+        draft.scope = .team
+        draft.ownerScope = "  сборки и TestFlight "  
         let chosen = resolve(draft)
         #expect(chosen.understanding.deadline == day(11, 1))
         #expect(chosen.deadlineOrigin == .chosen)
@@ -292,9 +289,10 @@ struct QuickGoalTests {
         #expect(chosen.understanding.method == .hybrid)
         #expect(chosen.methodOrigin == .chosen)
         #expect(chosen.scopeOrigin == .chosen)
-        #expect(QuickGoalText.summary(chosen, time: time) == "до 1 ноября · Низкая")
+        #expect(QuickGoalText.summary(chosen, time: time) == "до 1 ноября · Низкая · цель команды")
         let goal = chosen.goal(id: WowFixture.goalMVP, createdAt: time.now, time: time)
-        #expect(goal.scopeOverride == .personal, "Выбранная сфера хранится")
+        #expect(goal.scope == .team, "Выбранное «От команды» хранится")
+        #expect(goal.ownerScope == "Сборки и TestFlight")
         #expect(goal.priority == .low)
         #expect(goal.progressMethod == .hybrid)
 

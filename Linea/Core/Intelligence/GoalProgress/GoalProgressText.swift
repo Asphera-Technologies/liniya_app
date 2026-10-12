@@ -65,10 +65,23 @@ nonisolated enum GoalProgressText {
         return result
     }
 
-    /// «18 пользователей», «2,5 км».
+    /// Для текста: миллионы и миллиарды словом, если так сказано точно —
+    /// «5 млн», «3,2 млн»; иначе — все цифры: «3 251 000». В поле ввода
+    /// число всегда полное (`number`).
+    static func compact(_ value: Double) -> String {
+        guard value.isFinite else { return "—" }
+        for (scale, word) in [(1e9, "млрд"), (1e6, "млн")] where abs(value) >= scale {
+            let scaled = value / scale
+            // Точно в сотых долях: 3 200 000 — «3,2 млн», 3 251 000 — нет.
+            if abs((scaled * 100).rounded() - scaled * 100) < 1e-6 { return "\(number(scaled)) \(word)" }
+        }
+        return number(value)
+    }
+
+    /// «18 пользователей», «2,5 км», «5 млн ₽».
     static func amount(_ value: Double, unit: String) -> String {
         let unit = unit.trimmingCharacters(in: .whitespaces)
-        return unit.isEmpty ? number(value) : "\(number(value)) \(unit)"
+        return unit.isEmpty ? compact(value) : "\(compact(value)) \(unit)"
     }
 
     /// «18 из 50 пользователей»; цель меньше старта — «78 кг, цель — 75 кг».
@@ -76,7 +89,7 @@ nonisolated enum GoalProgressText {
         if metric.isDecreasing {
             return "\(amount(metric.current, unit: metric.unit)), цель — \(amount(metric.target, unit: metric.unit))"
         }
-        return "\(number(metric.current)) из \(amount(metric.target, unit: metric.unit))"
+        return "\(compact(metric.current)) из \(amount(metric.target, unit: metric.unit))"
     }
 
     /// «36%».
@@ -87,6 +100,12 @@ nonisolated enum GoalProgressText {
     /// «2 из 5 этапов», «1 из 1 этапа».
     static func milestones(done: Int, total: Int) -> String {
         "\(done) из \(total) \(RussianText.plural(total, "этапа", "этапов", "этапов"))"
+    }
+
+    /// «3 действия», «1 действие», «ни одного действия» — свои, у общей цели.
+    static func ownActions(_ count: Int) -> String {
+        guard count > 0 else { return "ни одного действия" }
+        return "\(count) " + RussianText.plural(count, "действие", "действия", "действий")
     }
 
     /// «5 значимых действий», «1 значимое действие», «ни одного значимого действия».
@@ -169,6 +188,45 @@ nonisolated enum GoalProgressText {
             guard let stage = progress.stage else { return RussianWords.capitalizedFirst(last) }
             return "\(stage)\(separator)\(last)"
         }
+    }
+
+    // MARK: Общая цель и вклад
+
+    /// Подпись цели команды или компании в «Плане»; у своей — nil.
+    static func scopeLabel(_ scope: GoalScope) -> String? {
+        switch scope {
+        case .personal: return nil
+        case .team: return "Команда"
+        case .company: return "Компания"
+        }
+    }
+
+    /// Вклад человека одной строкой: своё число — с процентом; иначе — свои
+    /// действия. Общий прогресс сюда не попадает, как и наоборот.
+    static func contributionSummary(_ contribution: GoalContribution, time: TimeContext) -> String {
+        if let metric = contribution.metrics.first, metric.target != metric.start {
+            var text = "Моя часть: \(self.metric(metric))"
+            if let value = contribution.value { text += separator + percent(value) }
+            return text
+        }
+        if contribution.recentActions > 0 {
+            return "Моя часть: \(ownActions(contribution.recentActions)) за \(GoalProgressEngine.recentDays) дней"
+        }
+        if let last = contribution.lastActionAt {
+            return "Моя часть: последнее действие — \(moment(last, time: time))"
+        }
+        return "Моя часть: действий пока нет"
+    }
+
+    /// Свои действия в карточке цели: задачи, последнее, за 30 дней.
+    static func contributionLines(_ contribution: GoalContribution, time: TimeContext) -> [(label: String, value: String)] {
+        var tasks = "\(contribution.closedTasks) закрыто"
+        if contribution.openTasks > 0 { tasks += separator + "\(contribution.openTasks) открыто" }
+        return [
+            ("Мои задачи", tasks),
+            ("Последнее действие", contribution.lastActionAt.map { moment($0, time: time) } ?? "пока не было"),
+            ("За \(GoalProgressEngine.recentDays) дней", ownActions(contribution.recentActions)),
+        ]
     }
 
     /// Без процентов: стадия, последнее продвижение, действия за 30 дней.

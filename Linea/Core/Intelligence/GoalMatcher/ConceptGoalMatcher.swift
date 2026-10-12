@@ -146,6 +146,8 @@ nonisolated struct ConceptGoalMatcher: GoalMatcher {
             for term in terms(text ?? "") { profile[term] = max(profile[term] ?? 0, weight) }
         }
         add(goal.title, weight: titleWeight)
+        // Часть человека в общей цели — то, чем заняты его задачи (ADR-038).
+        add(goal.ownPart, weight: titleWeight)
         add(goal.targetState, weight: targetWeight)
         add(goal.successCriteria.joined(separator: ". "), weight: targetWeight)
         add(goal.currentState, weight: storyWeight)

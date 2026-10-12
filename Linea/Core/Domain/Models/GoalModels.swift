@@ -139,38 +139,42 @@ nonisolated struct GoalMilestone: Identifiable, Hashable, Codable, Sendable {
     var isDone: Bool { completedAt != nil }
 }
 
-/// Сфера жизни, к которой относится цель (`scope`).
+/// Чья цель (`scope`): только человека, его команды или всей компании.
+/// У командной и общей цели прогресс — общий, а у человека — своя часть
+/// (`LineaGoal.ownerScope`) и свой вклад; это разные вещи (ADR-038).
 nonisolated enum GoalScope: String, Codable, CaseIterable, Sendable {
-    case work
-    case health
-    case learning
-    case finance
-    case relationships
-    case personal
-
-    var title: String {
-        switch self {
-        case .work: return "Работа"
-        case .health: return "Здоровье"
-        case .learning: return "Обучение"
-        case .finance: return "Финансы"
-        case .relationships: return "Близкие"
-        case .personal: return "Личное"
-        }
-    }
-}
-
-/// Чья цель (`owner_scope`): только своя, команды или общая с кем-то.
-nonisolated enum GoalOwnerScope: String, Codable, CaseIterable, Sendable {
     case personal
     case team
-    case shared
+    case company
 
     var title: String {
         switch self {
         case .personal: return "Моя"
         case .team: return "Команды"
-        case .shared: return "Общая"
+        case .company: return "Компании"
+        }
+    }
+
+    /// Ответ на «Эта цель зависит только от тебя или от команды?».
+    var choiceTitle: String {
+        switch self {
+        case .personal: return "От меня"
+        case .team: return "От команды"
+        case .company: return "От компании"
+        }
+    }
+
+    /// Цель не только человека: прогресс общий, у человека — своя часть.
+    var isShared: Bool { self != .personal }
+
+    /// «Чья цель» так, как её хранила сборка раунда 7: «общая» (с семьёй,
+    /// с партнёром) — это команда. Незнакомое — nil.
+    static func legacy(_ raw: String?) -> GoalScope? {
+        switch raw {
+        case "personal": return .personal
+        case "team", "shared": return .team
+        case "company": return .company
+        default: return nil
         }
     }
 }
@@ -223,7 +227,13 @@ nonisolated struct GoalProgressEvent: Hashable, Codable, Sendable {
         case metricUpdated
         case stageChanged
         case manualStateChanged
+        /// Своё число у командной цели ближе к цели — это вклад человека, а
+        /// не прогресс общей цели.
+        case contributionUpdated
     }
+
+    /// Продвижение общей цели, а не вклад человека в неё.
+    var isGoalLevel: Bool { kind != .contributionUpdated }
 
     var kind: Kind
     var at: Date

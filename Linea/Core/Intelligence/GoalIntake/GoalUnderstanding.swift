@@ -21,17 +21,25 @@ nonisolated struct GoalIntakeInput: Hashable, Sendable {
     var answers: [GoalQuestion.Topic: String]
     /// Вопросы, которые человек пропустил: их больше не задаём.
     var skipped: Set<GoalQuestion.Topic>
+    /// Чья цель, если человек уже выбрал: «От меня», «От команды».
+    var scope: GoalScope?
+    /// Его часть общей цели, если уже сказал (быстрая цель).
+    var ownerScope: String?
 
     init(
         title: String,
         details: String = "",
         answers: [GoalQuestion.Topic: String] = [:],
-        skipped: Set<GoalQuestion.Topic> = []
+        skipped: Set<GoalQuestion.Topic> = [],
+        scope: GoalScope? = nil,
+        ownerScope: String? = nil
     ) {
         self.title = title
         self.details = details
         self.answers = answers
         self.skipped = skipped
+        self.scope = scope
+        self.ownerScope = ownerScope
     }
 }
 
@@ -42,6 +50,8 @@ nonisolated struct GoalQuestion: Hashable, Sendable {
         case result
         /// С чего начинаем: что уже есть.
         case start
+        /// За какую часть общей цели отвечает человек (`owner_scope`).
+        case owner
     }
 
     let topic: Topic
@@ -60,10 +70,17 @@ nonisolated struct GoalQuestion: Hashable, Sendable {
         example: "Например: есть прототип, идёт переработка онбординга. Или: начинаю с нуля."
     )
 
+    static let owner = GoalQuestion(
+        topic: .owner,
+        text: "За какую часть этой цели отвечаешь ты?",
+        example: "Например: привлечение крупных клиентов и ключевые переговоры."
+    )
+
     static func about(_ topic: Topic) -> GoalQuestion {
         switch topic {
         case .result: return .result
         case .start: return .start
+        case .owner: return .owner
         }
     }
 }
@@ -93,10 +110,12 @@ nonisolated struct GoalUnderstanding: Hashable, Sendable {
     var isTitleUnderstood: Bool
     /// Тип цели (`goal_type`) — его Linea определяет сама.
     var kind: GoalKind
+    /// Чья цель (`scope`): догадка Linea по словам или выбор человека.
     var scope: GoalScope
-    /// Сферу выбрал человек — она хранится; иначе Linea пересчитывает её сама.
+    /// «От меня» / «От команды» выбрал человек — догадка его не перепишет.
     var isScopeChosen: Bool
-    var owner: GoalOwnerScope
+    /// Часть человека в общей цели (`owner_scope`).
+    var ownerScope: String?
     /// Как считать прогресс: что есть в словах, иначе — как обычно для типа.
     var method: GoalProgressMethod
     var metrics: [GoalMetric]
@@ -119,7 +138,7 @@ nonisolated struct GoalUnderstanding: Hashable, Sendable {
         kind: GoalKind = .other,
         scope: GoalScope = .personal,
         isScopeChosen: Bool = false,
-        owner: GoalOwnerScope = .personal,
+        ownerScope: String? = nil,
         method: GoalProgressMethod = .manual,
         metrics: [GoalMetric] = [],
         milestones: [GoalMilestone] = [],
@@ -139,7 +158,7 @@ nonisolated struct GoalUnderstanding: Hashable, Sendable {
         self.kind = kind
         self.scope = scope
         self.isScopeChosen = isScopeChosen
-        self.owner = owner
+        self.ownerScope = ownerScope
         self.method = method
         self.metrics = metrics
         self.milestones = milestones
@@ -156,7 +175,6 @@ nonisolated struct GoalUnderstanding: Hashable, Sendable {
         let story = [details, currentState, targetState].compactMap { $0 }.joined(separator: ". ")
         result.kind = classifier.classify(title: title, details: story).kind
         if !isScopeChosen { result.scope = classifier.scope(title: title, details: story) }
-        result.owner = classifier.owner(title: title, details: story)
         let structure = GoalStructure.derive(title: title, currentState: currentState, successCriteria: successCriteria)
         result.metrics = structure.metrics
         result.milestones = structure.milestones
@@ -196,8 +214,8 @@ nonisolated struct GoalUnderstanding: Hashable, Sendable {
             },
             progressMethod: method,
             manualState: method == .manual ? .started : nil,
-            ownerScope: owner,
-            scopeOverride: isScopeChosen ? scope : nil,
+            scope: scope,
+            ownerScope: scope.isShared ? Self.text(ownerScope) : nil,
             lastReviewedAt: createdAt
         )
     }

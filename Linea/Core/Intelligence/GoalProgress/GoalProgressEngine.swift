@@ -14,11 +14,34 @@
 //  пути. Двигают закрытые этапы и обновлённые числа. Задачи идут в
 //  «значимые действия» и «последнее продвижение».
 //
+//  У цели команды или компании два разных показателя (ADR-038): прогресс
+//  общей цели (`goal_progress`) — то, что человек знает о результате всех, —
+//  и его вклад (`personal_contribution_progress`): свои числа и свои
+//  действия. Задачи человека — это вклад; общий прогресс они не определяют:
+//  «закрыл 80 % своих задач» не значит «цель команды на 80 %».
+//
 //  Чистая функция от цели, её задач и времени: одинаково считает строка
 //  цели в «Плане», карточка цели и движок приоритизации.
 //
 
 import Foundation
+
+/// Вклад человека в общую цель (`personal_contribution_progress`).
+nonisolated struct GoalContribution: Hashable, Sendable {
+    /// За какую часть отвечает человек (`owner_scope`).
+    let part: String?
+    /// Свои числа: «2 из 5 enterprise-клиентов».
+    let metrics: [GoalMetric]
+    /// Доля своего первого числа — или nil: процента вклада без своего числа нет.
+    let value: Double?
+    /// Свои действия: закрытые задачи цели.
+    let closedTasks: Int
+    let openTasks: Int
+    /// Последнее своё действие: задача, своё число.
+    let lastActionAt: Date?
+    /// Свои действия за `GoalProgressEngine.recentDays` дней.
+    let recentActions: Int
+}
 
 /// Прогресс цели так, как его можно честно показать.
 nonisolated struct GoalProgress: Hashable, Sendable {
@@ -52,6 +75,10 @@ nonisolated struct GoalProgress: Hashable, Sendable {
     let lastProgressAt: Date?
     /// Значимые действия за `GoalProgressEngine.recentDays` дней.
     let recentActions: Int
+    /// Чья цель.
+    let scope: GoalScope
+    /// Вклад человека — только у цели команды или компании.
+    let contribution: GoalContribution?
 
     var bar: Bar? {
         if isCompleted { return .fraction(1) }
@@ -84,12 +111,27 @@ nonisolated struct GoalProgressEngine: Sendable {
         case .milestones, .manual, .qualitative: shownMetrics = []
         }
 
-        // Значимые действия: закрытые задачи цели и продвижения из журнала.
-        let closed = tasks
-            .filter { $0.goalID == goal.id && $0.isDone && $0.cancelledAt == nil }
-            .compactMap(\.completedAt)
-        let moments = (closed + goal.progressLog.map(\.at)).filter { $0 <= time.now }
+        // Значимые действия: закрытые задачи цели и продвижения из журнала. У
+        // общей цели задачи человека — его вклад, а не движение всей цели.
+        let linked = tasks.filter { $0.goalID == goal.id && $0.cancelledAt == nil }
+        let closed = linked.filter(\.isDone).compactMap(\.completedAt)
+        let goalEvents = goal.progressLog.filter(\.isGoalLevel).map(\.at)
+        let moments = ((goal.scope.isShared ? [] : closed) + goalEvents).filter { $0 <= time.now }
         let windowStart = time.adding(days: -Self.recentDays, to: time.now)
+
+        var contribution: GoalContribution?
+        if goal.scope.isShared {
+            let own = (closed + goal.progressLog.filter { !$0.isGoalLevel }.map(\.at)).filter { $0 <= time.now }
+            contribution = GoalContribution(
+                part: goal.ownPart,
+                metrics: goal.contributionMetrics,
+                value: goal.contributionMetrics.first?.fraction,
+                closedTasks: closed.count,
+                openTasks: linked.filter(\.isOpen).count,
+                lastActionAt: own.max(),
+                recentActions: own.filter { $0 > windowStart }.count
+            )
+        }
 
         return GoalProgress(
             method: method,
@@ -103,8 +145,19 @@ nonisolated struct GoalProgressEngine: Sendable {
             reportedState: method == .manual ? goal.reportedState : nil,
             stage: goal.stage,
             lastProgressAt: moments.max(),
-            recentActions: moments.filter { $0 > windowStart }.count
+            recentActions: moments.filter { $0 > windowStart }.count,
+            scope: goal.scope,
+            contribution: contribution
         )
+    }
+
+    /// Когда человек последний раз что-то делал по цели: закрыл или начал
+    /// задачу, сдвинул этап, число, стадию. Не было ничего — когда создал.
+    /// Пересмотр карточки — не действие (`GoalAttention`).
+    static func lastAction(of goal: LineaGoal, tasks: [LineaTask], time: TimeContext) -> Date {
+        let linked = tasks.filter { $0.goalID == goal.id && $0.cancelledAt == nil }
+        let moments = linked.compactMap(\.completedAt) + linked.compactMap(\.startedAt) + goal.progressLog.map(\.at)
+        return (moments.filter { $0 <= time.now } + [goal.createdAt]).max() ?? goal.createdAt
     }
 
     /// `progress_value`: доля, которую можно обоснованно посчитать, — или nil.

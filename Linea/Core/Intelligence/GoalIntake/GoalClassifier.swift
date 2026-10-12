@@ -2,11 +2,12 @@
 //  GoalClassifier.swift
 //  Linea
 //
-//  Тип цели (`goal_type`), сфера (`scope`) и чья цель (`owner_scope`) — по
+//  Тип цели (`goal_type`) и чья она (`scope`: моя, команды, компании) — по
 //  словам, как тип задачи (ADR-024): небольшие явные словари, офлайн,
-//  мгновенно, каждое правило закреплено тестом. Тип и сферу Linea
-//  определяет сама и пересчитывает вместе с названием; хранится только
-//  выбор человека (`kindOverride`, `scopeOverride`).
+//  мгновенно, каждое правило закреплено тестом. Тип Linea определяет сама и
+//  пересчитывает вместе с названием; хранится только выбор человека
+//  (`kindOverride`). Чья цель — догадка при создании; человек её
+//  подтверждает или меняет, и она хранится (`LineaGoal.scope`).
 //
 //  Тип решает, как считать прогресс новой цели и какие у неё стадии:
 //  проект — этапами, измеримая — числом, привычка, навык и развитие — без
@@ -40,10 +41,6 @@ nonisolated struct GoalClassifier: Sendable {
     /// нет, — по рассказу.
     func kind(of goal: LineaGoal) -> GoalKind {
         goal.kindOverride ?? classify(title: goal.title, details: Self.story(of: goal)).kind
-    }
-
-    func scope(of goal: LineaGoal) -> GoalScope {
-        goal.scopeOverride ?? scope(title: goal.title, details: Self.story(of: goal))
     }
 
     /// Всё, что человек рассказал о цели, кроме названия.
@@ -88,40 +85,21 @@ nonisolated struct GoalClassifier: Sendable {
         return nil
     }
 
-    // MARK: Сфера
-
-    /// Сфера: где больше слов — название вдвое весомее рассказа. Поровну —
-    /// по порядку `GoalScope.allCases`; слов нет — «Личное».
-    func scope(title: String, details: String? = nil) -> GoalScope {
-        var score: [GoalScope: Double] = [:]
-        for (text, weight) in [(title, 2.0), (details ?? "", 1.0)] {
-            for word in RuleBasedGoalAnalyzer.words(text) {
-                guard let scope = GoalWords.scope(of: word) else { continue }
-                score[scope, default: 0] += weight
-            }
-        }
-        let best = GoalScope.allCases.max { lhs, rhs in
-            let left = score[lhs] ?? 0
-            let right = score[rhs] ?? 0
-            if left != right { return left < right }
-            // При равенстве выигрывает тот, кто раньше в списке.
-            return GoalScope.allCases.firstIndex(of: lhs)! > GoalScope.allCases.firstIndex(of: rhs)!
-        }
-        guard let best, (score[best] ?? 0) > 0 else { return .personal }
-        return best
-    }
-
     // MARK: Чья цель
 
-    /// «С командой», «всем отделом» — команды; «вместе с женой», «всей
-    /// семьёй» — общая; иначе — своя.
-    func owner(title: String, details: String? = nil) -> GoalOwnerScope {
+    /// «Довести выручку компании…» — компании; «всей командой», «с
+    /// коллегами», «вместе с женой» — команды (семья и партнёр — тоже
+    /// команда: цель зависит не только от человека); иначе — своя.
+    func scope(title: String, details: String? = nil) -> GoalScope {
         let words = RuleBasedGoalAnalyzer.words(title + " " + (details ?? ""))
+        if words.contains(where: { word in
+            GoalWords.companyWords.contains(word) || GoalWords.companyStems.contains(where: word.hasPrefix)
+        }) { return .company }
         if words.contains(where: { word in GoalWords.teamStems.contains(where: word.hasPrefix) }) { return .team }
-        if words.contains("вместе") { return .shared }
+        if words.contains("вместе") || words.contains("сообща") { return .team }
         for (index, word) in words.enumerated() where word == "всей" || word == "с" || word == "со" {
             guard words.indices.contains(index + 1) else { continue }
-            if GoalWords.companions.contains(words[index + 1]) { return .shared }
+            if GoalWords.companions.contains(words[index + 1]) { return .team }
         }
         return .personal
     }
@@ -174,62 +152,12 @@ nonisolated enum GoalWords {
         words.first { word in exact.contains(word) || stems.contains(where: word.hasPrefix) }
     }
 
-    // MARK: Сфера
-
-    static let workStems = [
-        "работ", "клиент", "проект", "бизнес", "компани", "продукт", "карьер", "повышен", "оффер", "офер",
-        "стартап", "выручк", "команд", "заказчик", "релиз", "mvp", "сервис",
-    ]
-    static let workConcepts: Set<String> = [
-        "launch", "beta", "testing", "build", "app", "onboarding", "linea", "design", "marketing", "sales", "users", "jobs",
-    ]
-    static let healthStems = [
-        "здоров", "высып", "врач", "анализ", "зуб", "курить", "курени", "алкогол", "медитац", "стресс", "давлен",
-        "похуд", "сброс", "килограм",
-    ]
-    static let healthWords: Set<String> = ["сон", "сна", "спать", "кг", "вес", "веса"]
-    static let healthConcepts: Set<String> = ["fitness", "nutrition"]
-    static let learningStems = [
-        "учеб", "учит", "курс", "выучи", "научи", "освои", "изучи", "экзамен", "университет", "универ",
-        "диплом", "сертифик", "навык", "лекци", "программир",
-    ]
-    static let learningConcepts: Set<String> = ["reading", "language"]
-    static let financeStems = [
-        "долг", "кредит", "ипотек", "доход", "зарабат", "деньг", "рубл", "зарплат", "подушк", "пенси", "сбереж",
-        "инвест", "тысяч", "миллион",
-    ]
-    static let financeConcepts: Set<String> = ["money"]
-    static let relationshipStems = ["семь", "семей", "ребен", "родител", "друз", "отношени", "свидан", "свадьб", "близк", "партнер"]
-    static let relationshipWords: Set<String> = [
-        "дети", "детей", "детьми", "детям", "сын", "сыну", "сыном", "дочь", "дочке", "дочкой", "мама", "маме", "маму",
-        "мамой", "папа", "папе", "папу", "папой", "жена", "жене", "жену", "женой", "муж", "мужу", "мужем", "друг",
-        "друга", "другом",
-    ]
-    static let personalStems = [
-        "квартир", "ремонт", "переезд", "переех", "отпуск", "путешеств", "хобби", "рисова", "музык", "гитар",
-        "отдых", "машин",
-    ]
-    static let personalWords: Set<String> = ["дом", "дома", "права"]
-
-    /// Сфера одного слова; служебное и общее — ни одной.
-    static func scope(of word: String) -> GoalScope? {
-        if let concept = GoalConcepts.concept(of: word) {
-            if workConcepts.contains(concept.id) { return .work }
-            if healthConcepts.contains(concept.id) { return .health }
-            if learningConcepts.contains(concept.id) { return .learning }
-            if financeConcepts.contains(concept.id) { return .finance }
-        }
-        if workStems.contains(where: word.hasPrefix) { return .work }
-        if healthWords.contains(word) || healthStems.contains(where: word.hasPrefix) { return .health }
-        if learningStems.contains(where: word.hasPrefix) { return .learning }
-        if financeStems.contains(where: word.hasPrefix) { return .finance }
-        if relationshipWords.contains(word) || relationshipStems.contains(where: word.hasPrefix) { return .relationships }
-        if personalWords.contains(word) || personalStems.contains(where: word.hasPrefix) { return .personal }
-        return nil
-    }
-
     // MARK: Чья цель
 
+    /// Выручка, компания, фирма: цель всей компании. «Фирма» — целиком:
+    /// «фирменный стиль» — не про компанию.
+    static let companyStems = ["компани", "организаци", "корпорат", "холдинг", "выручк"]
+    static let companyWords: Set<String> = ["фирма", "фирмы", "фирме", "фирму", "фирмой"]
     static let teamStems = ["команд", "коллег", "отдел"]
     /// «с женой», «всей семьёй»: цель на двоих и больше.
     static let companions: Set<String> = [

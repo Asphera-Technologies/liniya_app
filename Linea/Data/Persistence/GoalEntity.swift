@@ -47,11 +47,18 @@ final class GoalEntity {
     var progressLogData: Data?
     var progressMethodRaw: String?
     var manualStateRaw: String?
+    /// Чья цель (`scope`: personal, team, company). Имя колонки — с раунда 7,
+    /// где здесь лежало «моя / команды / общая»; «общая» читается как команда.
     var ownerScopeRaw: String?
-    /// Тип и сфера, которые выбрал человек; nil — как решит Linea.
+    /// За какую часть общей цели отвечает человек (`owner_scope`), текстом.
+    var ownerScopeText: String?
+    /// Свои числа у командной цели (вклад), JSON.
+    var contributionMetricsData: Data?
+    /// Тип, который выбрал человек; nil — как решит Linea.
     var kindOverrideRaw: String?
-    var scopeOverrideRaw: String?
     var lastReviewedAt: Date?
+    /// «Пока нет» на предложение вернуться к цели.
+    var attentionSnoozedUntil: Date?
 
     init(
         id: UUID,
@@ -76,9 +83,11 @@ final class GoalEntity {
         progressMethodRaw: String? = nil,
         manualStateRaw: String? = nil,
         ownerScopeRaw: String? = nil,
+        ownerScopeText: String? = nil,
+        contributionMetricsData: Data? = nil,
         kindOverrideRaw: String? = nil,
-        scopeOverrideRaw: String? = nil,
-        lastReviewedAt: Date? = nil
+        lastReviewedAt: Date? = nil,
+        attentionSnoozedUntil: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -102,9 +111,11 @@ final class GoalEntity {
         self.progressMethodRaw = progressMethodRaw
         self.manualStateRaw = manualStateRaw
         self.ownerScopeRaw = ownerScopeRaw
+        self.ownerScopeText = ownerScopeText
+        self.contributionMetricsData = contributionMetricsData
         self.kindOverrideRaw = kindOverrideRaw
-        self.scopeOverrideRaw = scopeOverrideRaw
         self.lastReviewedAt = lastReviewedAt
+        self.attentionSnoozedUntil = attentionSnoozedUntil
     }
 }
 
@@ -131,10 +142,12 @@ extension GoalEntity {
             progressLogData: Self.encoded(goal.progressLog),
             progressMethodRaw: goal.progressMethod.rawValue,
             manualStateRaw: goal.manualState?.rawValue,
-            ownerScopeRaw: goal.ownerScope.rawValue,
+            ownerScopeRaw: goal.scope.rawValue,
+            ownerScopeText: goal.ownerScope,
+            contributionMetricsData: Self.encoded(goal.contributionMetrics),
             kindOverrideRaw: goal.kindOverride?.rawValue,
-            scopeOverrideRaw: goal.scopeOverride?.rawValue,
-            lastReviewedAt: goal.lastReviewedAt
+            lastReviewedAt: goal.lastReviewedAt,
+            attentionSnoozedUntil: goal.attentionSnoozedUntil
         )
     }
 
@@ -159,11 +172,13 @@ extension GoalEntity {
             metrics: Self.decoded([GoalMetric].self, from: metricsData) ?? [],
             progressMethod: progressMethodRaw.flatMap(GoalProgressMethod.init(rawValue:)) ?? .manual,
             manualState: manualStateRaw.flatMap(GoalManualState.init(rawValue:)),
-            ownerScope: ownerScopeRaw.flatMap(GoalOwnerScope.init(rawValue:)) ?? .personal,
+            scope: GoalScope.legacy(ownerScopeRaw) ?? .personal,
+            ownerScope: ownerScopeText,
+            contributionMetrics: Self.decoded([GoalMetric].self, from: contributionMetricsData) ?? [],
             kindOverride: kindOverrideRaw.flatMap(GoalKind.init(rawValue:)),
-            scopeOverride: scopeOverrideRaw.flatMap(GoalScope.init(rawValue:)),
             progressLog: Self.decoded([GoalProgressEvent].self, from: progressLogData) ?? [],
-            lastReviewedAt: lastReviewedAt
+            lastReviewedAt: lastReviewedAt,
+            attentionSnoozedUntil: attentionSnoozedUntil
         )
     }
 
@@ -191,10 +206,12 @@ extension GoalEntity {
         progressLogData = Self.encoded(goal.progressLog)
         progressMethodRaw = goal.progressMethod.rawValue
         manualStateRaw = goal.manualState?.rawValue
-        ownerScopeRaw = goal.ownerScope.rawValue
+        ownerScopeRaw = goal.scope.rawValue
+        ownerScopeText = goal.ownerScope
+        contributionMetricsData = Self.encoded(goal.contributionMetrics)
         kindOverrideRaw = goal.kindOverride?.rawValue
-        scopeOverrideRaw = goal.scopeOverride?.rawValue
         lastReviewedAt = goal.lastReviewedAt
+        attentionSnoozedUntil = goal.attentionSnoozedUntil
     }
 
     private static func encoded<Value: Encodable>(_ values: [Value]) -> Data? {

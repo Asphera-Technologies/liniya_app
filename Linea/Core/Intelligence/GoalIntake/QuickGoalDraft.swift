@@ -6,7 +6,8 @@
 //  «Чего хочешь достичь?». Строка «Выпустить Линия в TestFlight до 15-го
 //  октября» → название «Выпустить Линия в TestFlight», срок 15 октября, тип
 //  — проект, прогресс — этапами. Под строкой — чипы самого важного: срок,
-//  важность, как считать прогресс, сфера. Выбор в чипе сильнее сказанного,
+//  важность, как считать прогресс, чья цель. У цели команды или компании —
+//  «За какую часть отвечаешь ты?» (ADR-038). Выбор в чипе сильнее сказанного,
 //  сказанное — того, что Linea решила сама. «Создать цель» — и всё; рассказ,
 //  «Сейчас», признаки успеха — по желанию, «Рассказать подробнее».
 //
@@ -28,30 +29,42 @@ nonisolated struct QuickGoalDraft: Hashable, Sendable {
     var deadline: DeadlineChoice?
     var priority: TaskPriority?
     var method: GoalProgressMethod?
+    /// «От меня» / «От команды» / «От компании».
     var scope: GoalScope?
+    /// «За какую часть отвечаешь ты?» — у цели команды или компании.
+    var ownerScope: String
 
     init(
         text: String = "",
         deadline: DeadlineChoice? = nil,
         priority: TaskPriority? = nil,
         method: GoalProgressMethod? = nil,
-        scope: GoalScope? = nil
+        scope: GoalScope? = nil,
+        ownerScope: String = ""
     ) {
         self.text = text
         self.deadline = deadline
         self.priority = priority
         self.method = method
         self.scope = scope
+        self.ownerScope = ownerScope
     }
 
     var hasChoices: Bool { deadline != nil || priority != nil || method != nil || scope != nil }
+
+    /// Что передать разбору: строка, выбор «чья цель» и часть человека.
+    func input(details: String = "", answers: [GoalQuestion.Topic: String] = [:],
+               skipped: Set<GoalQuestion.Topic> = [], title: String? = nil) -> GoalIntakeInput {
+        GoalIntakeInput(title: title ?? text, details: details, answers: answers, skipped: skipped,
+                        scope: scope, ownerScope: ownerScope)
+    }
 
     func resolve(
         profile: UserProfile,
         time: TimeContext,
         analyzer: RuleBasedGoalAnalyzer = RuleBasedGoalAnalyzer()
     ) -> QuickGoalResolution {
-        var understood = analyzer.understand(GoalIntakeInput(title: text), profile: profile, time: time)
+        var understood = analyzer.understand(input(), profile: profile, time: time)
         // Одна строка — это название. Результатом и признаком успеха Linea её
         // не повторяет: их человек скажет сам, если захочет.
         if understood.successCriteria.map(RussianWords.normalized) == [RussianWords.normalized(understood.title)] {
@@ -95,7 +108,11 @@ nonisolated struct QuickGoalDraft: Hashable, Sendable {
             understanding.scope = scope
             understanding.isScopeChosen = true
             result.scopeOrigin = .chosen
+        } else {
+            // Команду или компанию Linea увидела в словах — это сказано.
+            result.scopeOrigin = understood.scope.isShared ? .typed : .assumed
         }
+        if !understanding.scope.isShared { understanding.ownerScope = nil }
 
         result.understanding = understanding
         return result
@@ -111,6 +128,7 @@ nonisolated struct QuickGoalResolution: Hashable, Sendable {
     var priorityOrigin: Origin = .assumed
     /// Как считать прогресс: решила Linea (`assumed`) или выбрал человек.
     var methodOrigin: Origin = .assumed
+    /// Чья цель: сказано («выручку компании»), выбрано или по умолчанию — моя.
     var scopeOrigin: Origin = .assumed
 
     init(understanding: GoalUnderstanding) {
@@ -179,6 +197,9 @@ nonisolated enum QuickGoalText {
         }
         if resolution.priorityOrigin != .assumed {
             parts.append(LineaGoal.importanceTitle(resolution.understanding.priority))
+        }
+        if resolution.scopeOrigin != .assumed, resolution.understanding.scope.isShared {
+            parts.append("цель \(resolution.understanding.scope.title.lowercased())")
         }
         return parts.joined(separator: GoalProgressText.separator)
     }

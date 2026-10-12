@@ -30,9 +30,10 @@ struct GoalStateTests {
             ],
             metrics: [GoalMetric(id: id(3), unit: "пользователей", current: 0, target: 50)],
             progressMethod: .hybrid,
-            ownerScope: .team,
+            scope: .team,
+            ownerScope: "Сборки и TestFlight",
+            contributionMetrics: [GoalMetric(id: id(4), unit: "сборок", current: 1, target: 3)],
             kindOverride: .project,
-            scopeOverride: .work,
             lastReviewedAt: WowFixture.created
         )
     }
@@ -44,7 +45,9 @@ struct GoalStateTests {
         #expect(decoded == beta)
         #expect(decoded.stage == "Разработка")
         #expect(decoded.stages.count == 6)
-        #expect(decoded.ownerScope == .team)
+        #expect(decoded.scope == .team)
+        #expect(decoded.ownerScope == "Сборки и TestFlight")
+        #expect(decoded.contributionMetrics.first?.target == 3)
         #expect(decoded.nextMilestone?.title == "TestFlight опубликован")
     }
 
@@ -57,7 +60,8 @@ struct GoalStateTests {
         let goal = try JSONDecoder().decode(LineaGoal.self, from: Data(json.utf8))
         #expect(goal.progressMethod == .manual)
         #expect(goal.reportedState == .inProgress)
-        #expect(goal.ownerScope == .personal)
+        #expect(goal.scope == .personal)
+        #expect(goal.ownerScope == nil)
         #expect(goal.stages.isEmpty)
         #expect(goal.stage == nil)
         #expect(goal.milestones.isEmpty)
@@ -68,13 +72,23 @@ struct GoalStateTests {
     func unknownValuesAreSoft() throws {
         let json = """
         {"id":"\(goalID.uuidString)","title":"Цель","createdAt":0,
-         "progressMethod":"telepathy","ownerScope":"galaxy","manualState":"maybe","milestones":[{"oops":1}]}
+         "progressMethod":"telepathy","scope":"galaxy","manualState":"maybe","milestones":[{"oops":1}]}
         """
         let goal = try JSONDecoder().decode(LineaGoal.self, from: Data(json.utf8))
         #expect(goal.progressMethod == .manual)
-        #expect(goal.ownerScope == .personal)
+        #expect(goal.scope == .personal)
         #expect(goal.manualState == nil)
         #expect(goal.milestones.isEmpty)
+    }
+
+    @Test("Цель сборки раунда 7: «чья цель» под ключом owner_scope — это не зона ответственности")
+    func round7OwnerDecodes() throws {
+        let json = #"{"id":"\#(goalID.uuidString)","title":"Ремонт","createdAt":0,"ownerScope":"shared"}"#
+        let goal = try JSONDecoder().decode(LineaGoal.self, from: Data(json.utf8))
+        #expect(goal.scope == .team, "«Общая» — это команда")
+        #expect(goal.ownerScope == nil)
+        #expect(GoalScope.legacy("company") == .company)
+        #expect(GoalScope.legacy("Продажи") == nil)
     }
 
     // MARK: Пересмотр и продвижения

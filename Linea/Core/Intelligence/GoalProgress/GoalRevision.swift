@@ -26,13 +26,17 @@ nonisolated enum GoalRevision {
         goal.lastReviewedAt = time.now
         guard let previous else { return goal }
 
-        goal.metrics = updated.metrics.map { metric in
-            var metric = metric
-            if let old = previous.metrics.first(where: { $0.id == metric.id }), old.current != metric.current {
-                metric.updatedAt = time.now
+        func stamped(_ metrics: [GoalMetric], before: [GoalMetric]) -> [GoalMetric] {
+            metrics.map { metric in
+                var metric = metric
+                if let old = before.first(where: { $0.id == metric.id }), old.current != metric.current {
+                    metric.updatedAt = time.now
+                }
+                return metric
             }
-            return metric
         }
+        goal.metrics = stamped(updated.metrics, before: previous.metrics)
+        goal.contributionMetrics = stamped(updated.contributionMetrics, before: previous.contributionMetrics)
         let events = progress(from: previous, to: goal, at: time.now)
         goal.progressLog = Array((previous.progressLog + events).suffix(logLimit))
         return goal
@@ -49,12 +53,16 @@ nonisolated enum GoalRevision {
             }
         }
 
-        for metric in updated.metrics {
-            guard let old = previous.metrics.first(where: { $0.id == metric.id }), old.current != metric.current else { continue }
-            // Ближе к цели — продвижение; дальше — нет.
-            if abs(metric.target - metric.current) < abs(old.target - old.current) {
-                events.append(GoalProgressEvent(kind: .metricUpdated, at: moment,
-                                                detail: GoalProgressText.amount(metric.current, unit: metric.unit)))
+        // Ближе к цели — продвижение; дальше — нет. Свои числа у общей цели —
+        // вклад человека.
+        for (metrics, before, kind) in [(updated.metrics, previous.metrics, GoalProgressEvent.Kind.metricUpdated),
+                                        (updated.contributionMetrics, previous.contributionMetrics, GoalProgressEvent.Kind.contributionUpdated)] {
+            for metric in metrics {
+                guard let old = before.first(where: { $0.id == metric.id }), old.current != metric.current else { continue }
+                if abs(metric.target - metric.current) < abs(old.target - old.current) {
+                    events.append(GoalProgressEvent(kind: kind, at: moment,
+                                                    detail: GoalProgressText.amount(metric.current, unit: metric.unit)))
+                }
             }
         }
 

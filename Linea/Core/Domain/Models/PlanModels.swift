@@ -265,18 +265,27 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// Где цель по словам человека (`manual`). nil у целей, созданных со
     /// слайдером: тогда состояние следует из прежнего `progress`.
     var manualState: GoalManualState?
-    /// Чья цель. По умолчанию — своя.
-    var ownerScope: GoalOwnerScope
+    /// Чья цель (`scope`): моя, команды, компании. По умолчанию — своя.
+    var scope: GoalScope
+    /// За какую часть общей цели отвечает сам человек (`owner_scope`):
+    /// «Новые enterprise-клиенты и ключевые переговоры». Шаги Linea строит
+    /// только в этих рамках (`GoalStepScope`). У своей цели — nil.
+    var ownerScope: String?
+    /// Свои числа у командной цели — вклад человека
+    /// (`personal_contribution_progress`): «2 из 5 enterprise-клиентов».
+    /// Общий прогресс — в `metrics`; одно другого не определяет.
+    var contributionMetrics: [GoalMetric]
     /// Тип, который выбрал человек; nil — как решит Linea (`GoalClassifier`).
     var kindOverride: GoalKind?
-    /// Сфера, которую выбрал человек; nil — как решит Linea.
-    var scopeOverride: GoalScope?
     /// Продвижения человека: этапы, числа, стадии (`GoalRevision`).
     var progressLog: [GoalProgressEvent]
     /// Когда человек последний раз пересматривал цель: создал, сохранил
     /// карточку, сдвинул прогресс. nil — цель сохранена раньше, чем Linea
     /// стала это помнить.
     var lastReviewedAt: Date?
+    /// «Пока нет» на «Хочешь найти для неё небольшое окно завтра?»: до этого
+    /// момента Linea о цели не напоминает (`GoalAttention`).
+    var attentionSnoozedUntil: Date?
 
     init(
         id: UUID = UUID(),
@@ -298,11 +307,13 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         metrics: [GoalMetric] = [],
         progressMethod: GoalProgressMethod = .manual,
         manualState: GoalManualState? = nil,
-        ownerScope: GoalOwnerScope = .personal,
+        scope: GoalScope = .personal,
+        ownerScope: String? = nil,
+        contributionMetrics: [GoalMetric] = [],
         kindOverride: GoalKind? = nil,
-        scopeOverride: GoalScope? = nil,
         progressLog: [GoalProgressEvent] = [],
-        lastReviewedAt: Date? = nil
+        lastReviewedAt: Date? = nil,
+        attentionSnoozedUntil: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -323,11 +334,13 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         self.metrics = metrics
         self.progressMethod = progressMethod
         self.manualState = manualState
+        self.scope = scope
         self.ownerScope = ownerScope
+        self.contributionMetrics = contributionMetrics
         self.kindOverride = kindOverride
-        self.scopeOverride = scopeOverride
         self.progressLog = progressLog
         self.lastReviewedAt = lastReviewedAt
+        self.attentionSnoozedUntil = attentionSnoozedUntil
     }
 
     /// Мягкое чтение, как у задачи: цели лежат и в документах дня.
@@ -356,11 +369,22 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         metrics = (try? container.decodeIfPresent([GoalMetric].self, forKey: .metrics)) ?? []
         progressMethod = (try? container.decodeIfPresent(GoalProgressMethod.self, forKey: .progressMethod)) ?? .manual
         manualState = try? container.decodeIfPresent(GoalManualState.self, forKey: .manualState)
-        ownerScope = (try? container.decodeIfPresent(GoalOwnerScope.self, forKey: .ownerScope)) ?? .personal
+        var scope = (try? container.decodeIfPresent(GoalScope.self, forKey: .scope)) ?? .personal
+        // `owner_scope` — текст. Сборка раунда 7 хранила под этим ключом «чья
+        // цель» («personal», «team», «shared»): это не зона ответственности.
+        let owner = try? container.decodeIfPresent(String.self, forKey: .ownerScope)
+        if let legacy = GoalScope.legacy(owner) {
+            if scope == .personal { scope = legacy }
+            ownerScope = nil
+        } else {
+            ownerScope = owner
+        }
+        self.scope = scope
+        contributionMetrics = (try? container.decodeIfPresent([GoalMetric].self, forKey: .contributionMetrics)) ?? []
         kindOverride = try? container.decodeIfPresent(GoalKind.self, forKey: .kindOverride)
-        scopeOverride = try? container.decodeIfPresent(GoalScope.self, forKey: .scopeOverride)
         progressLog = (try? container.decodeIfPresent([GoalProgressEvent].self, forKey: .progressLog)) ?? []
         lastReviewedAt = try? container.decodeIfPresent(Date.self, forKey: .lastReviewedAt)
+        attentionSnoozedUntil = try? container.decodeIfPresent(Date.self, forKey: .attentionSnoozedUntil)
     }
 
     /// «Низкая / Средняя / Высокая» — важность цели в женском роде.
@@ -398,6 +422,13 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// Следующий незакрытый этап — «следующий рубеж».
     var nextMilestone: GoalMilestone? {
         milestones.first { !$0.isDone }
+    }
+
+    /// Часть человека в общей цели — если цель общая и часть названа.
+    var ownPart: String? {
+        guard scope.isShared, let ownerScope else { return nil }
+        let trimmed = ownerScope.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

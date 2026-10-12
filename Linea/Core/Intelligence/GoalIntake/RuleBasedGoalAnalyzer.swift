@@ -69,18 +69,27 @@ nonisolated struct RuleBasedGoalAnalyzer: GoalAnalyzing {
         // На вопрос ответили, пусть и без чисел, — это и есть признак успеха.
         if criteria.isEmpty, resultAnswer != nil { criteria = targetTexts }
 
+        // Чья цель: выбор человека, иначе — по словам («выручку компании»).
+        // Его часть — из быстрой цели или из ответа на вопрос.
+        let story = Self.details(input)
+        let scope = input.scope ?? classifier.scope(title: title, details: story)
+        let ownerScope = (Self.trimmed(input.ownerScope) ?? Self.trimmed(input.answers[.owner])).map(Self.sentenceCase)
+
         var question: GoalQuestion?
-        if criteria.isEmpty, resultAnswer == nil, !input.skipped.contains(.result) {
+        if scope.isShared, ownerScope == nil, !input.skipped.contains(.owner) {
+            // Общая цель — сначала часть человека: Linea планирует ему его
+            // часть, а не всю работу команды.
+            question = .owner
+        } else if criteria.isEmpty, resultAnswer == nil, !input.skipped.contains(.result) {
             question = .result
         } else if currentTexts.isEmpty, startAnswer == nil, !input.skipped.contains(.start) {
             question = .start
         }
 
-        // Модель состояния: тип, сфера, чья цель, чем мерить путь и стадии —
-        // всё из сказанного, ничего сверх.
+        // Модель состояния: тип, чем мерить путь и стадии — всё из сказанного,
+        // ничего сверх.
         let currentState = Self.paragraph(currentTexts)
         let successCriteria = Self.unique(criteria)
-        let story = Self.details(input)
         let kind = classifier.classify(title: title, details: story).kind
         let structure = GoalStructure.derive(title: title, currentState: currentState, successCriteria: successCriteria)
 
@@ -96,8 +105,9 @@ nonisolated struct RuleBasedGoalAnalyzer: GoalAnalyzing {
             isPrioritySaid: line.priority != nil,
             isTitleUnderstood: line.isUnderstood,
             kind: kind,
-            scope: classifier.scope(title: title, details: story),
-            owner: classifier.owner(title: title, details: story),
+            scope: scope,
+            isScopeChosen: input.scope != nil,
+            ownerScope: scope.isShared ? ownerScope : nil,
             method: GoalStructure.method(kind: kind, metrics: structure.metrics, milestones: structure.milestones),
             metrics: structure.metrics,
             milestones: structure.milestones,
