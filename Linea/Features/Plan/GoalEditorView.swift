@@ -41,6 +41,8 @@ struct GoalEditorView: View {
     /// Веса этапов видны, если они уже есть или человек их включил.
     @State private var showsWeights: Bool
     @State private var isEditingStages = false
+    /// Этап, который сейчас набирают: «+ этап» и ввод сразу ставят курсор в новый.
+    @FocusState private var focusedMilestone: UUID?
     @Namespace private var prioritySegments
     /// «Готово» and «Удалить» fire once.
     @State private var isSaving = false
@@ -208,7 +210,7 @@ struct GoalEditorView: View {
                 LineaHairline()
             }
             Button {
-                withAnimation(.snappy) { draft.milestones.append(GoalMilestone(id: UUID(), title: "")) }
+                addMilestone(after: nil)
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
@@ -267,7 +269,20 @@ struct GoalEditorView: View {
                 .font(LineaFont.rowTitle)
                 .foregroundStyle(milestone.isDone ? LineaColor.textSecondary : LineaColor.textPrimary)
                 .tint(LineaColor.ink)
+                .focused($focusedMilestone, equals: milestone.id)
+                .submitLabel(.next)
                 .accessibilityIdentifier("goal.milestone.title")
+                .onChange(of: milestone.title) { _, value in
+                    // Ввод в многострочном поле — перевод строки; здесь это «следующий этап».
+                    guard value.contains("\n") else { return }
+                    binding.wrappedValue.title = value.replacingOccurrences(of: "\n", with: " ")
+                        .trimmingCharacters(in: .whitespaces)
+                    if binding.wrappedValue.title.isEmpty {
+                        focusedMilestone = nil
+                    } else {
+                        addMilestone(after: milestone.id)
+                    }
+                }
 
             if showsWeights {
                 LineaNumberField(label: "Вес", value: binding.weight, placeholder: "—", identifier: "goal.milestone.weight")
@@ -285,6 +300,23 @@ struct GoalEditorView: View {
             .accessibilityLabel("Убрать этап «\(milestone.title)»")
         }
         .padding(.vertical, 10)
+    }
+
+    /// Новый пустой этап — после этого (или в конце) — и курсор в него.
+    private func addMilestone(after id: UUID?) {
+        let milestone = GoalMilestone(id: UUID(), title: "")
+        withAnimation(.snappy) {
+            if let id, let index = draft.milestones.firstIndex(where: { $0.id == id }) {
+                draft.milestones.insert(milestone, at: index + 1)
+            } else {
+                draft.milestones.append(milestone)
+            }
+        }
+        Task {
+            // Поле появится в следующем проходе раскладки — тогда и фокус.
+            try? await Task.sleep(for: .milliseconds(80))
+            focusedMilestone = milestone.id
+        }
     }
 
     /// По id, а не по индексу: удалённый этап не уронит строку, которая

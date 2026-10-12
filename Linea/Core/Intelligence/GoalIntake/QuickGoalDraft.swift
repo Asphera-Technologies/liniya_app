@@ -51,7 +51,13 @@ nonisolated struct QuickGoalDraft: Hashable, Sendable {
         time: TimeContext,
         analyzer: RuleBasedGoalAnalyzer = RuleBasedGoalAnalyzer()
     ) -> QuickGoalResolution {
-        let understood = analyzer.understand(GoalIntakeInput(title: text), profile: profile, time: time)
+        var understood = analyzer.understand(GoalIntakeInput(title: text), profile: profile, time: time)
+        // Одна строка — это название. Результатом и признаком успеха Linea её
+        // не повторяет: их человек скажет сам, если захочет.
+        if understood.successCriteria.map(RussianWords.normalized) == [RussianWords.normalized(understood.title)] {
+            understood.successCriteria = []
+            understood.targetState = nil
+        }
         return resolution(of: understood)
     }
 

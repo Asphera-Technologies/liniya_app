@@ -40,6 +40,8 @@ struct QuickGoalTests {
         #expect(understanding.stages == ["Исследование", "Разработка", "Подготовка запуска", "Тестирование", "Запуск", "Рост"])
         #expect(understanding.stage == nil, "О том, где цель сейчас, не сказано — стадия не выбрана")
         #expect(understanding.milestones.isEmpty, "Название этапом не бывает")
+        #expect(understanding.successCriteria.isEmpty, "Одна строка — название, а не признак успеха")
+        #expect(understanding.targetState == nil)
         #expect(resolution.isUnderstood)
         #expect(resolution.deadlineOrigin == .typed)
         #expect(resolution.priorityOrigin == .assumed)
