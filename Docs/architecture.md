@@ -170,6 +170,25 @@ milestones give a percentage; milestones without weights, a manual report
 or a qualitative goal never do. Closed tasks never move a goal's
 percentage. The goal card edits a fresh copy of the goal (ADR-036, §26).
 
+A team or company goal (`scope`, ADR-038, §28) has two separate measures:
+the shared goal's progress and the person's contribution — their own part
+(`owner_scope`), their numbers and their tasks. Steps and windows are built
+only within the own part (`GoalStepScope`).
+
+### Goal support on Today
+
+```text
+DayRecord (план, встречи, ответы дня) + задачи + цели
+        ↓  DayComposition: обязательства, быт, другое, шаги к важным целям
+GoalBalance — много текущего, 0 шагов, есть 30 минут → «Оставить 30 минут / Не сегодня»
+GoalAttention — важная цель 4 дня без действий → «Да / Пока нет»
+        ↓  GoalOffer (одна карточка за раз) → IntelligenceStore.answerGoalOffer
+отклик goalOffer в день · GoalWindow — задача-окно на 30 минут · «Пока нет» — неделя тишины
+```
+
+Support is a question, not a reproach (ADR-039, ADR-040): an answer is
+final for the day («Не сегодня») or for a week («Пока нет»).
+
 ### Evening check-in and memory
 
 ```text
