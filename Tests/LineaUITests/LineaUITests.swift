@@ -597,7 +597,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertEqual(app.buttons["goal.stage"].label, "Стадия: Разработка")
         XCTAssertTrue(app.staticTexts["goal.card.caption"].label.contains("обновлена сегодня"))
         snapshot(app, "44 Карточка цели: стадия")
-        app.navigationBars["Цель"].buttons["Готово"].tap()
+        saveGoalCard(app)
         XCTAssertTrue(app.navigationBars["Цель"].waitForNonExistence(timeout: 5))
     }
 
@@ -621,7 +621,7 @@ final class LineaUITests: XCTestCase {
         let summary = app.staticTexts["goal.progress.summary"]
         XCTAssertTrue(waitForLabel(summary, "18 из 50 пользователей · 36%"), "Прогресс: \(summary.label)")
         snapshot(app, "45 Число: 18 из 50 — 36%")
-        app.navigationBars["Цель"].buttons["Готово"].tap()
+        saveGoalCard(app)
         XCTAssertTrue(waitForLabel(row, containing: "18 из 50 пользователей · 36%"), "Строка цели: \(row.label)")
         snapshot(app, "46 План: 18 из 50 — 36%")
 
@@ -637,7 +637,7 @@ final class LineaUITests: XCTestCase {
         toggle.tap()
         XCTAssertTrue(waitForLabel(summary, "1 из 2 этапов"), "Без весов — «1 из 2 этапов», без процента: \(summary.label)")
         snapshot(app, "47 Этапы: закрыт один")
-        app.navigationBars["Цель"].buttons["Готово"].tap()
+        saveGoalCard(app)
         XCTAssertTrue(waitForLabel(row, containing: "1 из 2 этапов"), "Строка цели: \(row.label)")
         XCTAssertFalse(row.label.contains("%"), "Процента нет")
 
@@ -651,7 +651,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Последнее продвижение"].exists)
         XCTAssertTrue(app.staticTexts["сегодня"].exists, "Этап закрыт сегодня — это продвижение")
         snapshot(app, "48 Без процентов")
-        app.navigationBars["Цель"].buttons["Готово"].tap()
+        saveGoalCard(app)
         XCTAssertTrue(waitForLabel(row, containing: "продвижение — сегодня"), "Строка цели: \(row.label)")
         XCTAssertFalse(row.label.contains("%"), "Без процентов — и в «Плане»")
 
@@ -663,7 +663,7 @@ final class LineaUITests: XCTestCase {
         app.buttons["goal.manual.almostDone"].tap()
         XCTAssertTrue(waitForLabel(summary, "Почти готово"))
         snapshot(app, "49 Отмечаю сам")
-        app.navigationBars["Цель"].buttons["Готово"].tap()
+        saveGoalCard(app)
         XCTAssertTrue(waitForLabel(row, containing: "Почти готово"), "Строка цели: \(row.label)")
         snapshot(app, "50 План: почти готово")
     }
@@ -722,7 +722,7 @@ final class LineaUITests: XCTestCase {
         focus(ownCurrent, in: app)
         ownCurrent.replaceText("2")
         snapshot(app, "52 Общая цель и моя часть")
-        app.navigationBars["Цель"].buttons["Готово"].tap()
+        saveGoalCard(app)
         XCTAssertTrue(waitForLabel(row, containing: "Компания · 3,2 млн из 5 млн ₽ · 64%"), "Строка цели: \(row.label)")
         XCTAssertTrue(row.label.contains("Моя часть: 2 из 5 enterprise-клиентов · 40%"), "Строка цели: \(row.label)")
         snapshot(app, "53 План: цель компании и моя часть")
@@ -1033,12 +1033,10 @@ final class LineaUITests: XCTestCase {
         scrollTo(observation, in: app)
         snapshot(app, "76 На этой неделе")
 
-        // Прошлая неделя — свой обзор, без «пока».
+        // Прошлая неделя: целей тогда ещё не было — и обзора нет.
         app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Предыдущ")).firstMatch.tap()
-        XCTAssertTrue(week.waitForExistence(timeout: 5))
-        XCTAssertTrue(week.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "На неделе ")).firstMatch.exists,
-                      "Прошлая неделя подписана датами")
-        snapshot(app, "77 Обзор прошлой недели")
+        XCTAssertTrue(week.waitForNonExistence(timeout: 5), "Цели созданы на этой неделе — в обзоре прошлой их нет")
+        snapshot(app, "77 Прошлая неделя без обзора")
     }
 
     // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
@@ -1347,6 +1345,16 @@ final class LineaUITests: XCTestCase {
             if current == last { return }
             last = current
         }
+    }
+
+    /// «Готово» в карточке цели. Карточка закрывается, когда цель сохранена и
+    /// день пересчитан, — на симуляторе без Apple Health это бывает и десять
+    /// секунд: ждём, пока закроется, а не проверяем строку цели под ней.
+    @MainActor
+    private func saveGoalCard(_ app: XCUIApplication) {
+        let card = app.navigationBars["Цель"]
+        card.buttons["Готово"].tap()
+        XCTAssertTrue(card.waitForNonExistence(timeout: 20), "Карточка цели закрылась")
     }
 
     /// После «Начать» открывается фокус — свернуть его, чтобы продолжить на
