@@ -61,7 +61,7 @@ struct TodayView: View {
         }
         .task { await intelligence.refresh(reason: .appeared) }
         .task { await intelligence.keepNextActionFresh() }
-        .onDisappear { intelligence.clearGoalOfferConfirmation() }
+        .onDisappear { intelligence.clearTodayNotes() }
         .refreshable { await intelligence.refresh(reason: .manual) }
         .sheet(item: $editingTask) { target in
             TaskEditorView(existing: target.task)
@@ -126,13 +126,16 @@ struct TodayView: View {
 
     /// «Сейчас»: одно действие — что, сколько и почему, [Начать] [Не сейчас]
     /// [Другое]. «Другое» раскрывает два-три варианта, а не весь список задач.
-    /// Начатое — «в работе» с [Завершить] [Не сейчас]. Причина — одна короткая
-    /// фраза, готовая в ядре (`NowReasoner`): у каждой рекомендации она есть.
+    /// Начатое — «в работе» с [Завершить] [Не сейчас] [Развернуть] (фокус).
+    /// Причина — одна короткая фраза, готовая в ядре (`NowReasoner`): у каждой
+    /// рекомендации она есть. Над действием — короткий ответ Linea на
+    /// «Завершить» и «Не сейчас»: «Сделано за 35 мин.», «Хорошо, подберу другое.»
     @ViewBuilder
     private var nowSection: some View {
         if let action = intelligence.nextAction {
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(text: "Сейчас", trailing: action.isStarted ? "в работе" : nil)
+                nowNote
                 if let option = action.option {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(option.title)
@@ -179,8 +182,14 @@ struct TodayView: View {
                             Task { await intelligence.notNowAction() }
                         }
                         // У начатого «Другое» нет: взяться за другое — «Не
-                        // сейчас» или «Начать» в списке.
-                        if !action.isStarted, !action.alternatives.isEmpty {
+                        // сейчас» или «Начать» в списке. Зато можно вернуться
+                        // в фокус, если его свернули.
+                        if action.isStarted, let taskID = action.taskID {
+                            LineaOutlineButton(title: "Развернуть") {
+                                intelligence.openFocus(taskID)
+                            }
+                            .accessibilityIdentifier("now.openFocus")
+                        } else if !action.alternatives.isEmpty {
                             LineaOutlineButton(title: showsAlternatives ? "Скрыть" : "Другое") {
                                 withAnimation(.snappy) { showsAlternatives.toggle() }
                             }
@@ -193,6 +202,33 @@ struct TodayView: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("today.now")
+        } else if intelligence.nowNote != nil {
+            // Сделал последнее — предлагать нечего, но ответ Linea виден.
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Сейчас")
+                nowNote
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("today.now")
+        }
+    }
+
+    /// «Сделано за 35 мин.», «Хорошо, подберу другое.» — тихо, одной строкой.
+    @ViewBuilder
+    private var nowNote: some View {
+        if let note = intelligence.nowNote {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LineaColor.textSecondary)
+                    .accessibilityHidden(true)
+                Text(note)
+                    .font(LineaFont.rowTitle)
+                    .foregroundStyle(LineaColor.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("now.note")
         }
     }
 

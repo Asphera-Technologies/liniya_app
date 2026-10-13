@@ -5,7 +5,9 @@
 //  App-level navigation: an icon-only native tab bar across Linea's five
 //  areas, with the ambient Linea AI surface presented over everything from
 //  the command bar. Icon-only tabs keep the calm Linea character; each tab
-//  carries an accessibility label for VoiceOver.
+//  carries an accessibility label for VoiceOver. A started task's focus
+//  («Начать» → `FocusView`) lies over the tabs until it is minimized,
+//  finished or let go.
 //
 
 import SwiftUI
@@ -26,28 +28,17 @@ struct RootView: View {
     var body: some View {
         @Bindable var appState = appState
 
-        TabView(selection: $selection) {
-            TodayView()
-                .tag(AppTab.today)
-                .tabItem { Image(systemName: "calendar").accessibilityLabel("Сегодня") }
-
-            PlanView()
-                .tag(AppTab.plan)
-                .tabItem { Image(systemName: "list.bullet").accessibilityLabel("План") }
-
-            NutritionView()
-                .tag(AppTab.nutrition)
-                .tabItem { Image(systemName: "fork.knife").accessibilityLabel("Питание") }
-
-            HealthView()
-                .tag(AppTab.health)
-                .tabItem { Image(systemName: "waveform.path.ecg").accessibilityLabel("Здоровье") }
-
-            ProfileView()
-                .tag(AppTab.profile)
-                .tabItem { Image(systemName: "person").accessibilityLabel("Профиль") }
+        ZStack {
+            tabs
+            // Фокус начатого дела — поверх вкладок, а не листом: «Начать» в
+            // карточке задачи открывает его под карточкой, без спора листов.
+            if let focus = intelligence.focus {
+                FocusView(focus: focus)
+                    .transition(.move(edge: .bottom))
+                    .zIndex(1)
+            }
         }
-        .tint(LineaColor.ink)
+        .animation(.snappy, value: intelligence.focus?.taskID)
         // Coming back to the app is the moment to re-check the day: iOS runs
         // no code of ours at 14:30, so this is when a slipping plan is noticed.
         // The check-in never records in the background: leaving the app stops
@@ -84,6 +75,31 @@ struct RootView: View {
             InboxReviewView(scope: scope)
                 .presentationDetents([.large])
         }
+    }
+
+    private var tabs: some View {
+        TabView(selection: $selection) {
+            TodayView()
+                .tag(AppTab.today)
+                .tabItem { Image(systemName: "calendar").accessibilityLabel("Сегодня") }
+
+            PlanView()
+                .tag(AppTab.plan)
+                .tabItem { Image(systemName: "list.bullet").accessibilityLabel("План") }
+
+            NutritionView()
+                .tag(AppTab.nutrition)
+                .tabItem { Image(systemName: "fork.knife").accessibilityLabel("Питание") }
+
+            HealthView()
+                .tag(AppTab.health)
+                .tabItem { Image(systemName: "waveform.path.ecg").accessibilityLabel("Здоровье") }
+
+            ProfileView()
+                .tag(AppTab.profile)
+                .tabItem { Image(systemName: "person").accessibilityLabel("Профиль") }
+        }
+        .tint(LineaColor.ink)
     }
 }
 

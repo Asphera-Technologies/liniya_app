@@ -46,6 +46,15 @@ final class IntelligenceStore {
     private(set) var nextAction: NextAction?
     /// Что ответила Linea на «Оставить 30 минут» или «Да» — пока открыт «Сегодня».
     private(set) var goalOfferConfirmation: String?
+    /// Короткий ответ над «Сейчас» после «Завершить» или «Не сейчас» — «Сделано
+    /// за 35 мин.», «Хорошо, подберу другое.» — пока открыт «Сегодня».
+    private(set) var nowNote: String?
+    /// Чей фокус открыт поверх приложения (`TaskFocus`): «Начать» открывает,
+    /// «Свернуть» закрывает, задача в работе — пока у неё есть `startedAt`.
+    private(set) var focusTaskID: UUID?
+    /// Фокус начатой задачи после запуска приложения показывается один раз:
+    /// свёрнутый остаётся свёрнутым.
+    private var didResumeFocus = false
     /// Что человек выбрал в «Другое» — пока задача открыта.
     private var preferredTaskID: UUID?
     /// Сколько экранов «Сегодня» сейчас открыто: только тогда «Сейчас» видно
@@ -187,6 +196,7 @@ final class IntelligenceStore {
 
             let record = mergingFeedback(into: output.record)
             apply(record)
+            resumeFocusIfNeeded(time: time)
             calendarCache.removeAll()
             sleepInsight = output.insight
             logSnapshot(record)
@@ -512,6 +522,7 @@ final class IntelligenceStore {
         guard let action = nextAction, let option = action.option,
               let task = planStore.tasks.first(where: { $0.id == option.taskID }) else { return }
         await perform(.finish, on: task, plannedMinutes: option.minutes)
+        noteFinished(task.id)
     }
 
     /// «Не сейчас» на «Сейчас»: предложенное или начатое откладывается на
@@ -520,6 +531,56 @@ final class IntelligenceStore {
         guard let action = nextAction, let option = action.option,
               let task = planStore.tasks.first(where: { $0.id == option.taskID }) else { return }
         await perform(.notNow, on: task, plannedMinutes: option.minutes)
+        nowNote = TaskExecutionText.declined
+    }
+
+    // MARK: - Фокус
+
+    /// Минимальный фокус начатой задачи: что делаю, сколько отведено, с
+    /// какого времени. Нет — фокус свёрнут или задача уже не в работе.
+    var focus: TaskFocus? {
+        guard let focusTaskID, let task = planStore.tasks.first(where: { $0.id == focusTaskID }) else { return nil }
+        return TaskFocus.of(task, record: record, calibration: calibration, time: time)
+    }
+
+    /// «Развернуть» у начатого действия на «Сегодня».
+    func openFocus(_ taskID: UUID) {
+        focusTaskID = taskID
+    }
+
+    /// «Свернуть»: задача остаётся в работе, на «Сегодня» — «в работе».
+    func minimizeFocus() {
+        focusTaskID = nil
+    }
+
+    /// «Завершить» в фокусе: задача сделана, сколько заняло — над «Сейчас».
+    func finishFocus() async {
+        guard let focus, let task = planStore.tasks.first(where: { $0.id == focus.taskID }) else { return }
+        await perform(.finish, on: task, plannedMinutes: focus.minutes)
+        noteFinished(task.id)
+    }
+
+    /// «Не получается продолжить»: то же, что «Не сейчас» у начатой — Linea
+    /// отпускает задачу, записывает, сколько человек успел, и подбирает другое.
+    func stopFocus() async {
+        guard let focus, let task = planStore.tasks.first(where: { $0.id == focus.taskID }) else { return }
+        await perform(.notNow, on: task, plannedMinutes: focus.minutes)
+        nowNote = TaskExecutionText.declined
+    }
+
+    /// После запуска приложения: дело, начатое до выхода, по-прежнему в работе —
+    /// его фокус снова на экране. Один раз: свёрнутый дальше не всплывает.
+    private func resumeFocusIfNeeded(time: TimeContext) {
+        guard !didResumeFocus else { return }
+        didResumeFocus = true
+        if focusTaskID == nil, let task = TaskFocus.resumable(in: planStore.tasks, time: time) {
+            focusTaskID = task.id
+        }
+    }
+
+    private func noteFinished(_ taskID: UUID) {
+        guard let task = planStore.tasks.first(where: { $0.id == taskID }), task.isDone else { return }
+        nowNote = TaskExecutionText.finished(task)
     }
 
     // MARK: - Поддержка целей
@@ -561,9 +622,10 @@ final class IntelligenceStore {
         }
     }
 
-    /// «Сегодня» закрыт — подтверждение больше не нужно.
-    func clearGoalOfferConfirmation() {
+    /// «Сегодня» закрыт — ответы Linea больше не нужны.
+    func clearTodayNotes() {
         goalOfferConfirmation = nil
+        nowNote = nil
     }
 
     // MARK: - Выполнение задач
@@ -593,6 +655,14 @@ final class IntelligenceStore {
             await save(updated, failure: "Действие с задачей не записалось в день")
         }
         if action == .start || current.id == preferredTaskID { preferredTaskID = nil }
+        // «Начать» откуда угодно открывает фокус; закрыли или отпустили дело —
+        // его фокус больше не нужен.
+        if action == .start {
+            focusTaskID = current.id
+            nowNote = nil
+        } else if focusTaskID == current.id {
+            focusTaskID = nil
+        }
         let suggestionID = output.task.suggestionID
         let actual = output.task.actualMinutes.map { "\($0)" } ?? "нет"
         LineaLog.plan.notice("Задача: \(action.rawValue, privacy: .public), предложение Linea \(suggestionID != nil, privacy: .public), заняло \(actual, privacy: .public) мин, снято с работы \(output.paused.count, privacy: .public)")
