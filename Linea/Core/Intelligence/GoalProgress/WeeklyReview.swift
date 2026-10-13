@@ -69,11 +69,11 @@ nonisolated struct WeeklyReviewBuilder: Sendable {
         }
 
         // Продвижения по каждой цели — закрытые задачи и движение самой цели.
-        let advances = Dictionary(uniqueKeysWithValues: goals.map { goal in
+        let advances = Dictionary(goals.map { goal in
             let done = closed.filter { $0.goalID == goal.id }.count
             let moves = goal.progressLog.filter { inWeek($0.at) }.count
             return (goal.id, done + moves)
-        })
+        }, uniquingKeysWith: { first, _ in first })
         let shown = goals
             .filter { ($0.isActive && !$0.isCompleted) || (advances[$0.id] ?? 0) > 0 }
             .sorted { lhs, rhs in

@@ -54,12 +54,14 @@ nonisolated struct RescheduleContext: Sendable {
         self.time = time
     }
 
-    /// Чем занят день: встречи, задачи со своим временем, еда. Повторы не
-    /// страшны — занятое время объединяется (`FreeWindows`).
-    func commitments(on day: Date) -> [Commitment] {
+    /// Чем занят день: встречи, задачи со своим временем, еда — кроме
+    /// времени самой задачи `except`, которую переносят. Повторы не страшны —
+    /// занятое время объединяется (`FreeWindows`).
+    func commitments(on day: Date, except taskID: UUID? = nil) -> [Commitment] {
         let interval = time.dayInterval(containing: day)
         var result = commitments.filter { $0.interval.intersects(interval) }
         result += CommitmentMapper().commitments(signals: [], tasks: tasks, day: interval, time: time)
+        if let taskID { result.removeAll { $0.taskID == taskID } }
         for window in nutrition?.mealWindows ?? [] {
             let start = time.date(on: interval.start, at: window.start)
             result.append(Commitment(
@@ -116,7 +118,8 @@ nonisolated struct AutoReschedule: Sendable {
         var day = firstDay
         while day <= lastDay {
             let windows = FreeWindows.compute(day: day, now: earliest, profile: context.profile,
-                                              commitments: context.commitments(on: day), config: context.config, time: time)
+                                              commitments: context.commitments(on: day, except: task.id),
+                                              config: context.config, time: time)
             let fitting = windows.filter { window in
                 window.duration >= neededSeconds
                     && (deadline.map { window.start.addingTimeInterval(neededSeconds) <= $0 } ?? true)

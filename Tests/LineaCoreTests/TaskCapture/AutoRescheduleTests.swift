@@ -53,6 +53,17 @@ struct AutoRescheduleTests {
         #expect(inbox.task.deferredUntil == WowFixture.moment(11, 30))
     }
 
+    @Test("«Позже сегодня» у задачи со своим временем: время снято, своё же время окну не мешает")
+    func laterTodayFixedTask() throws {
+        var fixed = task()
+        fixed.scheduledStart = WowFixture.moment(11, 30)
+        let result = reschedule.apply(.laterToday, to: fixed, context: context([fixed]))
+        #expect(result.task.scheduledStart == nil, "Иначе задача ждала бы своего времени и «позже» — сразу")
+        #expect(result.task.deferredUntil == WowFixture.moment(11, 30))
+        let decided = reschedule.apply(.automatic, to: fixed, context: context([fixed])).task
+        #expect(decided.deferredUntil == WowFixture.moment(11, 30))
+    }
+
     @Test("Обычные переносы говорят коротко, куда, и снимают «Не сейчас» и «в работе»")
     func simpleTargetsNote() {
         var started = task()

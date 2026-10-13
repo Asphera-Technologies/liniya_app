@@ -19,7 +19,7 @@
 //
 //  «Позже сегодня» — день остаётся сегодняшним, а час Linea находит сама:
 //  первое окно не раньше чем через полтора часа, где задача помещается
-//  целиком. «Пусть Linea решит» — и день, и окно выбирает Linea
+//  целиком; своё время у задачи снимается. «Пусть Linea решит» — и день, и окно выбирает Linea
 //  (`AutoReschedule`), и переставляет сама, если день прошёл.
 //
 
@@ -106,10 +106,13 @@ nonisolated struct TaskReschedule: Sendable {
             return Result(task: decided.task, note: AutoReschedule.note(decided.placement, time: time))
         case .laterToday:
             var moved = moving(task, to: .today, profile: context.profile, time: time)
+            // Своё время больше не держит задачу: она — позже.
+            moved.scheduledStart = nil
             let earliest = Self.laterTodayStart(time: time)
             let fit = WindowFinder.nextFit(
                 minutes: PlanDuration.minutes(for: task, calibration: context.calibration), on: time.today,
-                notBefore: earliest, profile: context.profile, commitments: context.commitments(on: time.today),
+                notBefore: earliest, profile: context.profile,
+                commitments: context.commitments(on: time.today, except: task.id),
                 config: context.config, time: time
             )
             let start = fit?.start ?? earliest
