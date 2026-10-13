@@ -852,6 +852,87 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "65 Сегодня: «Хорошо, подберу другое.»")
     }
 
+    // MARK: - 18. «Не сейчас»: «Хорошо, подберу другое.», иногда «Почему не сейчас?»
+
+    @MainActor
+    func test18NotNowWhy() throws {
+        var app = launch()
+        addTask(app, "Подготовить презентацию сегодня 45 минут, важно")
+        addTask(app, "Разобрать письмо сегодня 15 минут")
+        addTask(app, "Оплатить интернет сегодня 10 минут")
+
+        openTab(app, "Сегодня", index: 0)
+        var now = nowCard(app)
+        XCTAssertTrue(now.waitForExistence(timeout: 15))
+        XCTAssertTrue(now.staticTexts["Подготовить презентацию"].waitForExistence(timeout: 5))
+        now.buttons["Не сейчас"].tap()
+        var note = app.descendants(matching: .any).matching(identifier: "now.note").firstMatch
+        XCTAssertTrue(waitForLabel(note, "Хорошо, подберу другое.", timeout: 10), "Тон без упрёка: \(note.label)")
+        var question = app.descendants(matching: .any).matching(identifier: "now.question").firstMatch
+        XCTAssertTrue(question.waitForExistence(timeout: 5), "Отложили важное — Linea спрашивает почему")
+        XCTAssertTrue(question.staticTexts["Почему не сейчас?"].exists)
+        for reason in ["Нет времени", "Нет сил", "Не хочется", "Неактуально"] {
+            XCTAssertTrue(question.buttons[reason].exists, "Ответ «\(reason)»")
+        }
+        XCTAssertTrue(now.staticTexts["Подготовить презентацию"].waitForNonExistence(timeout: 5), "Предложение убрано")
+        XCTAssertTrue(now.buttons["Начать"].exists, "Linea предложила другое")
+        scrollTo(question, in: app)
+        snapshot(app, "66 Не сейчас: почему?")
+
+        // «Нет времени» — Linea вернётся к задаче, когда та поместится целиком.
+        question.buttons["Нет времени"].tap()
+        XCTAssertTrue(question.waitForNonExistence(timeout: 5), "Ответили — вопроса нет")
+        XCTAssertTrue(waitForLabel(note, containing: "Хорошо, вернусь к ней в "), "Ответ: \(note.label)")
+        snapshot(app, "67 Нет времени: вернусь, когда поместится")
+
+        // Обычное дело — без вопроса.
+        now.buttons["Не сейчас"].tap()
+        XCTAssertTrue(waitForLabel(note, "Хорошо, подберу другое."), note.label)
+        XCTAssertFalse(question.exists, "Про обычное дело Linea не спрашивает")
+        snapshot(app, "68 Не сейчас без вопроса")
+
+        // «Неактуально» — из планов; «Вернуть» возвращает.
+        app.terminate()
+        app = launch()
+        addTask(app, "Подготовить презентацию сегодня 45 минут, важно")
+        addTask(app, "Оплатить интернет сегодня 10 минут")
+        openTab(app, "Сегодня", index: 0)
+        now = nowCard(app)
+        note = app.descendants(matching: .any).matching(identifier: "now.note").firstMatch
+        question = app.descendants(matching: .any).matching(identifier: "now.question").firstMatch
+        XCTAssertTrue(now.staticTexts["Подготовить презентацию"].waitForExistence(timeout: 15))
+        now.buttons["Не сейчас"].tap()
+        XCTAssertTrue(question.waitForExistence(timeout: 10))
+        question.buttons["Неактуально"].tap()
+        XCTAssertTrue(waitForLabel(note, "Убрала из планов."), note.label)
+        let restore = app.buttons["now.restore"]
+        XCTAssertTrue(restore.exists, "Рядом — «Вернуть»")
+        snapshot(app, "69 Неактуально: убрала из планов")
+        restore.tap()
+        XCTAssertTrue(waitForLabel(note, "Вернула в планы."), note.label)
+        openTab(app, "План", index: 1)
+        XCTAssertTrue(button(app, startingWith: "Подготовить презентацию").waitForExistence(timeout: 5), "Задача снова в планах")
+
+        // «Нет сил» — Linea пока предлагает полегче.
+        app.terminate()
+        app = launch()
+        addTask(app, "Подготовить презентацию сегодня 45 минут, важно")
+        addTask(app, "Оплатить интернет сегодня 10 минут")
+        openTab(app, "Сегодня", index: 0)
+        now = nowCard(app)
+        note = app.descendants(matching: .any).matching(identifier: "now.note").firstMatch
+        question = app.descendants(matching: .any).matching(identifier: "now.question").firstMatch
+        XCTAssertTrue(now.staticTexts["Подготовить презентацию"].waitForExistence(timeout: 15))
+        now.buttons["Не сейчас"].tap()
+        XCTAssertTrue(question.waitForExistence(timeout: 10))
+        question.buttons["Нет сил"].tap()
+        XCTAssertTrue(waitForLabel(note, "Хорошо, пока предложу что-то полегче."), note.label)
+        XCTAssertTrue(now.staticTexts["Оплатить интернет"].waitForExistence(timeout: 5))
+        XCTAssertTrue(now.staticTexts["Это полегче — пока сил немного."].waitForExistence(timeout: 5), "Причина — полегче")
+        scrollTo(now, in: app)
+        snapshot(app, "70 Нет сил: полегче")
+    }
+
     // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
 
     @MainActor
