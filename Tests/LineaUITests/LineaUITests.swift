@@ -348,6 +348,8 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "51 Сейчас после «Не сейчас»")
 
         // «Начать» — в работе: «Завершить» и «Не сейчас», без «Другое».
+        // Ответ и вопрос над «Сейчас» сдвигают кнопки вниз — под строку Linea AI.
+        bringAboveCommandBar(now.buttons["Начать"], in: app)
         now.buttons["Начать"].tap()
         minimizeFocus(app)
         XCTAssertTrue(now.buttons["Завершить"].waitForExistence(timeout: 10), "Начатое — с «Завершить»")
@@ -880,12 +882,14 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "66 Не сейчас: почему?")
 
         // «Нет времени» — Linea вернётся к задаче, когда та поместится целиком.
+        bringAboveCommandBar(question.buttons["Нет времени"], in: app)
         question.buttons["Нет времени"].tap()
         XCTAssertTrue(question.waitForNonExistence(timeout: 5), "Ответили — вопроса нет")
         XCTAssertTrue(waitForLabel(note, containing: "Хорошо, вернусь к ней в "), "Ответ: \(note.label)")
         snapshot(app, "67 Нет времени: вернусь, когда поместится")
 
         // Обычное дело — без вопроса.
+        bringAboveCommandBar(now.buttons["Не сейчас"], in: app)
         now.buttons["Не сейчас"].tap()
         XCTAssertTrue(waitForLabel(note, "Хорошо, подберу другое."), note.label)
         XCTAssertFalse(question.exists, "Про обычное дело Linea не спрашивает")
@@ -903,6 +907,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(now.staticTexts["Подготовить презентацию"].waitForExistence(timeout: 15))
         now.buttons["Не сейчас"].tap()
         XCTAssertTrue(question.waitForExistence(timeout: 10))
+        bringAboveCommandBar(question.buttons["Неактуально"], in: app)
         question.buttons["Неактуально"].tap()
         XCTAssertTrue(waitForLabel(note, "Убрала из планов."), note.label)
         let restore = app.buttons["now.restore"]
@@ -925,6 +930,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(now.staticTexts["Подготовить презентацию"].waitForExistence(timeout: 15))
         now.buttons["Не сейчас"].tap()
         XCTAssertTrue(question.waitForExistence(timeout: 10))
+        bringAboveCommandBar(question.buttons["Нет сил"], in: app)
         question.buttons["Нет сил"].tap()
         XCTAssertTrue(waitForLabel(note, "Хорошо, пока предложу что-то полегче."), note.label)
         XCTAssertTrue(now.staticTexts["Оплатить интернет"].waitForExistence(timeout: 5))
