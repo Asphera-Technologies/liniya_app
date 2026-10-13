@@ -933,6 +933,65 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "70 Нет сил: полегче")
     }
 
+    // MARK: - 19. Перенести: позже сегодня, завтра, на неделе, «Пусть Linea решит»
+
+    @MainActor
+    func test19RescheduleLetLineaDecide() throws {
+        let app = launch()
+        addTask(app, "Подготовить презентацию сегодня 45 минут")
+        addTask(app, "Ответить на письма сегодня 30 минут")
+        openTab(app, "План", index: 1)
+
+        // Свайп влево — меню заказчика.
+        let presentation = button(app, startingWith: "Подготовить презентацию")
+        XCTAssertTrue(presentation.waitForExistence(timeout: 5))
+        bringAboveCommandBar(presentation, in: app)
+        presentation.swipeLeft()
+        XCTAssertTrue(app.staticTexts["Перенести «Подготовить презентацию»"].waitForExistence(timeout: 5))
+        for option in ["Позже сегодня", "Завтра", "Пусть Linea решит", "Выбрать дату…"] {
+            XCTAssertTrue(app.buttons[option].exists, "В «Перенести» есть «\(option)»")
+        }
+        XCTAssertTrue(button(app, startingWith: "На неделе · до ").exists, "В «Перенести» есть «На неделе»")
+        XCTAssertFalse(app.buttons["Без даты"].exists, "Меню — как в постановке")
+        snapshot(app, "71 Перенести: меню заказчика")
+
+        // «Пусть Linea решит» — Linea сама находит окно и говорит, куда поставила.
+        app.buttons["Пусть Linea решит"].tap()
+        let toast = notice(app)
+        XCTAssertTrue(toast.waitForExistence(timeout: 5), "Linea говорит, куда поставила")
+        XCTAssertTrue(toast.label.hasPrefix("Поставила на "), "Сообщение: \(toast.label)")
+        snapshot(app, "72 Пусть Linea решит: поставила")
+        let decided = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@",
+                                                       "Подготовить презентацию", "Время выбрала Linea")).firstMatch
+        XCTAssertTrue(decided.waitForExistence(timeout: 5), "Под задачей — что время выбрала Linea")
+        XCTAssertTrue(toast.waitForNonExistence(timeout: 6), "Сообщение уходит само")
+        snapshot(app, "73 План: время выбрала Linea")
+
+        // Меню долгого нажатия: «Перенести» → «Позже сегодня».
+        let letters = button(app, startingWith: "Ответить на письма")
+        bringAboveCommandBar(letters, in: app)
+        letters.press(forDuration: 1.2)
+        tapMenuItem(app, "Перенести")
+        XCTAssertTrue(app.staticTexts["Перенести «Ответить на письма»"].waitForExistence(timeout: 5), "«Перенести» из меню")
+        app.buttons["Позже сегодня"].tap()
+        XCTAssertTrue(toast.waitForExistence(timeout: 5))
+        XCTAssertTrue(toast.label.hasPrefix("Перенесла на "), "Сообщение: \(toast.label)")
+        let later = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@",
+                                                     "Ответить на письма", "Позже — с ")).firstMatch
+        XCTAssertTrue(later.waitForExistence(timeout: 5), "Под задачей — с какого времени")
+        snapshot(app, "74 Позже сегодня")
+
+        // Карточка: место выбирает Linea.
+        bringAboveCommandBar(decided, in: app)
+        decided.tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForExistence(timeout: 5))
+        let status = app.staticTexts["task.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(status.label.hasPrefix("Время выбрала Linea: "), status.label)
+        snapshot(app, "75 Карточка: время выбрала Linea")
+        app.navigationBars["Задача"].buttons["Отмена"].tap()
+    }
+
     // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
 
     @MainActor
@@ -955,20 +1014,19 @@ final class LineaUITests: XCTestCase {
         XCTAssertFalse(app.navigationBars["Задача"].exists, "Карточка задачи не открывалась")
         snapshot(app, "40 Свайп вправо — Готово")
 
-        // Влево — «Перенести»: короткий выбор; «Без даты» — во входящие.
+        // Влево — «Перенести»: короткий выбор; «Завтра» — и Linea говорит, куда.
         let mom = button(app, startingWith: "Позвонить маме")
         bringAboveCommandBar(mom, in: app)
         mom.swipeLeft()
         XCTAssertTrue(app.staticTexts["Перенести «Позвонить маме»"].waitForExistence(timeout: 5), "Свайп влево — «Перенести»")
-        for option in ["Завтра", "Выбрать дату…", "Без даты"] {
+        for option in ["Позже сегодня", "Завтра", "Пусть Linea решит", "Выбрать дату…"] {
             XCTAssertTrue(app.buttons[option].exists, "В «Перенести» есть «\(option)»")
         }
         snapshot(app, "41 Свайп влево — Перенести")
-        app.buttons["Без даты"].tap()
-        let inbox = app.descendants(matching: .any).matching(identifier: "plan.inbox").firstMatch
-        XCTAssertTrue(inbox.waitForExistence(timeout: 5), "Появился раздел «Без даты»")
-        XCTAssertTrue(inbox.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Позвонить маме")).firstMatch
-            .waitForExistence(timeout: 5), "Задача перенесена в «Без даты»")
+        app.buttons["Завтра"].tap()
+        let moved = notice(app)
+        XCTAssertTrue(moved.waitForExistence(timeout: 5), "Linea говорит, куда перенесла")
+        XCTAssertEqual(moved.label, "Перенесла на завтра.")
 
         // «Выбрать дату…» — календарь.
         let release = button(app, startingWith: "Подготовить релиз")
@@ -1339,6 +1397,12 @@ final class LineaUITests: XCTestCase {
                                               XCUIElement.ElementType.textField.rawValue,
                                               XCUIElement.ElementType.textView.rawValue)).firstMatch
         return input.waitForExistence(timeout: 5) ? input : byID.firstMatch
+    }
+
+    /// Сообщение сверху — куда Linea перенесла задачу.
+    @MainActor
+    private func notice(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "notice").firstMatch
     }
 
     @MainActor
