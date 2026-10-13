@@ -308,7 +308,9 @@ nonisolated struct DecisionEngine: Sendable {
                     // the next one — unless most of it still fits.
                     if planned > windowMinutes, Double(windowMinutes) < 0.8 * Double(planned) { continue }
                     let minutes = min(planned, windowMinutes)
-                    guard minutes >= config.minimumBlockMinutes else { continue }
+                    // Обрывок задачи короче минимального блока — не место для
+                    // работы; короткая задача целиком — место.
+                    guard minutes == planned || minutes >= config.minimumBlockMinutes else { continue }
                     if usedMinutes + minutes > capMinutes {
                         capBlocked.insert(task.id)
                         continue

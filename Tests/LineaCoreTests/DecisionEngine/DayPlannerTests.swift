@@ -28,6 +28,20 @@ struct DayPlannerTests {
         #expect(plan.focusBlocks.allSatisfy { $0.score != nil })
     }
 
+    @Test("Короткая задача на 10 минут встаёт в план целиком, а не «не помещается»")
+    func shortTaskIsPlanned() {
+        let time = WowFixture.time(11, 54)
+        let internet = LineaTask(title: "Оплатить интернет", date: WowFixture.today, createdAt: WowFixture.created,
+                                 estimatedMinutes: 10, cognitiveDemand: .light)
+        let plan = PlanFixture.engine().plan(
+            snapshot: PlanFixture.snapshot(tasks: [internet], commitments: [], goals: [], at: time),
+            state: PlanFixture.unknownState(at: time), time: time, planID: WowFixture.planID
+        )
+        #expect(PlanFixture.timeline(plan) == ["11:54–12:04 focus Оплатить интернет"])
+        #expect(plan.topTaskIDs == [internet.id], "Сводка дня не скажет «На сегодня задач нет»")
+        #expect(plan.deferredTaskIDs.isEmpty)
+    }
+
     @Test("Обед и тренировка дают факты mealWindow и workoutPlanned")
     func commitmentFacts() {
         let time = WowFixture.morning
