@@ -51,9 +51,12 @@ nonisolated struct NextActionUseCase: Sendable {
         time: TimeContext,
         preferred: UUID? = nil
     ) -> NextAction? {
-        guard var snapshot = record.snapshot, let state = record.state,
+        guard var snapshot = record.snapshot, var state = record.state,
               time.isSameDay(snapshot.day, time.now) else { return nil }
         snapshot.tasks = tasks
+        // «Нет сил» в ответ на «Почему не сейчас?»: два часа — полегче.
+        let isTired = record.reportedLowEnergy(at: time.now, within: NotNowFeedback.lowEnergyMinutes)
+        if isTired { state = state.reportedTired() }
         let active = record.activeAction(tasks: tasks, at: time.now)
         // План держит время начатого действия занятым. Для «Другое» считаем
         // без него: что ещё можно сделать вместо.
@@ -66,7 +69,13 @@ nonisolated struct NextActionUseCase: Sendable {
         let titles = Dictionary(tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
         let minimum = engine.config.minimumActionScore
         let ranked = window.isBusy ? [] : engine.rankNow(context: context)
-        let actionable = ranked.filter { $0.action >= minimum }
+        var actionable = ranked.filter { $0.action >= minimum }
+        // Сил нет — сложное только если больше нечего.
+        if isTired {
+            let deep = Set(tasks.filter { $0.cognitiveDemand.score >= DecisionEngine.deepDemandThreshold }.map(\.id))
+            let lighter = actionable.filter { !deep.contains($0.taskID) }
+            if !lighter.isEmpty { actionable = lighter }
+        }
 
         // Человек уже взялся за действие — оно и есть «сейчас».
         if let active, let title = titles[active.start.taskID] {
@@ -128,7 +137,8 @@ nonisolated struct NextActionUseCase: Sendable {
             let choice = NowReasoner.Choice(
                 task: task, assessment: best, window: window,
                 laterTitle: later.flatMap { titles[$0.taskID] },
-                isPlanned: best.taskID == plannedNow
+                isPlanned: best.taskID == plannedNow,
+                isTired: isTired
             )
             facts.append(.nowReason(reasoner.reason(for: choice, context: context)))
         }

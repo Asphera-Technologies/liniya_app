@@ -38,6 +38,15 @@ nonisolated enum FeedbackKind: Codable, Hashable, Sendable {
     /// Ответ на предложение для цели: окно среди текущих дел или возврат к
     /// давно не двигавшейся цели (`GoalOffer`).
     case goalOffer(GoalOfferAnswer)
+    /// Linea спросила «Почему не сейчас?» (`NotNowFeedback`): по этим
+    /// отметкам она знает, что спрашивала недавно, и не спрашивает часто.
+    case notNowAsked(taskID: UUID)
+    /// Ответ на «Почему не сейчас?»: нет времени, нет сил, не хочется,
+    /// неактуально.
+    case notNowReason(NotNowAnswer)
+    /// Убранную из планов задачу вернули («Вернуть» после «Неактуально»):
+    /// прежнее `taskCancelled` больше не в силе.
+    case taskRestored(taskID: UUID)
 }
 
 /// Задача сделана: сколько было отведено и сколько ушло на самом деле.

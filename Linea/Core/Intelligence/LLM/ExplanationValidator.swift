@@ -98,7 +98,7 @@ nonisolated struct ExplanationValidator: Sendable {
                 case .deferred(let times):
                     add("\(times)")
                 case .overdue, .missedDay, .planned, .mainGoalStep, .goalStep, .highPriority, .energyPeak,
-                     .freeTime, .quick, .mostImportant:
+                     .freeTime, .quick, .mostImportant, .lighter:
                     continue
                 }
             case .hrvVsUsual, .restingHeartRateVsUsual, .recovery, .loadAdvice, .highLoadYesterday,

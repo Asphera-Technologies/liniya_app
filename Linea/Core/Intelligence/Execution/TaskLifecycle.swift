@@ -80,6 +80,15 @@ nonisolated struct TaskLifecycle: Sendable {
         return result
     }
 
+    /// Вернуть убранную из планов («Вернуть» сразу после «Неактуально»):
+    /// задача снова открыта — с теми же днём, сроком и временем.
+    func restore(_ task: LineaTask) -> LineaTask? {
+        guard task.cancelledAt != nil else { return nil }
+        var result = task
+        result.cancelledAt = nil
+        return result
+    }
+
     /// Вернуть закрытую: снова открыта и не начата.
     func reopen(_ task: LineaTask) -> LineaTask? {
         guard task.isDone, task.cancelledAt == nil else { return nil }

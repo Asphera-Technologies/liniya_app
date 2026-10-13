@@ -11,6 +11,7 @@
 //  Причин у выбора обычно несколько — называется самая понятная, по порядку:
 //    1. важное не помещается в окно — сейчас то, на что окна хватит;
 //    2. своё время задачи — сейчас;
+//    2а. человек сказал «Нет сил» — это полегче;
 //    3. срок прошёл или день задачи прошёл;
 //    4. срок сегодня или завтра (вместе с высоким приоритетом, если он есть);
 //    5. идёт её блок в принятом плане;
@@ -35,6 +36,8 @@ nonisolated enum NowReason: Codable, Hashable, Sendable {
     case fitsBeforeLater(window: CommitmentKind?, windowTitle: String?, minutesLeft: Int, laterTitle: String)
     /// У задачи своё время, и оно сейчас.
     case startsAt(Date)
+    /// Человек сказал «Нет сил» — Linea предлагает полегче.
+    case lighter
     /// Срок задачи уже прошёл.
     case overdue
     /// День задачи прошёл, а она не закрыта.
@@ -90,6 +93,8 @@ nonisolated struct NowReasoner: Sendable {
         let laterTitle: String?
         /// Задача стоит в идущем блоке принятого плана.
         let isPlanned: Bool
+        /// Человек недавно сказал «Нет сил».
+        var isTired = false
     }
 
     func reason(for choice: Choice, context: PriorityContext) -> NowReason {
@@ -104,6 +109,9 @@ nonisolated struct NowReasoner: Sendable {
         }
         if let start = task.scheduledStart {
             return .startsAt(start)
+        }
+        if choice.isTired, task.cognitiveDemand.score < DecisionEngine.deepDemandThreshold {
+            return .lighter
         }
         if let deadline = task.deadline, deadline <= now {
             return .overdue

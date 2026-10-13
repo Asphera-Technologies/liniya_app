@@ -150,6 +150,8 @@ nonisolated struct RuleBasedExplainer: TextRenderer, Explainer {
             return "\(lead) — на это хватит, а \(RussianText.quoted(later)) лучше \(afterPhrase(kind: kind, title: title))."
         case .startsAt(let start):
             return "Назначена на \(facts.clock(start))."
+        case .lighter:
+            return "Это полегче — пока сил немного."
         case .overdue:
             return "Срок уже прошёл — лучше закрыть сейчас."
         case .missedDay:

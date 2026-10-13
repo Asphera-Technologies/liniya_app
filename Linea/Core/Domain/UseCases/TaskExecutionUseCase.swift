@@ -115,13 +115,20 @@ nonisolated struct TaskExecutionUseCase: Sendable {
         }
     }
 
-    /// Отклик в день вместе с тем, каким Linea видела человека в этот момент.
     private func appending(_ kind: FeedbackKind, to record: DayRecord, at moment: Date) -> DayRecord {
-        var record = record
+        record.appendingFeedback(kind, at: moment)
+    }
+}
+
+nonisolated extension DayRecord {
+    /// Отклик в день вместе с тем, каким Linea видела человека в этот момент.
+    /// Журнал только дописывается.
+    func appendingFeedback(_ kind: FeedbackKind, at moment: Date) -> DayRecord {
+        var record = self
         record.feedback.append(UserFeedback(
             at: moment, kind: kind,
-            energy: record.state?.energy, energyConfidence: record.state?.confidence,
-            loadAdvice: record.state?.loadAdvice, planID: record.plan?.id
+            energy: state?.energy, energyConfidence: state?.confidence,
+            loadAdvice: state?.loadAdvice, planID: plan?.id
         ))
         record.updatedAt = moment
         return record
