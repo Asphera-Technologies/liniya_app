@@ -51,7 +51,8 @@ nonisolated struct WeeklyReviewBuilder: Sendable {
 
     init() {}
 
-    /// Обзор недели `week`; nil — неделя ещё не началась или целей нет.
+    /// Обзор недели `week`; nil — неделя ещё не началась или целей в ней
+    /// ещё не было.
     func review(
         week: DateInterval,
         goals: [LineaGoal],
@@ -74,7 +75,9 @@ nonisolated struct WeeklyReviewBuilder: Sendable {
             let moves = goal.progressLog.filter { inWeek($0.at) }.count
             return (goal.id, done + moves)
         }, uniquingKeysWith: { first, _ in first })
+        // Цели, которых в ту неделю ещё не было, в её обзоре не нужны.
         let shown = goals
+            .filter { $0.createdAt < upTo }
             .filter { ($0.isActive && !$0.isCompleted) || (advances[$0.id] ?? 0) > 0 }
             .sorted { lhs, rhs in
                 let left = advances[lhs.id] ?? 0

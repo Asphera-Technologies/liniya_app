@@ -121,9 +121,12 @@ struct WeeklyReviewTests {
         #expect(review.goals.first?.advances == 2, "Задача этой недели и стадия этой недели")
     }
 
-    @Test("Прошлая неделя: «На неделе 31 авг – 6 сен», без «пока»")
+    @Test("Прошлая неделя: «На неделе 31 авг – 6 сен», без «пока»; цели, которых тогда не было, — не в ней")
     func pastWeek() throws {
         let past = DateInterval(start: WowFixture.moment(0, 0, dayOffset: -9), end: week.start)
+        // Цель заведена задолго до той недели.
+        let beta = LineaGoal(id: id(100), title: "Linea Beta", createdAt: WowFixture.moment(9, 0, dayOffset: -20),
+                             priority: .important)
         let tasks = [
             done(1, "Оплатить интернет", dayOffset: -8, minutes: 60),
             done(2, "Купить продукты", dayOffset: -7, minutes: 60),
@@ -133,6 +136,10 @@ struct WeeklyReviewTests {
         #expect(review.title == "На неделе 31 авг – 6 сен")
         #expect(review.goals.first?.summary == "без продвижений")
         #expect(review.observation == "Большая часть недели ушла на текущие дела. Шагов к целям за неделю не было.")
+        // Цель, созданная позже той недели, в её обзоре не показывается.
+        let later = LineaGoal(id: id(400), title: "Новая цель", createdAt: WowFixture.moment(9))
+        #expect(builder.review(week: past, goals: [beta, later], tasks: tasks, time: time)?.goals.map(\.title) == ["Linea Beta"])
+        #expect(builder.review(week: past, goals: [later], tasks: tasks, time: time) == nil, "Целей тогда ещё не было")
         let sameMonth = DateInterval(start: WowFixture.moment(0, 0, dayOffset: 5), end: WowFixture.moment(0, 0, dayOffset: 12))
         #expect(WeeklyReviewBuilder.title(week: sameMonth, isCurrent: false, time: time) == "На неделе 14–20 сен")
         #expect(WeeklyReviewBuilder.times(4) == "4 раза")
