@@ -51,6 +51,9 @@ final class TaskEntity {
     var deferredUntil: Date?
     /// Убрана из планов («Удалить»): не показывается, но остаётся в данных.
     var cancelledAt: Date?
+    /// «Пусть Linea решит» или «Позже сегодня» (`RescheduleMode`); nil — день
+    /// выбрал человек.
+    var rescheduleModeRaw: String?
 
     init(
         id: UUID,
@@ -75,7 +78,8 @@ final class TaskEntity {
         actualMinutes: Int? = nil,
         suggestionID: UUID? = nil,
         deferredUntil: Date? = nil,
-        cancelledAt: Date? = nil
+        cancelledAt: Date? = nil,
+        rescheduleModeRaw: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -100,6 +104,7 @@ final class TaskEntity {
         self.suggestionID = suggestionID
         self.deferredUntil = deferredUntil
         self.cancelledAt = cancelledAt
+        self.rescheduleModeRaw = rescheduleModeRaw
     }
 }
 
@@ -128,7 +133,8 @@ extension TaskEntity {
             actualMinutes: task.actualMinutes,
             suggestionID: task.suggestionID,
             deferredUntil: task.deferredUntil,
-            cancelledAt: task.cancelledAt
+            cancelledAt: task.cancelledAt,
+            rescheduleModeRaw: task.rescheduleMode?.rawValue
         )
     }
 
@@ -157,7 +163,8 @@ extension TaskEntity {
             actualMinutes: actualMinutes,
             suggestionID: suggestionID,
             deferredUntil: deferredUntil,
-            cancelledAt: cancelledAt
+            cancelledAt: cancelledAt,
+            rescheduleMode: rescheduleModeRaw.flatMap(RescheduleMode.init(rawValue:))
         )
     }
 
@@ -184,6 +191,7 @@ extension TaskEntity {
         suggestionID = task.suggestionID
         deferredUntil = task.deferredUntil
         cancelledAt = task.cancelledAt
+        rescheduleModeRaw = task.rescheduleMode?.rawValue
     }
 
     private static func raw(_ ids: [UUID]) -> String? {

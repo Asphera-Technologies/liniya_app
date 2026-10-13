@@ -2,11 +2,13 @@
 //  TaskRescheduleDialog.swift
 //  Linea
 //
-//  «Перенести» — свайп влево по задаче. Снизу выезжает короткий выбор:
-//  «Сегодня», «Завтра», «На неделе · до вс, 4 окт», «На следующей неделе ·
-//  пн, 5 окт», «Выбрать дату…», «Без даты» — кроме того, где задача уже
-//  стоит. «Выбрать дату…» открывает календарь: тап по дню переносит сразу.
-//  Варианты и то, что станет с задачей, — из ядра (`TaskReschedule`).
+//  «Перенести» — свайп влево по задаче или пункт меню долгого нажатия.
+//  Снизу выезжает короткий выбор: «Позже сегодня», «Завтра», «На неделе ·
+//  до вс, 4 окт», «Пусть Linea решит», «Выбрать дату…» — кроме того, где
+//  задача уже стоит; у задачи на другой день вместо «Позже сегодня» —
+//  «Сегодня». «Выбрать дату…» открывает календарь: тап по дню переносит
+//  сразу. Варианты и то, что станет с задачей, — из ядра (`TaskReschedule`,
+//  `AutoReschedule`); куда Linea поставила задачу, видно в сообщении сверху.
 //
 //  Здесь же — обработчики строки задачи для «Плана» и «Сегодня»
 //  (`PlanStore.rowActions`), чтобы оба экрана вели себя одинаково.
@@ -24,7 +26,6 @@ extension View {
 private struct TaskRescheduleDialog: ViewModifier {
     @Binding var task: LineaTask?
 
-    @Environment(PlanStore.self) private var plan
     @Environment(UserProfileStore.self) private var profile
     @Environment(IntelligenceStore.self) private var intelligence
     @State private var pickingDay: LineaTask?
@@ -51,7 +52,7 @@ private struct TaskRescheduleDialog: ViewModifier {
     }
 
     private func move(_ task: LineaTask, to target: TaskReschedule.Target) {
-        Task { await plan.rescheduleTask(task, to: target, profile: profile.profile) }
+        Task { await intelligence.reschedule(task, to: target) }
     }
 }
 

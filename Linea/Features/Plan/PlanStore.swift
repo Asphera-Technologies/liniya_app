@@ -131,10 +131,23 @@ final class PlanStore {
         await saveTask(updated)
     }
 
-    /// «Перенести» у строки: день, срок и время — по правилу `TaskReschedule`.
-    /// Перенос задачи, которую пора было делать, засчитывается в `saveTask`.
-    func rescheduleTask(_ task: LineaTask, to target: TaskReschedule.Target, profile: UserProfile) async {
-        await saveTask(TaskReschedule().apply(target, to: task, profile: profile, time: timeProvider()))
+    /// Изменения, где ядро уже решило, чьё что: «Пусть Linea решит» отдаёт
+    /// день и время Linea (`AutoReschedule`), и она же переставляет задачу,
+    /// чей день прошёл. Поэтому без пометок «поменял человек» — только
+    /// перенос засчитывается. `replans: false` — пересчёт дня уже идёт.
+    func saveDecided(_ updated: [LineaTask], replans: Bool = true) async {
+        guard !updated.isEmpty else { return }
+        let time = timeProvider()
+        do {
+            for task in updated {
+                let previous = tasks.first { $0.id == task.id }
+                try await taskRepository.update(previous.map { TaskDeferral.counted(previous: $0, updated: task, time: time) } ?? task)
+            }
+            await load()
+            if replans { await onPlanInputsChanged?() }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     /// «Вернуть» сразу после «Неактуально»: убранная из планов задача снова в

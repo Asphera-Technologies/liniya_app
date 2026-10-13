@@ -54,6 +54,9 @@ final class IntelligenceStore {
     private(set) var notNowQuestion: NotNowQuestion?
     /// Задача, которую убрал ответ «Неактуально»: её можно «Вернуть».
     private var removedTask: LineaTask?
+    /// Короткое сообщение поверх экрана на пару секунд: куда Linea перенесла
+    /// задачу — «Поставила на завтра, 10:00.»
+    private(set) var notice: String?
     /// Чей фокус открыт поверх приложения (`TaskFocus`): «Начать» открывает,
     /// «Свернуть» закрывает, задача в работе — пока у неё есть `startedAt`.
     private(set) var focusTaskID: UUID?
@@ -174,6 +177,8 @@ final class IntelligenceStore {
             await planStore.load()
             let profile = try await profiles.load()
             userProfile = profile
+            // «Пусть Linea решит»: день прошёл, а задача не сделана — новое окно.
+            await replaceMissedTasks(profile: profile, time: time)
             calibration = try await calibrations.load()
             let nutrition = try await nutritionRepository.profile()
             let meals = try await nutritionRepository.meals(on: time.dayInterval(containing: time.now))
@@ -655,6 +660,61 @@ final class IntelligenceStore {
         nowNote = TaskExecutionText.finished(task)
         notNowQuestion = nil
         removedTask = nil
+    }
+
+    // MARK: - Перенести
+
+    /// «Перенести»: позже сегодня, завтра, на неделе, «Пусть Linea решит», свой
+    /// день. Куда — решает ядро (`TaskReschedule`, `AutoReschedule`) по
+    /// встречам, еде и делам ближайших дней; Linea коротко говорит, куда
+    /// поставила.
+    func reschedule(_ task: LineaTask, to target: TaskReschedule.Target) async {
+        let current = planStore.tasks.first { $0.id == task.id } ?? task
+        let context = await rescheduleContext(profile: userProfile, time: time)
+        let result = TaskReschedule().apply(target, to: current, context: context)
+        if focusTaskID == current.id { focusTaskID = nil }
+        let mode = result.task.rescheduleMode?.rawValue ?? "manual"
+        LineaLog.plan.notice("Перенести: \(mode, privacy: .public)")
+        if target == .automatic {
+            // День и время теперь решает Linea — не правка человека.
+            await planStore.saveDecided([result.task])
+        } else {
+            await planStore.saveTask(result.task)
+        }
+        notice = result.note
+    }
+
+    /// Сообщение показано — убрать. Только своё: могло прийти новое.
+    func clearNotice(_ shown: String) {
+        if notice == shown { notice = nil }
+    }
+
+    /// Что Linea знает о ближайших днях: встречи календаря на две недели,
+    /// сегодняшние обязательства, окна еды, дела, которые уже стоят.
+    private func rescheduleContext(profile: UserProfile, time: TimeContext) async -> RescheduleContext {
+        let horizon = DateInterval(start: time.today,
+                                   end: time.adding(days: AutoReschedule.horizonDays + 1, to: time.today))
+        var commitments = await calendarCommitments(in: horizon)
+        if let snapshot = record?.snapshot, time.isSameDay(snapshot.day, time.now) {
+            commitments += snapshot.commitments
+        }
+        let nutrition = try? await nutritionRepository.profile()
+        return RescheduleContext(profile: profile, tasks: planStore.tasks, commitments: commitments,
+                                 nutrition: nutrition, calibration: calibration, config: config, time: time)
+    }
+
+    /// Задачи «Пусть Linea решит», чей день прошёл, — на новое место, до
+    /// расчёта дня: план видит их уже переставленными.
+    private func replaceMissedTasks(profile: UserProfile, time: TimeContext) async {
+        let missed = planStore.tasks.contains { task in
+            task.isOpen && task.rescheduleMode == .automatic
+                && (task.date.map { time.startOfDay($0) < time.today } ?? false)
+        }
+        guard missed else { return }
+        let moved = AutoReschedule().replacingMissed(context: await rescheduleContext(profile: profile, time: time))
+        guard !moved.isEmpty else { return }
+        LineaLog.plan.notice("Пусть Linea решит: переставлено задач \(moved.count, privacy: .public)")
+        await planStore.saveDecided(moved, replans: false)
     }
 
     // MARK: - Поддержка целей

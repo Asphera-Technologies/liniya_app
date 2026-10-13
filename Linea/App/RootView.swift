@@ -39,6 +39,19 @@ struct RootView: View {
             }
         }
         .animation(.snappy, value: intelligence.focus?.taskID)
+        // Куда Linea перенесла задачу — сверху на пару секунд.
+        .overlay(alignment: .top) {
+            if let notice = intelligence.notice {
+                NoticeToast(text: notice)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task(id: notice) {
+                        try? await Task.sleep(for: .seconds(3))
+                        intelligence.clearNotice(notice)
+                    }
+            }
+        }
+        .animation(.snappy, value: intelligence.notice)
         // Coming back to the app is the moment to re-check the day: iOS runs
         // no code of ours at 14:30, so this is when a slipping plan is noticed.
         // The check-in never records in the background: leaving the app stops
