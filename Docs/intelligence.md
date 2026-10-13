@@ -1494,3 +1494,187 @@ enterprise-клиенты и ключевые переговоры», выруч
 «Хорошо: завтра Linea найдёт для неё 30 минут.». «Пока нет» —
 `attentionSnoozedUntil = сейчас + 7 дней` (`GoalAttention.snoozeDays`), без
 пересмотра цели и пересчёта плана. Оба — отклик `goalOffer` в день.
+
+## 31. Фокус после «Начать»
+
+Решение — ADR-041. Код — `Linea/Core/Intelligence/Execution/TaskFocus.swift`,
+`TaskExecutionText.finished/declined`, `FeedbackKind.taskNotNow.workedMinutes`;
+в приложении — `IntelligenceStore.focus/openFocus/minimizeFocus/finishFocus/stopFocus`,
+`FocusView`, слой поверх вкладок в `RootView`. Тесты —
+`Tests/LineaCoreTests/Execution/TaskFocusTests.swift`.
+
+**Фокус** (`TaskFocus.of`) — только у открытой начатой задачи: название,
+`minutes` — из последнего `actionStarted` этой задачи в дне (отклик пишется в
+ту же минуту, что `startedAt`), иначе `PlanDuration`; `duration` — «~45 мин»
+(`QuickTaskText.duration`), `started` — «Начато в 11:20», «Начато вчера в
+17:05», «Начато в вс, 6 сен». Константы: `hint` — «Можно выйти из приложения —
+выполнение продолжается.», `stopTitle` — «Не получается продолжить».
+
+**Когда показан.** `IntelligenceStore.focusTaskID` ставит любое успешное
+«Начать» (`perform(.start)`), снимают «Свернуть», «Завершить», «Не сейчас»,
+«Удалить» этой задачи и перенос (§33). Фокус виден, пока задача начата.
+После запуска приложения — один раз — фокус задачи из
+`TaskFocus.resumable`: последней начатой и открытой, начатой не раньше 12
+часов назад (`TaskLifecycle.maxActualMinutes`).
+
+**Действия.** «Завершить» — `perform(.finish)` с отведёнными минутами, над
+«Сейчас» — `TaskExecutionText.finished`: «Сделано за 35 мин.» (не начинали —
+«Сделано.»). «Не получается продолжить» — `perform(.notNow)` через вопрос
+§32; в отклик `taskNotNow` пишется `workedMinutes` — от `startedAt` до
+отказа, по правилу `TaskLifecycle.actualMinutes`. «Развернуть» у начатого
+действия на «Сегодня» — `openFocus`.
+
+## 32. «Не сейчас»: почему и что дальше
+
+Решение — ADR-042. Код — `Linea/Core/Domain/Models/NotNowReason.swift`
+(`NotNowReason`, `NotNowQuestion`, `NotNowAnswer`, `DayRecord.notNowQuestions/
+notNowAnswers/reportedLowEnergy`), `Linea/Core/Intelligence/Execution/NotNowFeedback.swift`,
+`WindowFinder`, `NextActionUseCase` (усталость), `NowReason.lighter`; в
+приложении — `IntelligenceStore.decline/answerNotNow/restoreRemovedTask`,
+вопрос в `TodayView`. Тесты — `Tests/LineaCoreTests/Execution/NotNowFeedbackTests.swift`.
+
+| Постановка | Linea |
+|---|---|
+| «Хорошо, подберу другое.» | `TaskExecutionText.declined` |
+| «Почему не сейчас?» | `NotNowQuestion.title`; у начатой — «Что помешало?» |
+| Нет времени / Нет сил / Не хочется / Неактуально | `NotNowReason.noTime / noEnergy / unwilling / irrelevant` |
+
+**Спросить ли** (`NotNowFeedback.question`, решается до отказа):
+1. запись дня — сегодняшняя; вопросов сегодня меньше 3 (`maxQuestionsPerDay`),
+   с прошлого прошло 120 минут (`questionGapMinutes`), про эту задачу сегодня
+   не спрашивали, без ответа осталось меньше 2 (`maxUnanswered`);
+2. у задачи в эту минуту (`PriorityEngine.assess` по снимку дня) нет
+   ограничений `shortWindow` и `lowEnergy` — иначе причина видна;
+3. `matters`: задача начата, высокий приоритет, переносилась, цель — важная
+   (`GoalBalance.importantGoals`), срок до конца завтра, её день прошёл, или
+   сегодня от неё уже отказывались (`taskNotNow` раньше).
+
+Спросила — в день отклик `notNowAsked(taskID)`.
+
+**Ответ** (`NotNowFeedback.answer`) — отклик `notNowReason(NotNowAnswer:
+задача, причина, id предложения, начата ли)` и:
+
+| Причина | Задача | Ответ Linea |
+|---|---|---|
+| `noTime` | `deferredUntil` — начало первого окна (`WindowFinder.nextFit`) не раньше чем через 120 минут (`noTimeGapMinutes`), где задача (`PlanDuration`) помещается целиком; встречи, еда, задачи со временем — `snapshot.commitments` без своих; нет — начало завтрашнего рабочего дня | «Хорошо, вернусь к ней в 14:30.» / «…завтра.» |
+| `noEnergy` | как была (90 минут «Не сейчас») | «Хорошо, пока предложу что-то полегче.» |
+| `unwilling` | как была | «Хорошо, вернусь к ней позже.» |
+| `irrelevant` | `TaskLifecycle.cancel`, в день ещё `taskCancelled` | «Убрала из планов.» + «Вернуть» |
+
+**Нет сил** (`DayRecord.reportedLowEnergy`, 120 минут — `lowEnergyMinutes`):
+`NextActionUseCase` считает с `UserState.reportedTired()` (энергия 0,
+уверенность 1) и убирает из выбора задачи сложности от
+`DecisionEngine.deepDemandThreshold`, если остаётся хоть одна полегче.
+Причина у такого предложения — `NowReason.lighter`: «Это полегче — пока сил
+немного.» (после `fitsBeforeLater` и `startsAt`, только у не сложной задачи).
+
+**«Вернуть»** (`NotNowFeedback.undo`): `TaskLifecycle.restore` (снимает
+`cancelledAt`), отклик `taskRestored`, сохранение — `PlanStore.restoreTask`
+(обновление по id), над «Сейчас» — «Вернула в планы.».
+
+**Экран.** Над следующим предложением «Сейчас»: ответ с галочкой, вопрос и
+четыре капсулы. Вопрос и «Вернуть» живут, пока открыт «Сегодня» и человек не
+взялся за другое.
+
+## 33. Быстрый перенос и «Пусть Linea решит»
+
+Решение — ADR-043. Код — `Linea/Core/Intelligence/TaskCapture/TaskReschedule.swift`,
+`AutoReschedule.swift` (`RescheduleContext`, `AutoReschedule`),
+`Linea/Core/Intelligence/DecisionEngine/WindowFinder.swift`, `RescheduleMode`,
+`TaskOwnership.userEdited`, `TaskExecutionText.status`; в приложении —
+`IntelligenceStore.reschedule/replaceMissedTasks`, `PlanStore.saveDecided`,
+`TaskRescheduleDialog`, пункт «Перенести» в `TaskActionsMenu`, `NoticeToast`.
+Тесты — `Tests/LineaCoreTests/TaskCapture/TaskRescheduleTests.swift`,
+`AutoRescheduleTests.swift`.
+
+| Постановка | Linea |
+|---|---|
+| `deferred = true` | `TaskStatus.deferred`: `deferredUntil` впереди — до найденного окна |
+| `reschedule_mode = automatic` | `LineaTask.rescheduleMode == .automatic` |
+| `reschedule_mode = manual` | `rescheduleMode == nil`; «Позже сегодня» — `.laterToday` |
+
+**Варианты** (`options`): «Позже сегодня» (у задачи на сегодня, просроченной и
+без даты, пока `сейчас + 90 мин` раньше конца рабочего дня) или «Сегодня» (у
+задачи на другой день); «Завтра» (если не на завтра); «На неделе · до вс, …»
+(если не «на неделе»); «Пусть Linea решит»; экран добавляет «Выбрать дату…».
+Цели `nextWeek` и `someday` остались в ядре, но в меню их нет.
+
+**Что станет с задачей** (`apply(_:to:context:)` → `Result: task, note`).
+Обычные цели — как в §20, плюс: `rescheduleMode`, `deferredUntil` и
+`startedAt` снимаются; ответ — «Перенесла на завтра.», «Перенесла на эту
+неделю — до вс, 13 сен.», «Перенесла на пт, 11 сен.».
+- `laterToday` — день сегодня (§20), своё время снимается (иначе задача
+  ждала бы его), `deferredUntil` — `WindowFinder.nextFit` не раньше `сейчас +
+  90 мин` по обязательствам дня без своих (`commitments(on:except:)`), нет
+  окна — сам этот момент; `rescheduleMode = .laterToday`; «Перенесла на
+  14:30.»
+- `automatic` — `AutoReschedule.decide`.
+
+**Поиск места** (`AutoReschedule.place(_:notBefore:context:)`): дни с
+`earliest` (`сейчас + 90 мин`) по день срока, если срок впереди, иначе 14 дней
+(`horizonDays`). В каждом дне — свободные окна (`FreeWindows`) после
+`earliest` вне обязательств (`RescheduleContext.commitments(on:)`: календарь
+на 14 дней и сегодняшний снимок, задачи со своим временем через
+`CommitmentMapper`, окна еды из профиля питания); подходят окна не короче
+задачи, которые кончаются не позже срока. Окно выбирается по сложности: `deep`
+— первое, начавшееся до 13:00 (`morningEnd`); `light` — первое место после
+13:00; иначе — первое. День берётся, если свободных минут минус дела,
+которые уже на нём стоят (`assignedMinutes`: открытые без своего времени),
+хватает задаче; иначе первый день с окном — запасной. Окна нет нигде — день
+`earliest` (или следующий, если рабочий день кончился), без окна.
+
+**Поставить** (`applying`): `date` — день, `deferredUntil` — начало окна
+(если впереди; без окна — `earliest`, если это тот же день), `scheduledStart`
+и `startedAt` — nil, `rescheduleMode = .automatic`, `userFields` — прежние
+(у старых задач — все) без `day` и `startTime`; из «Без даты» — разобрана.
+Сохраняется `PlanStore.saveDecided`: мимо `TaskOwnership.saved`, только
+`TaskDeferral.counted`. Ответ (`AutoReschedule.note`): «Поставила на завтра,
+10:00.», «Поставила на чт, 15 окт, 10:00.», без окна — «Поставила на сегодня
+— время найдёт план.»
+
+**День прошёл** (`replacingMissed`): открытые, не начатые задачи с
+`automatic`, чей день раньше сегодняшнего, — новое место с этой минуты.
+`IntelligenceStore.refreshOnce` делает это до расчёта дня
+(`saveDecided(replans: false)`); перенос засчитывается.
+
+**Человек забрал выбор** (`TaskOwnership.userEdited`): сохранение человеком
+поменяло день или время, а режим не задало само — `rescheduleMode = nil`.
+
+**Подписи** (`TaskExecutionText.status`): отложена и `automatic` — «Время
+выбрала Linea: 10:00» (сегодня) / «…: завтра, 10:00»; `laterToday` — «Позже —
+с 14:30»; иначе — «Не сейчас — до 12:30». В карточке у `automatic`, чьё окно
+наступило, — «Время выбирает Linea».
+
+## 34. Обзор недели
+
+Решение — ADR-044. Код — `Linea/Core/Intelligence/GoalProgress/WeeklyReview.swift`
+(`WeeklyReview`, `WeeklyReviewBuilder`); в приложении —
+`PlanStore.weeklyReview(meetings:)`, блок в `PlanView`. Тесты —
+`Tests/LineaCoreTests/GoalProgress/WeeklyReviewTests.swift`.
+
+**Неделя** — та, что показывает «План» (`PlanStore.visibleInterval`, с
+понедельника), только режим «Неделя»; считается то, что было до этой минуты.
+Будущая неделя и неделя, когда целей ещё не было, — без обзора.
+
+**Продвижения цели** — закрытые на неделе задачи цели (не отменённые) и
+события `progressLog` цели на неделе (у общей цели — и вклад). Показаны
+активные цели и цели с продвижениями — из заведённых до конца недели
+(`createdAt`); порядок — больше продвижений, потом как главная цель (важнее,
+ближний срок, давнее). Подпись — «3 продвижения»,
+«1 продвижение»; ноль — «пока без продвижений» (прошлая неделя — «без
+продвижений»).
+
+**Наблюдение** — только если закрыто ≥ 3 задач (`minimumTasks`) или ≥ 120
+минут (`minimumMinutes`). Минуты задачи — `actualMinutes`, иначе
+`TaskEstimate`; задачи без цели и встречи календаря (`source == .calendar`,
+не задачи) — текущее, из них обязательства — тип `obligation` и встречи;
+задачи с целью — шаги. Доля текущего ≥ 0,6 (`majorityShare`) — «Большая
+часть недели ушла на текущие обязательства.» (обязательств ≥ половины
+текущего) или «…на текущие дела.»; ≤ 0,4 — «Большая часть недели ушла на
+цели.»; иначе — «Неделя поделилась между текущими делами и целями.» Второе
+предложение — первая цель с продвижениями: «По «…» получилось продвинуться
+один раз / дважды / трижды / 4 раза / 5 раз.»; без продвижений — «Шагов к
+целям на этой неделе пока не было.» (прошлая — «…за неделю не было.»).
+
+**Заголовок** — «На этой неделе»; прошлая — «На неделе 5–11 окт», через
+границу месяца — «На неделе 28 сен – 4 окт».
