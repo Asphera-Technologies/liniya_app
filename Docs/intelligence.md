@@ -327,7 +327,9 @@ today + 2 дня`, а также без даты, но привязанные к
 
 **Свободные окна:** `[max(now, workdayStart), workdayEnd]` минус
 обязательства; после каждого поставленного блока буфер 10 мин; окна короче 15
-мин отбрасываются. `availableMinutes = Σ окон × capacityFactor_day`, где
+мин отбрасываются. Задача короче 15 минут встаёт целиком; обрывок задачи
+короче 15 минут — нет (до 13.10.2026 короткие задачи в план не попадали
+вовсе). `availableMinutes = Σ окон × capacityFactor_day`, где
 `capacityFactor_day = calibration.capacityFactor × (reduce 0.75 / normal 1.0 /
 push 1.1 / unknown 0.9)`.
 
