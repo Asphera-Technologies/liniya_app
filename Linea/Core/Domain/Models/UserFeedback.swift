@@ -25,8 +25,10 @@ nonisolated enum FeedbackKind: Codable, Hashable, Sendable {
     case actionStarted(ActionStart)
     /// «Завершить» (или «Готово»): сколько заняло на самом деле.
     case taskFinished(TaskFinish)
-    /// «Не сейчас»: задача была начата или только предложена.
-    case taskNotNow(taskID: UUID, wasStarted: Bool)
+    /// «Не сейчас»: задача была начата или только предложена. У начатой —
+    /// сколько человек успел с ней поработать («Не получается продолжить» в
+    /// фокусе); `nil` — не начинали или прошло больше 12 часов.
+    case taskNotNow(taskID: UUID, wasStarted: Bool, workedMinutes: Int? = nil)
     /// Задачу убрали из планов.
     case taskCancelled(taskID: UUID)
     /// Закрытую задачу вернули: прежнее `taskFinished` больше не правда.

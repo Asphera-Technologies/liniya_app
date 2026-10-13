@@ -95,7 +95,10 @@ nonisolated struct TaskExecutionUseCase: Sendable {
                 if offered != nil {
                     day = SuggestionLog.responding(.declined, to: task.id, in: day, at: moment).record
                 }
-                return appending(.taskNotNow(taskID: task.id, wasStarted: task.startedAt != nil), to: day, at: moment)
+                // Начатую отпустили — сколько успели, тоже правда о деле.
+                let worked = task.startedAt.flatMap { TaskLifecycle.actualMinutes(from: $0, to: moment) }
+                return appending(.taskNotNow(taskID: task.id, wasStarted: task.startedAt != nil, workedMinutes: worked),
+                                 to: day, at: moment)
             }
             return Output(task: updated, record: record)
 

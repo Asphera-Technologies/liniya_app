@@ -44,6 +44,17 @@ nonisolated enum TaskExecutionText {
         }
     }
 
+    /// Короткий ответ над «Сейчас» после «Завершить»: «Сделано за 35 мин.»;
+    /// не начинали — сколько заняло, неизвестно: «Сделано.»
+    static func finished(_ task: LineaTask) -> String {
+        guard let minutes = task.actualMinutes else { return "Сделано." }
+        return "Сделано за \(RussianText.duration(minutes: minutes))."
+    }
+
+    /// Ответ на «Не сейчас» и «Не получается продолжить» — без упрёка: не «ты
+    /// снова отложил», а что Linea сделает дальше.
+    static let declined = "Хорошо, подберу другое."
+
     /// «в 11:05» сегодня, «вчера в 11:05», раньше — «в пт, 3 окт».
     private static func moment(_ date: Date, time: TimeContext) -> String {
         let clock = RussianText.clock(date, time: time)
