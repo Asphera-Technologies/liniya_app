@@ -70,6 +70,16 @@ nonisolated enum CognitiveDemand: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// Как выбрано место задачи после «Перенести» (`reschedule_mode`). Нет
+/// значения — день выбрал человек (`manual`).
+nonisolated enum RescheduleMode: String, Codable, Hashable, Sendable {
+    /// «Пусть Linea решит»: день и окно выбирает Linea и сама переставляет
+    /// задачу, если её день прошёл, а она не сделана (`AutoReschedule`).
+    case automatic
+    /// «Позже сегодня»: день — сегодня, окно позже нашла Linea.
+    case laterToday
+}
+
 /// A single task/plan item.
 nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
@@ -122,6 +132,9 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     /// Человек убрал задачу из планов. Она не показывается, но остаётся в
     /// данных: отменённое — тоже поведение.
     var cancelledAt: Date?
+    /// Кто выбрал место задачи после «Перенести»: «Пусть Linea решит» —
+    /// Linea, и она же переставит задачу, если день прошёл. `nil` — человек.
+    var rescheduleMode: RescheduleMode?
 
     init(
         id: UUID = UUID(),
@@ -146,7 +159,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         actualMinutes: Int? = nil,
         suggestionID: UUID? = nil,
         deferredUntil: Date? = nil,
-        cancelledAt: Date? = nil
+        cancelledAt: Date? = nil,
+        rescheduleMode: RescheduleMode? = nil
     ) {
         self.id = id
         self.title = title
@@ -171,6 +185,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         self.suggestionID = suggestionID
         self.deferredUntil = deferredUntil
         self.cancelledAt = cancelledAt
+        self.rescheduleMode = rescheduleMode
     }
 
     /// Мягкое чтение: задачи лежат и в документах дня (`DayRecord`), и
@@ -201,6 +216,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         suggestionID = try container.decodeIfPresent(UUID.self, forKey: .suggestionID)
         deferredUntil = try container.decodeIfPresent(Date.self, forKey: .deferredUntil)
         cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
+        rescheduleMode = try container.decodeIfPresent(RescheduleMode.self, forKey: .rescheduleMode)
     }
 
     // Duration without the user's estimate depends on what the task is —

@@ -29,29 +29,29 @@ struct TaskRescheduleTests {
 
     // MARK: Варианты
 
-    @Test("Задача на сегодня: завтра, на неделе, следующая неделя, без даты — «Сегодня» не предлагается")
+    @Test("Меню заказчика: Позже сегодня, Завтра, На неделе, Пусть Linea решит (и «Выбрать дату…» на экране)")
     func optionsForToday() {
         #expect(titles(task(date: WowFixture.today)) == [
-            "Завтра", "На неделе · до вс, 13 сен", "На следующей неделе · пн, 14 сен", "Без даты",
+            "Позже сегодня", "Завтра", "На неделе · до вс, 13 сен", "Пусть Linea решит",
         ])
     }
 
-    @Test("Без даты — можно дать день; просроченную — вернуть в сегодня; закрытую не переносят")
+    @Test("Без даты и просроченную — тоже «Позже сегодня»; задачу на другой день — «Сегодня»; закрытую не переносят")
     func optionsForOtherTasks() {
-        #expect(titles(task()) == ["Сегодня", "Завтра", "На неделе · до вс, 13 сен", "На следующей неделе · пн, 14 сен"])
-        #expect(titles(task(date: day(-1))).first == "Сегодня")
-        #expect(titles(task(date: day(1))) == ["Сегодня", "На неделе · до вс, 13 сен", "На следующей неделе · пн, 14 сен", "Без даты"])
+        #expect(titles(task()) == ["Позже сегодня", "Завтра", "На неделе · до вс, 13 сен", "Пусть Linea решит"])
+        #expect(titles(task(date: day(-1))).first == "Позже сегодня")
+        #expect(titles(task(date: day(1))) == ["Сегодня", "На неделе · до вс, 13 сен", "Пусть Linea решит"])
         let thisWeek = task(deadline: TaskDay.endOfWeek(time: time, profile: profile))
-        #expect(titles(thisWeek) == ["Сегодня", "Завтра", "На следующей неделе · пн, 14 сен", "Без даты"])
+        #expect(titles(thisWeek) == ["Позже сегодня", "Завтра", "Пусть Linea решит"])
         #expect(titles(task(date: WowFixture.today, isDone: true)).isEmpty)
     }
 
-    @Test("В воскресенье следующая неделя — это завтра: отдельного пункта нет")
-    func sundayHasNoSeparateNextWeek() {
-        let sunday = WowFixture.time(10, dayOffset: 4)
-        let options = titles(task(date: sunday.today), at: sunday)
-        #expect(options.contains("Завтра"))
-        #expect(!options.contains { $0.hasPrefix("На следующей неделе") })
+    @Test("Вечером, когда до конца рабочего дня меньше полутора часов, «Позже сегодня» нет")
+    func noLaterTodayInTheEvening() {
+        let evening = WowFixture.time(19, 45)
+        #expect(titles(task(date: WowFixture.today), at: evening) == [
+            "Завтра", "На неделе · до вс, 13 сен", "Пусть Linea решит",
+        ])
     }
 
     // MARK: Что станет с задачей

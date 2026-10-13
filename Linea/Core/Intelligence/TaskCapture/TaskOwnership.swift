@@ -65,10 +65,17 @@ nonisolated enum TaskOwnership {
     }
 
     /// Человек сохранил задачу: всё, что он поменял, становится его. Что он
-    /// задал раньше, его и остаётся.
+    /// задал раньше, его и остаётся. Сам поменял день или время (карточкой,
+    /// итогом дня, «Переносим») — место задачи снова выбирает он, а не Linea:
+    /// «Пусть Linea решит» снято. Если же сохранение само выбрало, кто ставит
+    /// задачу («Позже сегодня» в «Перенести»), так и остаётся.
     static func userEdited(previous: LineaTask, updated: LineaTask) -> LineaTask {
         var result = updated
-        result.userFields = previous.userFields.map { $0.union(changedFields(from: previous, to: updated)) }
+        let changed = changedFields(from: previous, to: updated)
+        result.userFields = previous.userFields.map { $0.union(changed) }
+        if updated.rescheduleMode == previous.rescheduleMode, !changed.isDisjoint(with: [.day, .startTime]) {
+            result.rescheduleMode = nil
+        }
         return result
     }
 

@@ -29,10 +29,27 @@ nonisolated enum TaskExecutionText {
         case .deferred:
             guard let until = task.deferredUntil else { return nil }
             let clock = RussianText.clock(until, time: time)
-            return time.isSameDay(until, time.now) ? "Не сейчас — до \(clock)" : "Не сейчас — до завтра, \(clock)"
-        case .inbox, .planned, .suggested, .cancelled:
+            switch task.rescheduleMode {
+            case .automatic?:
+                return "Время выбрала Linea: \(when(until, time: time))"
+            case .laterToday?:
+                return "Позже — с \(clock)"
+            case nil:
+                return time.isSameDay(until, time.now) ? "Не сейчас — до \(clock)" : "Не сейчас — до завтра, \(clock)"
+            }
+        case .planned:
+            // «Пусть Linea решит», а окно уже наступило или его не нашлось.
+            return task.rescheduleMode == .automatic ? "Время выбирает Linea" : nil
+        case .inbox, .suggested, .cancelled:
             return nil
         }
+    }
+
+    /// «14:30» сегодня, «завтра, 10:00», «чт, 16 окт, 10:00».
+    private static func when(_ date: Date, time: TimeContext) -> String {
+        let clock = RussianText.clock(date, time: time)
+        if time.isSameDay(date, time.now) { return clock }
+        return "\(AutoReschedule.dayPhrase(date, time: time)), \(clock)"
     }
 
     /// Подпись под строкой списка: только то, что меняет дело сейчас, —
