@@ -302,9 +302,11 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(now.staticTexts["Короткая — можно закрыть сразу."].exists, "У выбранного — своя причина")
 
         now.buttons["Начать"].tap()
+        minimizeFocus(app)
         XCTAssertTrue(now.buttons["Завершить"].waitForExistence(timeout: 10), "Начатое — «в работе» с «Завершить»")
         XCTAssertTrue(now.buttons["Не сейчас"].exists, "Начатое можно отложить")
         XCTAssertFalse(now.buttons["Другое"].exists, "У начатого «Другое» нет")
+        XCTAssertTrue(now.buttons["Развернуть"].exists, "Свёрнутый фокус можно развернуть")
         XCTAssertTrue(now.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Начато в")).firstMatch.exists)
         scrollTo(now, in: app)
         snapshot(app, "26 В работе")
@@ -347,6 +349,7 @@ final class LineaUITests: XCTestCase {
 
         // «Начать» — в работе: «Завершить» и «Не сейчас», без «Другое».
         now.buttons["Начать"].tap()
+        minimizeFocus(app)
         XCTAssertTrue(now.buttons["Завершить"].waitForExistence(timeout: 10), "Начатое — с «Завершить»")
         XCTAssertTrue(now.buttons["Не сейчас"].exists)
         XCTAssertFalse(now.buttons["Другое"].exists, "У начатого «Другое» нет")
@@ -388,6 +391,7 @@ final class LineaUITests: XCTestCase {
         bringAboveCommandBar(otherRow, in: app)
         otherRow.press(forDuration: 1.2)
         tapMenuItem(app, "Начать")
+        minimizeFocus(app)
         let startedOther = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@", other, "В работе с "))
             .firstMatch
         XCTAssertTrue(startedOther.waitForExistence(timeout: 5), "«Начать» из меню")
@@ -775,6 +779,79 @@ final class LineaUITests: XCTestCase {
         XCTAssertFalse(offer.exists, "После ответа вопрос не повторяется")
     }
 
+    // MARK: - 17. Фокус после «Начать»: название, сколько, с какого времени, «Завершить»
+
+    @MainActor
+    func test17FocusAfterStart() throws {
+        let app = launch()
+        addTask(app, "Подготовить презентацию сегодня 45 минут, важно")
+
+        // «Сейчас» → «Начать» — открывается фокус, а не помодоро.
+        openTab(app, "Сегодня", index: 0)
+        let now = nowCard(app)
+        XCTAssertTrue(now.waitForExistence(timeout: 15))
+        XCTAssertTrue(now.staticTexts["Подготовить презентацию"].waitForExistence(timeout: 5))
+        now.buttons["Начать"].tap()
+        let focusTitle = app.staticTexts["focus.title"]
+        XCTAssertTrue(focusTitle.waitForExistence(timeout: 10), "После «Начать» — фокус")
+        XCTAssertEqual(focusTitle.label, "Подготовить презентацию")
+        XCTAssertTrue(app.staticTexts["~45 мин"].exists, "Сколько отведено")
+        XCTAssertTrue(app.staticTexts["focus.started"].label.hasPrefix("Начато в "), app.staticTexts["focus.started"].label)
+        XCTAssertTrue(app.buttons["focus.finish"].exists)
+        XCTAssertTrue(app.buttons["Не получается продолжить"].exists)
+        XCTAssertTrue(app.staticTexts["Можно выйти из приложения — выполнение продолжается."].exists)
+        snapshot(app, "60 Фокус после «Начать»")
+
+        // Вышел из приложения и вернулся — дело всё ещё в работе.
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(focusTitle.waitForExistence(timeout: 10), "После возврата фокус на месте")
+        snapshot(app, "61 Фокус после возврата в приложение")
+
+        // «Свернуть» — на «Сегодня» дело «в работе», «Развернуть» возвращает фокус.
+        minimizeFocus(app)
+        XCTAssertTrue(now.buttons["Развернуть"].waitForExistence(timeout: 5), "Свёрнутый фокус можно развернуть")
+        scrollTo(now, in: app)
+        snapshot(app, "62 Фокус свёрнут")
+        now.buttons["Развернуть"].tap()
+        XCTAssertTrue(focusTitle.waitForExistence(timeout: 5), "Фокус снова открыт")
+
+        // «Завершить» — фокус закрылся, над «Сейчас» — сколько заняло.
+        app.buttons["focus.finish"].tap()
+        XCTAssertTrue(focusTitle.waitForNonExistence(timeout: 10), "После «Завершить» фокус закрыт")
+        let note = app.descendants(matching: .any).matching(identifier: "now.note").firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 10), "Linea отвечает на «Завершить»")
+        XCTAssertTrue(note.label.hasPrefix("Сделано за "), "Ответ: \(note.label)")
+        snapshot(app, "63 Сделано: сколько заняло")
+
+        // «Начать» в карточке задачи — фокус под карточкой, виден, когда её закрыли.
+        addTask(app, "Ответить клиенту сегодня 15 минут")
+        openTab(app, "План", index: 1)
+        let row = button(app, startingWith: "Ответить клиенту")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        bringAboveCommandBar(row, in: app)
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForExistence(timeout: 5))
+        app.buttons["Начать"].tap()
+        XCTAssertTrue(app.staticTexts["task.status"].waitForExistence(timeout: 5), "В карточке — «В работе с …»")
+        app.navigationBars["Задача"].buttons["Отмена"].tap()
+        XCTAssertTrue(focusTitle.waitForExistence(timeout: 10), "Карточку закрыли — фокус на экране")
+        XCTAssertEqual(focusTitle.label, "Ответить клиенту")
+        XCTAssertTrue(app.staticTexts["~15 мин"].exists)
+
+        // «Не получается продолжить» — Linea отпускает дело и подбирает другое.
+        app.buttons["Не получается продолжить"].tap()
+        XCTAssertTrue(focusTitle.waitForNonExistence(timeout: 10), "Фокус закрыт")
+        let released = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@",
+                                                        "Ответить клиенту", "Не сейчас — до ")).firstMatch
+        XCTAssertTrue(released.waitForExistence(timeout: 5), "Отпущенное дело — «Не сейчас»")
+        snapshot(app, "64 План после «Не получается продолжить»")
+        openTab(app, "Сегодня", index: 0)
+        XCTAssertTrue(note.waitForExistence(timeout: 10))
+        XCTAssertEqual(note.label, "Хорошо, подберу другое.")
+        snapshot(app, "65 Сегодня: «Хорошо, подберу другое.»")
+    }
+
     // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
 
     @MainActor
@@ -1082,6 +1159,16 @@ final class LineaUITests: XCTestCase {
             if current == last { return }
             last = current
         }
+    }
+
+    /// После «Начать» открывается фокус — свернуть его, чтобы продолжить на
+    /// экране под ним.
+    @MainActor
+    private func minimizeFocus(_ app: XCUIApplication) {
+        let minimize = app.buttons["focus.minimize"]
+        XCTAssertTrue(minimize.waitForExistence(timeout: 10), "После «Начать» открылся фокус")
+        minimize.tap()
+        XCTAssertTrue(minimize.waitForNonExistence(timeout: 5), "Фокус свернулся")
     }
 
     @MainActor
