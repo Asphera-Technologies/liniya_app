@@ -49,6 +49,11 @@ final class IntelligenceStore {
     /// Короткий ответ над «Сейчас» после «Завершить» или «Не сейчас» — «Сделано
     /// за 35 мин.», «Хорошо, подберу другое.» — пока открыт «Сегодня».
     private(set) var nowNote: String?
+    /// «Почему не сейчас?» — иногда, когда ответ поможет планировать
+    /// (`NotNowFeedback`). Пока открыт «Сегодня» и человек не взялся за другое.
+    private(set) var notNowQuestion: NotNowQuestion?
+    /// Задача, которую убрал ответ «Неактуально»: её можно «Вернуть».
+    private var removedTask: LineaTask?
     /// Чей фокус открыт поверх приложения (`TaskFocus`): «Начать» открывает,
     /// «Свернуть» закрывает, задача в работе — пока у неё есть `startedAt`.
     private(set) var focusTaskID: UUID?
@@ -74,6 +79,7 @@ final class IntelligenceStore {
     private let ratingUseCase: RecordDayRatingUseCase
     private let nextActionUseCase: NextActionUseCase
     private let executionUseCase = TaskExecutionUseCase()
+    private let notNowFeedback: NotNowFeedback
     private let records: any DayRecordRepository
     private let calibrations: any CalibrationRepository
     private let profiles: any UserProfileRepository
@@ -126,6 +132,7 @@ final class IntelligenceStore {
         self.respondUseCase = respond
         self.ratingUseCase = recordRating
         self.nextActionUseCase = NextActionUseCase(config: config)
+        self.notNowFeedback = NotNowFeedback(config: config)
         self.records = records
         self.calibrations = calibrations
         self.profiles = profiles
@@ -526,12 +533,77 @@ final class IntelligenceStore {
     }
 
     /// «Не сейчас» на «Сейчас»: предложенное или начатое откладывается на
-    /// полтора часа, Linea предлагает другое.
+    /// полтора часа, Linea предлагает другое — и иногда спрашивает почему.
     func notNowAction() async {
         guard let action = nextAction, let option = action.option,
               let task = planStore.tasks.first(where: { $0.id == option.taskID }) else { return }
-        await perform(.notNow, on: task, plannedMinutes: option.minutes)
+        await decline(task, plannedMinutes: option.minutes)
+    }
+
+    /// «Не сейчас» и «Не получается продолжить»: решить, спросить ли
+    /// причину, — по тому, как Linea видела задачу до отказа, — потом отложить.
+    private func decline(_ task: LineaTask, plannedMinutes: Int) async {
+        let time = self.time
+        let day = record.flatMap { time.isSameDay($0.day, time.now) ? $0 : nil }
+        let question = notNowFeedback.question(for: task, record: day, tasks: planStore.tasks,
+                                               calibration: calibration, time: time)
+        await perform(.notNow, on: task, plannedMinutes: plannedMinutes)
         nowNote = TaskExecutionText.declined
+        removedTask = nil
+        notNowQuestion = question
+        guard let question, let current = record, time.isSameDay(current.day, time.now) else { return }
+        let asked = notNowFeedback.asking(question, in: current, at: time.now)
+        apply(asked)
+        LineaLog.plan.notice("Почему не сейчас: спросила, начата \(question.wasStarted, privacy: .public)")
+        await save(asked, failure: "Вопрос «Почему не сейчас?» не записался")
+    }
+
+    /// Ответ на «Почему не сейчас?»: задача и план меняются по причине,
+    /// Linea коротко говорит, что сделает дальше.
+    func answerNotNow(_ reason: NotNowReason) async {
+        guard let question = notNowQuestion,
+              let task = planStore.tasks.first(where: { $0.id == question.taskID }) else {
+            notNowQuestion = nil
+            return
+        }
+        let time = self.time
+        let day = record.flatMap { time.isSameDay($0.day, time.now) ? $0 : nil }
+        let outcome = notNowFeedback.answer(reason, to: question, task: task, record: day,
+                                            calibration: calibration, time: time)
+        notNowQuestion = nil
+        nowNote = outcome.reply
+        removedTask = outcome.canUndo ? outcome.task : nil
+        LineaLog.plan.notice("Почему не сейчас: \(reason.rawValue, privacy: .public)")
+        executionsInFlight += 1
+        // День — раньше задачи: пересборка после сохранения задачи читает его.
+        if let updated = outcome.record {
+            apply(updated)
+            await save(updated, failure: "Ответ «Почему не сейчас?» не записался")
+        }
+        if outcome.task != task { await planStore.saveTask(outcome.task) }
+        executionsInFlight -= 1
+        await updateNextAction(time: self.time)
+    }
+
+    /// «Неактуально» убрало задачу — её можно вернуть, пока ответ на экране.
+    var canRestoreRemovedTask: Bool { removedTask != nil }
+
+    /// «Вернуть»: задача снова в планах, как была.
+    func restoreRemovedTask() async {
+        guard let removed = removedTask else { return }
+        let time = self.time
+        let day = record.flatMap { time.isSameDay($0.day, time.now) ? $0 : nil }
+        guard let restored = notNowFeedback.undo(removed, record: day, time: time) else { return }
+        removedTask = nil
+        nowNote = "Вернула в планы."
+        executionsInFlight += 1
+        if let updated = restored.record {
+            apply(updated)
+            await save(updated, failure: "«Вернуть» не записалось в день")
+        }
+        await planStore.restoreTask(restored.task)
+        executionsInFlight -= 1
+        await updateNextAction(time: self.time)
     }
 
     // MARK: - Фокус
@@ -561,11 +633,11 @@ final class IntelligenceStore {
     }
 
     /// «Не получается продолжить»: то же, что «Не сейчас» у начатой — Linea
-    /// отпускает задачу, записывает, сколько человек успел, и подбирает другое.
+    /// отпускает задачу, записывает, сколько человек успел, подбирает другое
+    /// и иногда спрашивает, что помешало.
     func stopFocus() async {
         guard let focus, let task = planStore.tasks.first(where: { $0.id == focus.taskID }) else { return }
-        await perform(.notNow, on: task, plannedMinutes: focus.minutes)
-        nowNote = TaskExecutionText.declined
+        await decline(task, plannedMinutes: focus.minutes)
     }
 
     /// После запуска приложения: дело, начатое до выхода, по-прежнему в работе —
@@ -581,6 +653,8 @@ final class IntelligenceStore {
     private func noteFinished(_ taskID: UUID) {
         guard let task = planStore.tasks.first(where: { $0.id == taskID }), task.isDone else { return }
         nowNote = TaskExecutionText.finished(task)
+        notNowQuestion = nil
+        removedTask = nil
     }
 
     // MARK: - Поддержка целей
@@ -622,10 +696,12 @@ final class IntelligenceStore {
         }
     }
 
-    /// «Сегодня» закрыт — ответы Linea больше не нужны.
+    /// «Сегодня» закрыт — ответы и вопрос Linea больше не нужны.
     func clearTodayNotes() {
         goalOfferConfirmation = nil
         nowNote = nil
+        notNowQuestion = nil
+        removedTask = nil
     }
 
     // MARK: - Выполнение задач
@@ -660,6 +736,8 @@ final class IntelligenceStore {
         if action == .start {
             focusTaskID = current.id
             nowNote = nil
+            notNowQuestion = nil
+            removedTask = nil
         } else if focusTaskID == current.id {
             focusTaskID = nil
         }

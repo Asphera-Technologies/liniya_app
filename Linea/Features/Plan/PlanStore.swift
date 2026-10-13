@@ -137,6 +137,19 @@ final class PlanStore {
         await saveTask(TaskReschedule().apply(target, to: task, profile: profile, time: timeProvider()))
     }
 
+    /// «Вернуть» сразу после «Неактуально»: убранная из планов задача снова в
+    /// них. Её нет в `tasks` (убранные не показываются), поэтому — обновление
+    /// по id, а не добавление.
+    func restoreTask(_ task: LineaTask) async {
+        do {
+            try await taskRepository.update(task)
+            await load()
+            await onPlanInputsChanged?()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// «Привязать к цели» из меню строки; `nil` — без цели.
     func linkTask(_ task: LineaTask, toGoal goalID: UUID?) async {
         guard task.goalID != goalID else { return }

@@ -136,6 +136,7 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(text: "Сейчас", trailing: action.isStarted ? "в работе" : nil)
                 nowNote
+                notNowQuestion
                 if let option = action.option {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(option.title)
@@ -207,6 +208,7 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(text: "Сейчас")
                 nowNote
+                notNowQuestion
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("today.now")
@@ -214,21 +216,66 @@ struct TodayView: View {
     }
 
     /// «Сделано за 35 мин.», «Хорошо, подберу другое.» — тихо, одной строкой.
+    /// После «Неактуально» рядом — «Вернуть».
     @ViewBuilder
     private var nowNote: some View {
         if let note = intelligence.nowNote {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: "checkmark")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(LineaColor.textSecondary)
-                    .accessibilityHidden(true)
-                Text(note)
-                    .font(LineaFont.rowTitle)
-                    .foregroundStyle(LineaColor.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: "checkmark")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .accessibilityHidden(true)
+                    Text(note)
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("now.note")
+                if intelligence.canRestoreRemovedTask {
+                    Spacer(minLength: 8)
+                    Button("Вернуть") {
+                        Task { await intelligence.restoreRemovedTask() }
+                    }
+                    .font(LineaFont.control)
+                    .tint(LineaColor.textPrimary)
+                    .accessibilityIdentifier("now.restore")
+                }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("now.note")
+        }
+    }
+
+    /// «Почему не сейчас?» — иногда, компактно: четыре ответа капсулами.
+    /// Отвечать не обязательно: вопрос уйдёт сам, когда закроешь «Сегодня».
+    @ViewBuilder
+    private var notNowQuestion: some View {
+        if let question = intelligence.notNowQuestion {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(question.title)
+                    .font(LineaFont.rowTitle)
+                    .foregroundStyle(LineaColor.textPrimary)
+                FlowLayout(spacing: 8) {
+                    ForEach(question.reasons, id: \.self) { reason in
+                        Button {
+                            Task { await intelligence.answerNotNow(reason) }
+                        } label: {
+                            Text(reason.title)
+                                .font(LineaFont.control)
+                                .foregroundStyle(LineaColor.textPrimary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(Capsule(style: .continuous).fill(LineaColor.fill))
+                                .contentShape(Capsule(style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("notNow.\(reason.rawValue)")
+                    }
+                }
+            }
+            .padding(.bottom, 6)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("now.question")
         }
     }
 
