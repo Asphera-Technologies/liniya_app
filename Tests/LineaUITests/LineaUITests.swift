@@ -992,6 +992,55 @@ final class LineaUITests: XCTestCase {
         app.navigationBars["Задача"].buttons["Отмена"].tap()
     }
 
+    // MARK: - 20. Мягкий обзор прогресса: «На этой неделе»
+
+    @MainActor
+    func test20WeeklyReview() throws {
+        let app = launch()
+        openTab(app, "План", index: 1)
+        createQuickGoal(app, "Запустить Линия Beta")
+        createQuickGoal(app, "Увеличить продажи Asphera")
+        let titles = ["Отправить договор клиенту", "Подготовить отчёт для клиента", "Подготовить релиз", "Проверить сборку"]
+        addTask(app, "Отправить договор клиенту сегодня 60 минут")
+        addTask(app, "Подготовить отчёт для клиента сегодня 60 минут")
+        addTask(app, "Подготовить релиз сегодня 30 минут для цели Beta")
+        addTask(app, "Проверить сборку сегодня 15 минут для цели Beta")
+
+        // Неделя: две задачи к цели и две — текущие обязательства, все закрыты.
+        openTab(app, "План", index: 1)
+        let closed = app.buttons.matching(NSPredicate(format: "label == %@", "Отметить невыполненной"))
+        for (index, title) in titles.enumerated() {
+            let row = button(app, startingWith: title)
+            XCTAssertTrue(row.waitForExistence(timeout: 5), "Задача «\(title)»")
+            bringAboveCommandBar(row, in: app)
+            row.swipeRight()
+            let deadline = Date().addingTimeInterval(5)
+            while closed.count < index + 1, Date() < deadline { Thread.sleep(forTimeInterval: 0.25) }
+            XCTAssertEqual(closed.count, index + 1, "«\(title)» закрыта")
+        }
+
+        let week = app.descendants(matching: .any).matching(identifier: "plan.week").firstMatch
+        XCTAssertTrue(week.waitForExistence(timeout: 10), "В «Плане» — обзор недели")
+        XCTAssertTrue(week.staticTexts["На этой неделе"].exists)
+        let lines = app.descendants(matching: .any).matching(identifier: "plan.week.goal")
+        XCTAssertTrue(lines.element(boundBy: 0).label.contains("Запустить Линия Beta"), lines.element(boundBy: 0).label)
+        XCTAssertTrue(lines.element(boundBy: 0).label.contains("2 продвижения"), lines.element(boundBy: 0).label)
+        XCTAssertTrue(lines.element(boundBy: 1).label.contains("Увеличить продажи Asphera"), lines.element(boundBy: 1).label)
+        XCTAssertTrue(lines.element(boundBy: 1).label.contains("пока без продвижений"), lines.element(boundBy: 1).label)
+        let observation = app.staticTexts["plan.week.observation"]
+        XCTAssertEqual(observation.label,
+                       "Большая часть недели ушла на текущие обязательства. По «Запустить Линия Beta» получилось продвинуться дважды.")
+        scrollTo(observation, in: app)
+        snapshot(app, "76 На этой неделе")
+
+        // Прошлая неделя — свой обзор, без «пока».
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Предыдущ")).firstMatch.tap()
+        XCTAssertTrue(week.waitForExistence(timeout: 5))
+        XCTAssertTrue(week.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "На неделе ")).firstMatch.exists,
+                      "Прошлая неделя подписана датами")
+        snapshot(app, "77 Обзор прошлой недели")
+    }
+
     // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
 
     @MainActor
