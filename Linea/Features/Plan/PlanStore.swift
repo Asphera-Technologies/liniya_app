@@ -238,6 +238,15 @@ final class PlanStore {
 
     var time: TimeContext { timeProvider() }
 
+    /// «На этой неделе»: сколько продвижений по каждой цели и одно
+    /// наблюдение — для недели, которую показывает «План». Встречи — из
+    /// календаря за эту неделю. В режиме «Месяц» и для недель впереди — нет.
+    func weeklyReview(meetings: [Commitment]) -> WeeklyReview? {
+        guard scope == .week else { return nil }
+        return WeeklyReviewBuilder().review(week: visibleInterval, goals: goals, tasks: tasks,
+                                            meetings: meetings, time: timeProvider())
+    }
+
     // MARK: - Derived: Today
 
     /// The single most important open task to surface on Today. Prefers tasks

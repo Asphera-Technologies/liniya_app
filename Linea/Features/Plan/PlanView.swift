@@ -50,6 +50,7 @@ struct PlanView: View {
                 }
 
                 goalsSection
+                weekSection
                 inboxSection
                 tasksSection
                 calendarSection
@@ -93,6 +94,48 @@ struct PlanView: View {
                 }
             }
             addRow(title: "Цель", identifier: "plan.addGoal") { editingGoal = .new }
+        }
+    }
+
+    // MARK: Week
+
+    /// «На этой неделе» — мягкий обзор: продвижения по каждой цели и одно
+    /// наблюдение, на что ушла неделя. Без оценок; тексты — из ядра
+    /// (`WeeklyReviewBuilder`).
+    @ViewBuilder
+    private var weekSection: some View {
+        if let review = plan.weeklyReview(meetings: calendarEvents) {
+            VStack(alignment: .leading, spacing: 4) {
+                SectionLabel(text: review.title)
+                VStack(spacing: 0) {
+                    ForEach(Array(review.goals.enumerated()), id: \.element.id) { index, line in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(line.title)
+                                .font(LineaFont.rowTitle)
+                                .foregroundStyle(LineaColor.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 8)
+                            Text(line.summary)
+                                .font(LineaFont.caption)
+                                .foregroundStyle(line.advances > 0 ? LineaColor.textSecondary : LineaColor.textTertiary)
+                        }
+                        .padding(.vertical, 12)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("plan.week.goal")
+                        if index < review.goals.count - 1 { LineaHairline() }
+                    }
+                }
+                if let observation = review.observation {
+                    Text(observation)
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 6)
+                        .accessibilityIdentifier("plan.week.observation")
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("plan.week")
         }
     }
 
