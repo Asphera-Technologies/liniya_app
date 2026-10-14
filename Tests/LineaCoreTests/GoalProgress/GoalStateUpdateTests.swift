@@ -81,6 +81,7 @@ struct GoalStateUpdateTests {
         goal.metrics = [GoalMetric(id: id(7), unit: "пользователей", current: 5, target: 50)]
         let update = reader.read("Уже 18 пользователей, лендинг сделали", goal: goal)
         #expect(update.metrics == [GoalStateUpdate.MetricChange(metricID: id(7), unit: "пользователей", from: 5, to: 18)])
+        #expect(update.metrics.map { GoalStateUpdate.line($0, goal: goal) } == ["18 из 50 пользователей · было 5"])
         let applied = reader.applied(update, to: goal, at: time.now)
         #expect(applied.metrics.first?.current == 18)
         #expect(applied.progressMethod == .hybrid)

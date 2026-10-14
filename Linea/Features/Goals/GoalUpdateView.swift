@@ -131,7 +131,7 @@ struct GoalUpdateView: View {
                         .accessibilityIdentifier("goal.update.item")
                 }
                 ForEach(proposal.metrics, id: \.metricID) { change in
-                    Text("\(GoalProgressText.amount(change.to, unit: change.unit)) · было \(GoalProgressText.number(change.from))")
+                    Text(GoalStateUpdate.line(change, goal: goal))
                         .font(LineaFont.rowTitle)
                         .foregroundStyle(LineaColor.textPrimary)
                         .accessibilityIdentifier("goal.update.metric")

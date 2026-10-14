@@ -83,6 +83,16 @@ nonisolated struct GoalStateUpdate: Hashable, Sendable {
         "\(item.status.mark) \(item.title) — \(statusText(item.status, for: item.title))"
     }
 
+    /// «18 из 50 пользователей · было 5» — число так же, как в карточке цели.
+    static func line(_ change: MetricChange, goal: LineaGoal) -> String {
+        let was = "было \(GoalProgressText.compact(change.from))"
+        guard var metric = goal.metrics.first(where: { $0.id == change.metricID }) else {
+            return "\(GoalProgressText.amount(change.to, unit: change.unit)) · \(was)"
+        }
+        metric.current = change.to
+        return "\(GoalProgressText.metric(metric)) · \(was)"
+    }
+
     /// «Новый фокус: закончить onboarding и подключить аналитику.»
     var focusSentence: String? { Self.focusSentence(focus) }
 
