@@ -111,3 +111,8 @@
 | Позже сегодня | `TaskReschedule.Target.laterToday`, `RescheduleMode.laterToday` | Перенос внутри дня: первое окно не раньше чем через полтора часа |
 | Пусть Linea решит | `AutoReschedule`, `RescheduleMode.automatic` | `reschedule_mode = automatic`: день и окно выбирает Linea и переставляет задачу сама, если день прошёл |
 | Обзор недели | `WeeklyReview`, `WeeklyReviewBuilder` | «На этой неделе»: продвижения по каждой цели и одно наблюдение, на что ушла неделя; без оценок |
+| Оценка длительности | `DurationEstimator`, `DurationEstimate`, `DurationSource` | Сколько займёт задача, если человек не сказал: `learned` — по похожим задачам с известной длительностью, `ai` — по словам и типу; `user` — сказал человек |
+| Защищённое окно | `GoalWindowPolicy`, `PlanBlockKind.goal`, `GoalWindowNow` | Время для цели, которое Linea с разрешения оставляет в плане каждый день; весит больше обычных задач, срочное и встречи его передвигают |
+| Обновить состояние | `GoalUpdateReader`, `GoalStateUpdate` | «Что изменилось?» → ✓ ● ○ по этапам, числа, стадия, «Новый фокус»; меняется только после «Подтвердить» |
+| Новый фокус | `LineaGoal.nextActions` | `next_actions`: ближайшие шаги цели словами — «Закончить onboarding», «Подключить аналитику» |
+| История состояния | `LineaGoal.stateHistory`, `GoalStateNote` | Прежние «Что уже сделано»: обновление их не стирает |

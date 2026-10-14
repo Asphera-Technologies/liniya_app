@@ -1690,3 +1690,163 @@ notNowAnswers/reportedLowEnergy`), `Linea/Core/Intelligence/Execution/NotNowFeed
 
 **Заголовок** — «На этой неделе»; прошлая — «На неделе 5–11 окт», через
 границу месяца — «На неделе 28 сен – 4 окт».
+
+## 35. Оценка длительности
+
+Решение — ADR-045. Код — `Linea/Core/Domain/Models/DurationEstimate.swift`
+(`DurationSource`, `DurationEstimate`, `DurationText`),
+`Linea/Core/Intelligence/Classification/DurationEstimator.swift`,
+`QuickTaskDraft.resolve(history:)`, `TaskOwnership`, `PlanDuration`; в
+приложении — `QuickAddStore.resolution`, `PlanStore.estimated`, «Сколько
+займёт» в `TaskEditorView`. Тесты —
+`Tests/LineaCoreTests/Classification/DurationEstimatorTests.swift`.
+
+**Оценка** (`DurationEstimator.estimate(title:kind:history:time:)`):
+1. `learned` — закрытые, не отменённые задачи с `actualMinutes`, закрытые за
+   90 дней (`historyDays`) и не позже сейчас. Слово оценки названия
+   (`entry(for:)`) есть — похожие с тем же словом (`Entry.key`), нужно 3
+   (`minimumSamples`); нет — без слова и того же типа, нужно 5
+   (`minimumKindSamples`). Медиана, до 5 минут, не меньше 5; `samples` —
+   сколько.
+2. `ai` — минуты слова; нет слова — `TaskKind.typicalMinutes`.
+
+**Слово оценки** (`entry(for:)`): слова строчными, «ё» → «е». Первое слово —
+быстрое действие (`isQuickAction`: ответить, отправить/переслать/скинуть,
+напомнить/подтвердить/уточнить, перезвонить — 10; позвонить, звонок — 15;
+оплатить — 10; заказать/продлить/записаться — 15; купить — 30) — оно.
+Иначе — самое долгое из найденных: написать — 15, сообщение — 10, письмо —
+15, проверить/посмотреть/прочитать/согласовать/разобрать — 30, изучить —
+60, встреча/созвон/совещание/планёрка/интервью/собеседование — 60,
+презентация, отчёт, предложение (КП, смета, резюме), текст — 60, договор,
+бриф — 30, статья, доклад — 90, стратегия, исследование, архитектура — 90,
+анализ, релиз — 60, дизайн/макет/прототип — 90, разработать/реализовать —
+120, уборка — 60, приготовить — 45, тренировка/пробежка/зал/бег — 60.
+
+**Где.** Быстрый ввод: длительность не сказана и не выбрана —
+`QuickTaskResolution.estimate`, серый чип показывает `estimatedMinutes`,
+задача сохраняется с `estimatedMinutes` и `estimatedDurationSource` (`user`
+— сказана или выбрана; иначе источник оценки); `.duration` в `userFields` —
+только у `user`. Задача без длительности, сохранённая через `PlanStore`
+(человек снял свою в карточке), получает оценку там же (`estimated`), и
+`.duration` из `userFields` уходит.
+
+**Чья.** `TaskOwnership.userEdited`: человек поменял длительность — источник
+`user` (сняли — пусто, оценит `PlanStore`); экран может отметить выбор и без
+смены значения (`updated.userFields` объединяются). `refreshedAfterEdit`:
+переименование — у оценки Linea (`isDurationEstimatedByLinea`) новая по
+словам (`rules`), источник `ai`; у человека и у старых задач (`userFields`
+nil) — нет.
+
+**План.** `PlanDuration.minutes`: `learned` — как есть, остальное — ×
+`calibration.estimateMultiplier`.
+
+**Тексты** (`DurationText.estimate`): «~10 мин — оценка Linea», «~25 мин —
+по твоим похожим задачам»; у длительности человека — nil.
+
+## 36. Защищённое окно под цель
+
+Решение — ADR-046. Код — `GoalWindowPolicy` (`GoalModels.swift`),
+`LineaGoal.protectedWindow`, `PlanBlockKind.goal`, `PlanBlock.goalID`,
+`DecisionEngine.placeAroundGoalWindows/protectedGoals/isUrgent/reserve`,
+`GoalStepScope.advanceTitle`, `GoalWindow.protectedTaskID/protectedTask`,
+`GoalWindowNow`, `NowReason.goalWindow`, `NextActionUseCase.windowAction`,
+`FeedbackKind.goalWindowDeclined`; в приложении — «Защищённое окно» в
+`GoalEditorView`, `IntelligenceStore.startAction/notNowAction`, строка блока
+в `PlanBlockRow`. Тесты — `Tests/LineaCoreTests/GoalSupport/ProtectedWindowTests.swift`.
+
+**Разрешение** — `GoalWindowPolicy`: `minutes` (30 или 60, не меньше 10),
+`partOfDay` (`morning` — от начала рабочего дня до 12:00, `afternoon` —
+12–17, `evening` — с 17:00 до конца рабочего дня, `any` — весь рабочий
+день), `weekdaysOnly`. Подпись — «30 мин · вечером», «1 ч · когда свободно ·
+по будням».
+
+**Кому окно сегодня** (`protectedGoals`): активные невыполненные цели с
+разрешением; по будням — не в субботу и воскресенье; блока цели нет среди
+сохранённых (окно прожито или закреплено) и задачи окна на этот день нет
+(`protectedTaskID`). Важнее — раньше.
+
+**План** (`placeAroundGoalWindows`, только если такие цели есть; иначе
+расстановка как в §7):
+1. срочные кандидаты (`isUrgent`: срок раньше начала завтрашнего дня, или
+   день задачи прошёл) — обычной расстановкой во все окна дня;
+2. окна целей по очереди (`reserve`): первое место в своей части дня, где
+   окно помещается целиком; нет — первое после начала своей части; нет —
+   любое; нет нигде — без окна. Блок «Продвинуть «…»» (`advanceTitle`), вокруг
+   — буфер, как у задач;
+3. остальные кандидаты — в оставшееся время, нагрузка — с учётом срочных и
+   минут окон.
+
+**«Сейчас»** (`GoalWindowNow.current`: блок `.goal` идёт сейчас, его цель
+активна, `goalWindowDeclined` по ней сегодня не было): выбор человека в
+«Другое» сильнее; иначе — первая уместная задача цели, причина
+`.goalWindow` («Сейчас время для цели «…» — до 18:00.»); задач нет — само
+окно (`windowAction`): `Option(taskID: protectedTaskID, title: ближайший шаг
+цели или «Продвинуть «…»», minutes: до конца окна, не меньше 10,
+windowGoalID)`, «Другое» — уместные задачи. «Начать» на окне —
+`GoalWindow.protectedTask` (сегодня, остаток окна, цель; `userFields` —
+день, длительность, цель) сохраняется и начинается; «Не сейчас» — ответ
+`declined` предложению и отклик `goalWindowDeclined`.
+
+## 37. Обновить состояние цели
+
+Решение — ADR-047. Код — `Linea/Core/Intelligence/GoalProgress/GoalStateUpdate.swift`
+(`GoalStateUpdate`, `GoalUpdateReader`), `GoalMilestone.state`,
+`GoalStateNote`, `LineaGoal.nextActions/stateHistory`; в приложении —
+`GoalUpdateStore`, `GoalUpdateView`, «Обновить состояние» и «Новый фокус» в
+`GoalEditorView`, состояние этапа в `GoalProgressEditor`. Тесты —
+`Tests/LineaCoreTests/GoalProgress/GoalStateUpdateTests.swift`.
+
+| Постановка | Linea |
+|---|---|
+| `current_state` | `LineaGoal.currentState` — сказанное; прежнее — в `stateHistory` |
+| `stage` | `LineaGoal.stage` |
+| `milestones` | `LineaGoal.milestones`: закрытые — `completedAt`; `state` — `inProgress` / `almostDone` |
+| `progress` | по методу цели (§27) из обновлённых этапов и чисел |
+| `next_actions` | `LineaGoal.nextActions` — «Новый фокус» |
+
+**Разбор** (`GoalUpdateReader.read(_:goal:)`, цель не меняется):
+1. части (`clauses`): разделители `. , ; ! ?` и перевод строки, слова «но»,
+   «а», «однако», «зато»;
+2. признак (`status`), по старшинству: слово «не» — `notStarted`; «почти»,
+   «доделыва…», «заканчива…», «финиш…» — `almostDone`; «процесс…»,
+   «делаем», «занимаем…», «работаем», «начали», «идёт», «пилим», «в работе»,
+   «готовим» — `inProgress`; «уже» или «готов…», «сделал…», «законч…»,
+   «заверш…», «запустил…», «выпустил…», «подключил…», «настроил…»,
+   «сдали», «прошли», «отправил…», «залил…», «опубликова…», «собрал…»,
+   «внедрил…», «интегрировал…», «добавил…», «реализова…», «написал…»,
+   «есть» — `done`; признака нет — часть пропускается;
+3. о чём речь (`subjects`): слова без признаков и служебных; «и» делит на
+   предметы; совпало с единицей числа цели — это число, не этап;
+4. этап (`milestone(for:in:)`) — больше всего общих основ; нет — новый, название
+   (`title(from:)`): «-у» после согласной → «-а», «-ию» → «-ия», первая
+   заглавная;
+5. стадия (`stage(in:stages:)`): названа в части не `notStarted` — у
+   `done` — следующая за ней, иначе она; только вперёд от текущей;
+6. числа (`metricChanges`): `GoalMetricReader` → число цели или своё с той
+   же единицей, если значение другое;
+7. фокус: `almostDone` и `inProgress` — «Закончить <как сказано>»,
+   `notStarted` — глагол из сказанного (`infinitives`: «подключали» →
+   «подключить», «делали» → «сделать», «начинали» → «начать» …) + как
+   сказано, без глагола — «Начать «…»».
+
+**Строки** (`GoalStateUpdate.line`): «✓ … — завершено», «● … — почти
+готов/готова/готово», «● … — в процессе», «○ … — не начат/начата/начато» —
+род по окончанию первого слова (латиница — мужской). «Новый фокус: закончить
+onboarding и подключить аналитику.» (`focusSentence`).
+
+**Применить** (`applied(_:to:at:)`, после «Подтвердить»): у знакомых
+незакрытых этапов — закрытие или `state`; закрытые не трогаются; новые —
+в конец. Появились новые этапы — метод: `metric` → `hybrid`, `manual` и
+`qualitative` → `milestones`. Числа — `current`, стадия, `currentState` —
+сказанное (прежнее непустое и другое — `GoalStateNote` в `stateHistory`),
+`nextActions` — фокус. Сохраняется `PlanStore.saveGoal`: `GoalRevision`
+пишет закрытые этапы, числа ближе к цели и стадию вперёд в `progressLog`,
+`lastReviewedAt` — сейчас, план пересчитывается.
+
+**Экран.** «Обновить состояние» в «Где сейчас» → лист: «Что изменилось?»,
+поле, «Рассказать», «Разобрать»; потом «Обновлю состояние», строки, числа
+(«18 из 50 пользователей · было 5»), «Стадия — …», «Новый фокус: …»,
+[Подтвердить] [Изменить]. Пусто — «Этапов и чисел в словах не нашла —
+обновлю только «Что уже сделано».» После «Подтвердить» карточка — уже с
+сохранённой целью; под «Что уже сделано» — «Раньше (…): …», ниже — «Новый
+фокус: …»; у идущих этапов — «почти готов», «в процессе».
