@@ -48,8 +48,8 @@ struct ProtectedWindowTests {
         #expect(block.goalID == beta.id)
         #expect(block.taskID == nil, "Не задача")
         #expect(PlanFixture.overlaps(day.blocks) == false)
-        #expect(GoalWindowPolicy(minutes: 30, partOfDay: .evening).summary == "30 мин · вечером")
-        #expect(GoalWindowPolicy(minutes: 60, partOfDay: .any, weekdaysOnly: true).summary == "1 ч · когда свободно · по будням")
+        #expect(GoalWindowPolicy(minutes: 30, partOfDay: .evening).summary == "Каждый день · 30 мин · вечером")
+        #expect(GoalWindowPolicy(minutes: 60, partOfDay: .any, weekdaysOnly: true).summary == "По будням · 1 ч · когда свободно")
     }
 
     @Test("Повышенный вес: обычные задачи окно не занимают, даже если дня на всё не хватает")

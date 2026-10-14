@@ -200,11 +200,10 @@ nonisolated struct GoalWindowPolicy: Codable, Hashable, Sendable {
         self.weekdaysOnly = weekdaysOnly
     }
 
-    /// «30 мин · вечером», «1 ч · когда свободно · по будням».
+    /// «Каждый день · 30 мин · вечером», «По будням · 1 ч · когда свободно».
     var summary: String {
-        var parts = [RussianText.duration(minutes: minutes), partOfDay.title.lowercased()]
-        if weekdaysOnly { parts.append("по будням") }
-        return parts.joined(separator: " · ")
+        [weekdaysOnly ? "По будням" : "Каждый день", RussianText.duration(minutes: minutes), partOfDay.title.lowercased()]
+            .joined(separator: " · ")
     }
 }
 

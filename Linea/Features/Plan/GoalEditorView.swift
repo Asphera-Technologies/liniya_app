@@ -442,8 +442,7 @@ struct GoalEditorView: View {
                     Text("Защищённое окно")
                         .font(LineaFont.rowTitle)
                         .foregroundStyle(LineaColor.textPrimary)
-                    Text(draft.protectedWindow.map { "Каждый день · \($0.summary)" }
-                         ?? "Linea будет оставлять в плане время для цели")
+                    Text(draft.protectedWindow?.summary ?? "Linea будет оставлять в плане время для цели")
                         .font(LineaFont.caption)
                         .foregroundStyle(LineaColor.textTertiary)
                         .accessibilityIdentifier("goal.window.summary")
