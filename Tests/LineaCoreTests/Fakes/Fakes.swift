@@ -35,6 +35,19 @@ nonisolated struct FakeContextProvider: ContextProvider {
     }
 }
 
+/// Источник, который не отвечает вовсе и отмену не слышит — как Apple Health,
+/// зависший на только что загруженном симуляторе.
+nonisolated struct HangingContextProvider: ContextProvider {
+    let id: ProviderID
+    var displayName: String { id.rawValue }
+    var provides: Set<SignalKind> { [] }
+
+    func fetchContext(_ request: ContextRequest) async throws -> ProviderFetchResult {
+        await withUnsafeContinuation { (_: UnsafeContinuation<Void, Never>) in }
+        return ProviderFetchResult(signals: [], status: .ready)
+    }
+}
+
 final class InMemoryDayRecordRepository: DayRecordRepository {
     private var records: [Date: DayRecord] = [:]
 

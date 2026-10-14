@@ -42,6 +42,20 @@ struct ContextEngineTests {
         #expect(snapshot.signals.allSatisfy { $0.source == .healthKit })
     }
 
+    @Test("Источник, который завис и не слышит отмену, тоже не задерживает утро")
+    func hangingProvider() async {
+        let engine = ContextEngine(
+            providers: [
+                FakeContextProvider(id: .healthKit, signals: WowFixture.hrvSignals),
+                HangingContextProvider(id: .calendar),
+            ],
+            timeout: .milliseconds(100)
+        )
+        let snapshot = await capture(engine)
+        #expect(snapshot.providerStatuses[.calendar] == .timedOut)
+        #expect(snapshot.providerStatuses[.healthKit] == .ready)
+    }
+
     @Test("Одинаковые сигналы схлопываются, порядок не зависит от гонки")
     func deduplicationAndOrder() async {
         let doubled = WowFixture.hrvSignals + WowFixture.hrvSignals

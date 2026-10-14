@@ -86,24 +86,18 @@ nonisolated struct ContextEngine: Sendable {
 }
 
 /// Runs one provider under a timeout, turning every failure into a status.
+/// The timeout holds even for a provider that never answers and ignores
+/// cancellation (`withDeadline`): a stuck Apple Health must not stop the day
+/// from being planned.
 private func fetch(
     _ provider: any ContextProvider,
     request: ContextRequest,
     timeout: Duration
 ) async -> ProviderFetchResult {
     do {
-        return try await withThrowingTaskGroup(of: ProviderFetchResult?.self) { group in
-            group.addTask { try await provider.fetchContext(request) }
-            group.addTask {
-                try await Task.sleep(for: timeout)
-                return nil
-            }
-            // The first task to finish wins; the loser is cancelled.
-            let winner = try await group.next() ?? nil
-            group.cancelAll()
-            guard let winner else { return ProviderFetchResult(signals: [], status: .timedOut) }
-            return winner
-        }
+        return try await withDeadline(timeout) { try await provider.fetchContext(request) }
+    } catch is DeadlineExceeded {
+        return ProviderFetchResult(signals: [], status: .timedOut)
     } catch let error as ProviderError {
         switch error {
         case .unauthorized: return ProviderFetchResult(signals: [], status: .unauthorized)
