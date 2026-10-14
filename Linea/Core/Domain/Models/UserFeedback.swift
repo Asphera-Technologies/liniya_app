@@ -47,6 +47,9 @@ nonisolated enum FeedbackKind: Codable, Hashable, Sendable {
     /// Убранную из планов задачу вернули («Вернуть» после «Неактуально»):
     /// прежнее `taskCancelled` больше не в силе.
     case taskRestored(taskID: UUID)
+    /// «Не сейчас» на защищённом окне цели: в этот день «Сейчас» окно больше
+    /// не предлагает, время в плане остаётся.
+    case goalWindowDeclined(goalID: UUID)
 }
 
 /// Задача сделана: сколько было отведено и сколько ушло на самом деле.

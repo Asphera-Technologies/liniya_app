@@ -17,6 +17,34 @@
 import Foundation
 
 nonisolated enum GoalWindow {
+    /// Задача защищённого окна (ADR-046) появляется, когда человек нажал
+    /// «Начать» на окне в «Сейчас». Id — один на цель и день: по нему план
+    /// видит, что окно сегодня уже взято в работу, и не резервирует второе.
+    static func protectedTaskID(goalID: UUID, day: Date, time: TimeContext) -> UUID {
+        let days = Int(time.startOfDay(day).timeIntervalSinceReferenceDate / 86_400)
+        var text = goalID.uuidString
+        text.removeLast(8)
+        text += String(format: "%08X", max(0, days))
+        return UUID(uuidString: text) ?? goalID
+    }
+
+    /// «Начать» на защищённом окне: задача к цели на остаток окна, сегодня.
+    /// День, длительность и цель выбрал человек, когда разрешил окно.
+    static func protectedTask(for goal: LineaGoal, title: String, minutes: Int, time: TimeContext) -> LineaTask {
+        LineaTask(
+            id: protectedTaskID(goalID: goal.id, day: time.today, time: time),
+            title: title,
+            date: time.today,
+            priority: .normal,
+            createdAt: time.now,
+            estimatedMinutes: minutes,
+            cognitiveDemand: .normal,
+            goalID: goal.id,
+            userFields: [.day, .duration, .goal],
+            estimatedDurationSource: .user
+        )
+    }
+
     static func task(for goal: LineaGoal, offer: GoalOffer, id: UUID, time: TimeContext) -> LineaTask {
         LineaTask(
             id: id,

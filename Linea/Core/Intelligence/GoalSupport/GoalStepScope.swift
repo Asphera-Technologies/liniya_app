@@ -37,6 +37,13 @@ nonisolated struct GoalStepScope: Hashable, Sendable {
         return "Окно для цели \(RussianText.quoted(goalTitle))"
     }
 
+    /// Защищённое окно в плане (ADR-046): «Продвинуть «Linea Beta»», у общей
+    /// цели — «Продвинуть свою часть: Новые enterprise-клиенты…».
+    var advanceTitle: String {
+        if let part { return "Продвинуть свою часть: \(part)" }
+        return "Продвинуть \(RussianText.quoted(goalTitle))"
+    }
+
     /// Текст для модели, которая когда-нибудь будет раскладывать цель на
     /// шаги: у общей цели — часть человека, а цель всех — только как фон.
     var decompositionBrief: String {

@@ -21,6 +21,9 @@ nonisolated enum PlanBlockKind: String, Codable, Hashable, Sendable {
     case commitment
     case meal
     case rest
+    /// Защищённое окно под цель (ADR-046): время, которое Linea оставила для
+    /// цели с разрешения человека. Не задача и не событие календаря.
+    case goal
 }
 
 /// Per-component scores that produced a block's total — kept for
@@ -68,6 +71,8 @@ nonisolated struct PlanBlock: Codable, Hashable, Sendable, Identifiable {
     let id: String
     var kind: PlanBlockKind
     var taskID: UUID?
+    /// Цель защищённого окна (`kind == .goal`).
+    var goalID: UUID?
     var title: String
     var start: Date
     var end: Date
@@ -82,6 +87,7 @@ nonisolated struct PlanBlock: Codable, Hashable, Sendable, Identifiable {
         id: String,
         kind: PlanBlockKind,
         taskID: UUID? = nil,
+        goalID: UUID? = nil,
         title: String,
         start: Date,
         end: Date,
@@ -93,6 +99,7 @@ nonisolated struct PlanBlock: Codable, Hashable, Sendable, Identifiable {
         self.id = id
         self.kind = kind
         self.taskID = taskID
+        self.goalID = goalID
         self.title = title
         self.start = start
         self.end = max(start, end)

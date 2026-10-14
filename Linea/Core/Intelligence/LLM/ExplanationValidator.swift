@@ -91,7 +91,7 @@ nonisolated struct ExplanationValidator: Sendable {
                 switch reason {
                 case .fitsBeforeLater(_, _, let minutesLeft, _), .fitsWindow(_, _, let minutesLeft):
                     addMinutes(minutesLeft)
-                case .startsAt(let date), .deadline(let date, _, _):
+                case .startsAt(let date), .deadline(let date, _, _), .goalWindow(_, let date):
                     add(RussianText.clock(date, time: time))
                 case .unblocks(let count, _):
                     add("\(count)")

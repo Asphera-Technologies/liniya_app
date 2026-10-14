@@ -152,6 +152,8 @@ nonisolated struct RuleBasedExplainer: TextRenderer, Explainer {
             return "Назначена на \(facts.clock(start))."
         case .lighter:
             return "Это полегче — пока сил немного."
+        case .goalWindow(let goal, let until):
+            return "Сейчас время для цели \(RussianText.quoted(goal)) — до \(facts.clock(until))."
         case .overdue:
             return "Срок уже прошёл — лучше закрыть сейчас."
         case .missedDay:

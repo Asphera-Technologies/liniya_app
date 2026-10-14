@@ -142,6 +142,59 @@ nonisolated struct GoalMilestone: Identifiable, Hashable, Codable, Sendable {
 /// Чья цель (`scope`): только человека, его команды или всей компании.
 /// У командной и общей цели прогресс — общий, а у человека — своя часть
 /// (`LineaGoal.ownerScope`) и свой вклад; это разные вещи (ADR-038).
+/// Защищённое окно под цель (ADR-046): если человек разрешил, Linea каждый
+/// день оставляет в плане время для цели — «17:30–18:00 Продвинуть «Linea
+/// Beta»». Это не событие календаря: внутри плана окно весит больше обычных
+/// задач, но срочная задача или встреча может его передвинуть.
+nonisolated struct GoalWindowPolicy: Codable, Hashable, Sendable {
+    /// Когда в течение дня.
+    nonisolated enum PartOfDay: String, Codable, CaseIterable, Hashable, Sendable {
+        case morning
+        case afternoon
+        case evening
+        /// Когда свободно — в любое время рабочего дня.
+        case any
+
+        var title: String {
+            switch self {
+            case .morning: return "Утром"
+            case .afternoon: return "Днём"
+            case .evening: return "Вечером"
+            case .any: return "Когда свободно"
+            }
+        }
+
+        /// Часы части дня внутри рабочего дня.
+        func hours(workday start: TimeOfDay, end: TimeOfDay) -> (from: TimeOfDay, to: TimeOfDay) {
+            switch self {
+            case .morning: return (start, TimeOfDay(hour: 12))
+            case .afternoon: return (TimeOfDay(hour: 12), TimeOfDay(hour: 17))
+            case .evening: return (TimeOfDay(hour: 17), end)
+            case .any: return (start, end)
+            }
+        }
+    }
+
+    /// Сколько минут.
+    var minutes: Int
+    var partOfDay: PartOfDay
+    /// Только с понедельника по пятницу.
+    var weekdaysOnly: Bool
+
+    init(minutes: Int = 30, partOfDay: PartOfDay = .evening, weekdaysOnly: Bool = false) {
+        self.minutes = max(10, minutes)
+        self.partOfDay = partOfDay
+        self.weekdaysOnly = weekdaysOnly
+    }
+
+    /// «30 мин · вечером», «1 ч · когда свободно · по будням».
+    var summary: String {
+        var parts = [RussianText.duration(minutes: minutes), partOfDay.title.lowercased()]
+        if weekdaysOnly { parts.append("по будням") }
+        return parts.joined(separator: " · ")
+    }
+}
+
 nonisolated enum GoalScope: String, Codable, CaseIterable, Sendable {
     case personal
     case team

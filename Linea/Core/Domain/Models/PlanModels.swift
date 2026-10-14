@@ -320,6 +320,9 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// «Пока нет» на «Хочешь найти для неё небольшое окно завтра?»: до этого
     /// момента Linea о цели не напоминает (`GoalAttention`).
     var attentionSnoozedUntil: Date?
+    /// Защищённое окно под цель (ADR-046): человек разрешил оставлять в плане
+    /// время для цели. nil — не разрешал.
+    var protectedWindow: GoalWindowPolicy?
 
     init(
         id: UUID = UUID(),
@@ -348,7 +351,8 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         progressLog: [GoalProgressEvent] = [],
         sharedScope: GoalScope? = nil,
         lastReviewedAt: Date? = nil,
-        attentionSnoozedUntil: Date? = nil
+        attentionSnoozedUntil: Date? = nil,
+        protectedWindow: GoalWindowPolicy? = nil
     ) {
         self.id = id
         self.title = title
@@ -377,6 +381,7 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         self.progressLog = progressLog
         self.lastReviewedAt = lastReviewedAt
         self.attentionSnoozedUntil = attentionSnoozedUntil
+        self.protectedWindow = protectedWindow
     }
 
     /// Мягкое чтение, как у задачи: цели лежат и в документах дня.
@@ -425,6 +430,7 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         progressLog = (try? container.decodeIfPresent([GoalProgressEvent].self, forKey: .progressLog)) ?? []
         lastReviewedAt = try? container.decodeIfPresent(Date.self, forKey: .lastReviewedAt)
         attentionSnoozedUntil = try? container.decodeIfPresent(Date.self, forKey: .attentionSnoozedUntil)
+        protectedWindow = try? container.decodeIfPresent(GoalWindowPolicy.self, forKey: .protectedWindow)
     }
 
     /// «Низкая / Средняя / Высокая» — важность цели в женском роде.

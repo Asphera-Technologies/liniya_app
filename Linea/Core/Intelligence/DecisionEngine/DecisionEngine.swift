@@ -137,12 +137,19 @@ nonisolated struct DecisionEngine: Sendable {
             commitments: commitments + preservedBusy, config: config, time: time
         )
 
-        let placement = place(
-            candidates: candidates,
-            excluding: preservedTaskIDs.union(Set(commitments.compactMap(\.taskID))),
-            windows: windows, preserved: preserved, commitments: commitments,
-            from: from, context: priorityContext, planID: planID
-        )
+        let excluded = preservedTaskIDs.union(Set(commitments.compactMap(\.taskID)))
+        let protectedGoals = Self.protectedGoals(in: snapshot, day: day, preserved: preserved, time: time)
+        let placement = protectedGoals.isEmpty
+            ? place(
+                candidates: candidates, excluding: excluded,
+                windows: windows, preserved: preserved, commitments: commitments,
+                from: from, context: priorityContext, planID: planID
+            )
+            : placeAroundGoalWindows(
+                protectedGoals, candidates: candidates, excluding: excluded,
+                windows: windows, preserved: preserved, commitments: commitments,
+                from: from, day: day, context: priorityContext, planID: planID
+            )
 
         // «Без даты» (§18): все задачи дня встали, а время осталось — Linea сама
         // ставит туда пару задач из входящих, в пределах той же нагрузки. Если
@@ -361,6 +368,105 @@ nonisolated struct DecisionEngine: Sendable {
             return Deferred(task: task, reason: reason)
         }
         return Placement(blocks: blocks, deferred: deferred, usedMinutes: usedMinutes, capMinutes: capMinutes)
+    }
+
+    // MARK: - Защищённые окна под цели
+
+    /// Защищённые окна под цели (ADR-046): сначала встают срочные задачи —
+    /// срок до конца дня или уже прошёл, день задачи прошёл, — потом окна
+    /// целей, каждое в свою часть дня, потом остальные задачи в оставшееся
+    /// время. Окно весит больше обычной задачи, но срочное дело или встреча
+    /// его передвигают; места нет совсем — сегодня окна нет.
+    private func placeAroundGoalWindows(
+        _ goals: [LineaGoal],
+        candidates: [LineaTask],
+        excluding excluded: Set<UUID>,
+        windows: [DateInterval],
+        preserved: [PlanBlock],
+        commitments: [Commitment],
+        from: Date,
+        day: Date,
+        context: PriorityContext,
+        planID: UUID
+    ) -> Placement {
+        let time = context.time
+        let urgentIDs = Set(candidates.filter { Self.isUrgent($0, day: day, time: time) }.map(\.id))
+        let first = place(
+            candidates: candidates.filter { urgentIDs.contains($0.id) }, excluding: excluded,
+            windows: windows, preserved: preserved, commitments: commitments,
+            from: from, context: context, planID: planID
+        )
+        var free = Self.gaps(in: windows, around: first.blocks, bufferMinutes: config.blockBufferMinutes)
+        var goalBlocks: [PlanBlock] = []
+        for goal in goals {
+            guard let policy = goal.protectedWindow,
+                  let slot = Self.reserve(policy, in: free, day: day, profile: context.profile, time: time) else { continue }
+            let block = PlanBlock(
+                id: "\(planID.uuidString)-goal-\(goal.id.uuidString)", kind: .goal, goalID: goal.id,
+                title: GoalStepScope.of(goal).advanceTitle, start: slot.start, end: slot.end
+            )
+            goalBlocks.append(block)
+            free = Self.gaps(in: free, around: [block], bufferMinutes: config.blockBufferMinutes)
+        }
+        let reserved = goalBlocks.reduce(0) { $0 + $1.durationMinutes }
+        let rest = place(
+            candidates: candidates.filter { !urgentIDs.contains($0.id) }, excluding: excluded,
+            windows: free, preserved: preserved + first.blocks + goalBlocks, commitments: commitments,
+            from: from, context: context, planID: planID,
+            budget: (used: first.usedMinutes + reserved, cap: first.capMinutes)
+        )
+        return Placement(
+            blocks: first.blocks + goalBlocks + rest.blocks,
+            deferred: first.deferred + rest.deferred,
+            usedMinutes: rest.usedMinutes, capMinutes: first.capMinutes
+        )
+    }
+
+    /// Цели, которым сегодня положено защищённое окно: активные, человек
+    /// разрешил, сегодня подходящий день, окно сегодня ещё не прожито и не
+    /// взято в работу (задача окна уже есть). Важнее — раньше.
+    static func protectedGoals(in snapshot: ContextSnapshot, day: Date, preserved: [PlanBlock], time: TimeContext) -> [LineaGoal] {
+        let lived = Set(preserved.compactMap(\.goalID))
+        let weekday = time.calendar.component(.weekday, from: day)
+        let isWeekend = weekday == 1 || weekday == 7
+        let taskIDs = Set(snapshot.tasks.map(\.id))
+        return snapshot.goals
+            .filter { goal in
+                guard goal.isActive, !goal.isCompleted, let policy = goal.protectedWindow, !lived.contains(goal.id) else { return false }
+                guard !taskIDs.contains(GoalWindow.protectedTaskID(goalID: goal.id, day: day, time: time)) else { return false }
+                return !(policy.weekdaysOnly && isWeekend)
+            }
+            .sorted { lhs, rhs in
+                if lhs.priority.score != rhs.priority.score { return lhs.priority.score > rhs.priority.score }
+                if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+    }
+
+    /// Срочное — то, что сильнее защищённого окна: срок до конца дня или уже
+    /// прошёл, или день задачи прошёл.
+    static func isUrgent(_ task: LineaTask, day: Date, time: TimeContext) -> Bool {
+        if let deadline = task.deadline, deadline < time.adding(days: 1, to: day) { return true }
+        if let date = task.date, time.startOfDay(date) < day { return true }
+        return false
+    }
+
+    /// Место окна: первое, где оно помещается целиком, в своей части дня; там
+    /// занято — первое после её начала; и там нет — любое; нет нигде — nil.
+    static func reserve(_ policy: GoalWindowPolicy, in free: [DateInterval], day: Date, profile: UserProfile, time: TimeContext) -> DateInterval? {
+        let needed = TimeInterval(policy.minutes * 60)
+        let hours = policy.partOfDay.hours(workday: profile.workdayStart, end: profile.workdayEnd)
+        let partStart = time.date(on: day, at: hours.from)
+        let partEnd = max(partStart, time.date(on: day, at: hours.to))
+        for window in free {
+            let start = max(window.start, partStart)
+            if min(window.end, partEnd).timeIntervalSince(start) >= needed { return DateInterval(start: start, duration: needed) }
+        }
+        for window in free where window.end > partStart {
+            let start = max(window.start, partStart)
+            if window.end.timeIntervalSince(start) >= needed { return DateInterval(start: start, duration: needed) }
+        }
+        return free.first { $0.duration >= needed }.map { DateInterval(start: $0.start, duration: needed) }
     }
 
     /// A task the plan only takes into leftover time: no day, no deadline, no

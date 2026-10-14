@@ -18,6 +18,9 @@ nonisolated struct NextAction: Hashable, Sendable {
         let title: String
         /// «~15 мин».
         let minutes: Int
+        /// Защищённое окно этой цели (ADR-046): задачи ещё нет — «Начать»
+        /// создаёт её с `taskID`.
+        var windowGoalID: UUID? = nil
 
         var id: UUID { taskID }
     }

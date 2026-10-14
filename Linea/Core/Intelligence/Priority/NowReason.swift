@@ -11,7 +11,8 @@
 //  Причин у выбора обычно несколько — называется самая понятная, по порядку:
 //    1. важное не помещается в окно — сейчас то, на что окна хватит;
 //    2. своё время задачи — сейчас;
-//    2а. человек сказал «Нет сил» — это полегче;
+//    2а. идёт защищённое окно цели — это её задача;
+//    2б. человек сказал «Нет сил» — это полегче;
 //    3. срок прошёл или день задачи прошёл;
 //    4. срок сегодня или завтра (вместе с высоким приоритетом, если он есть);
 //    5. идёт её блок в принятом плане;
@@ -38,6 +39,8 @@ nonisolated enum NowReason: Codable, Hashable, Sendable {
     case startsAt(Date)
     /// Человек сказал «Нет сил» — Linea предлагает полегче.
     case lighter
+    /// Идёт защищённое окно цели (ADR-046): «Сейчас время для цели «…» — до 18:00.»
+    case goalWindow(goalTitle: String, until: Date)
     /// Срок задачи уже прошёл.
     case overdue
     /// День задачи прошёл, а она не закрыта.
@@ -95,6 +98,8 @@ nonisolated struct NowReasoner: Sendable {
         let isPlanned: Bool
         /// Человек недавно сказал «Нет сил».
         var isTired = false
+        /// Идёт защищённое окно цели: её задача — по этой причине.
+        var goalWindow: GoalWindowNow?
     }
 
     func reason(for choice: Choice, context: PriorityContext) -> NowReason {
@@ -109,6 +114,9 @@ nonisolated struct NowReasoner: Sendable {
         }
         if let start = task.scheduledStart {
             return .startsAt(start)
+        }
+        if let goalWindow = choice.goalWindow, task.goalID == goalWindow.goalID {
+            return .goalWindow(goalTitle: goalWindow.goalTitle, until: goalWindow.end)
         }
         if choice.isTired, task.cognitiveDemand.score < DecisionEngine.deepDemandThreshold {
             return .lighter
@@ -181,5 +189,29 @@ nonisolated struct NowReasoner: Sendable {
             if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
             return lhs.id.uuidString < rhs.id.uuidString
         }
+    }
+}
+
+/// Защищённое окно цели, которое идёт сейчас (ADR-046).
+nonisolated struct GoalWindowNow: Hashable, Sendable {
+    let goalID: UUID
+    let goalTitle: String
+    /// «Продвинуть «Linea Beta»» — так окно называется в плане.
+    let title: String
+    let end: Date
+
+    /// Окно из плана дня, которое идёт в этот момент: цель активна, а «Не
+    /// сейчас» на окне сегодня не говорили.
+    static func current(in record: DayRecord, goals: [LineaGoal], at moment: Date) -> GoalWindowNow? {
+        let declined = Set(record.feedback.compactMap { item -> UUID? in
+            if case .goalWindowDeclined(let goalID) = item.kind { return goalID }
+            return nil
+        })
+        guard let block = record.plan?.blocks.first(where: { block in
+            block.kind == .goal && block.start <= moment && moment < block.end
+                && !(block.goalID.map(declined.contains) ?? true)
+        }), let goalID = block.goalID,
+              let goal = goals.first(where: { $0.id == goalID && $0.isActive && !$0.isCompleted }) else { return nil }
+        return GoalWindowNow(goalID: goalID, goalTitle: goal.title, title: block.title, end: block.end)
     }
 }

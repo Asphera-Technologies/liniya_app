@@ -65,10 +65,10 @@ nonisolated struct NextActionUseCase: Sendable {
         }
         let context = PriorityContext(snapshot: snapshot, state: state, calibration: calibration,
                                       config: engine.config, time: time)
-        let window = context.window(at: time.now)
+        let priorityWindow = context.window(at: time.now)
         let titles = Dictionary(tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
         let minimum = engine.config.minimumActionScore
-        let ranked = window.isBusy ? [] : engine.rankNow(context: context)
+        let ranked = priorityWindow.isBusy ? [] : engine.rankNow(context: context)
         var actionable = ranked.filter { $0.action >= minimum }
         // Сил нет — сложное только если больше нечего.
         if isTired {
@@ -84,12 +84,23 @@ nonisolated struct NextActionUseCase: Sendable {
         }
 
         // Идёт встреча или рабочий день кончился — советовать нечего.
-        guard !window.isBusy else { return nil }
+        guard !priorityWindow.isBusy else { return nil }
 
         // Принятый план — договорённость: если его блок идёт сейчас и задача
         // уместна, «сейчас» — она. Выбор человека в «Другое» сильнее плана.
+        // Идёт защищённое окно цели (ADR-046) — сначала её задачи; задач нет —
+        // «сейчас» само окно.
         let plannedNow = plannedTaskID(in: record.plan, at: time.now, tasks: tasks)
+        let goalWindow = GoalWindowNow.current(in: record, goals: snapshot.goals, at: time.now)
+        let goalOf = Dictionary(tasks.map { ($0.id, $0.goalID) }, uniquingKeysWith: { first, _ in first })
+        let windowTask = goalWindow.flatMap { goalWindow in
+            actionable.first { goalOf[$0.taskID] == goalWindow.goalID }
+        }
+        if let goalWindow, preferred == nil, windowTask == nil {
+            return windowAction(goalWindow, actionable: actionable, titles: titles, snapshot: snapshot, time: time)
+        }
         let best = actionable.first { $0.taskID == preferred }
+            ?? windowTask
             ?? actionable.first { $0.taskID == plannedNow }
             ?? actionable.first
 
@@ -129,16 +140,18 @@ nonisolated struct NextActionUseCase: Sendable {
         }
         // Окно упоминается, когда оно и есть причина: важное или ничего не
         // помещается, либо до следующего дела не больше двух часов.
-        if later != nil || best == nil || window.minutes <= Self.windowWorthMentioningMinutes {
-            facts.append(.windowUntil(kind: window.until?.kind, title: window.until?.title, minutesLeft: window.minutes))
+        if later != nil || best == nil || priorityWindow.minutes <= Self.windowWorthMentioningMinutes {
+            facts.append(.windowUntil(kind: priorityWindow.until?.kind, title: priorityWindow.until?.title,
+                                      minutesLeft: priorityWindow.minutes))
         }
         // У каждой рекомендации — одна причина, понятная без техники.
         if let best, let task = tasks.first(where: { $0.id == best.taskID }) {
             let choice = NowReasoner.Choice(
-                task: task, assessment: best, window: window,
+                task: task, assessment: best, window: priorityWindow,
                 laterTitle: later.flatMap { titles[$0.taskID] },
                 isPlanned: best.taskID == plannedNow,
-                isTired: isTired
+                isTired: isTired,
+                goalWindow: goalWindow
             )
             facts.append(.nowReason(reasoner.reason(for: choice, context: context)))
         }
@@ -152,6 +165,32 @@ nonisolated struct NextActionUseCase: Sendable {
             headline: explanation.headline,
             reason: explanation.body,
             facts: facts
+        )
+    }
+
+    /// Защищённое окно цели, а задач цели сейчас нет: «сейчас» — само окно,
+    /// «Начать» создаст под него задачу. Остальное уместное — в «Другое».
+    private func windowAction(
+        _ window: GoalWindowNow,
+        actionable: [PriorityAssessment],
+        titles: [UUID: String],
+        snapshot: ContextSnapshot,
+        time: TimeContext
+    ) -> NextAction {
+        let minutes = max(10, Int(window.end.timeIntervalSince(time.now) / 60))
+        let option = NextAction.Option(
+            taskID: GoalWindow.protectedTaskID(goalID: window.goalID, day: time.today, time: time),
+            title: window.title, minutes: minutes, windowGoalID: window.goalID
+        )
+        let alternatives = actionable.prefix(Self.maxAlternatives).compactMap { Self.option($0, titles: titles) }
+        let facts: [Fact] = [
+            .nowAction(taskID: option.taskID, title: option.title),
+            .nowReason(.goalWindow(goalTitle: window.goalTitle, until: window.end)),
+        ]
+        let explanation = render(facts, snapshot: snapshot, time: time)
+        return NextAction(
+            option: option, alternatives: Array(alternatives), laterTaskID: nil, startedAt: nil,
+            headline: explanation.headline, reason: explanation.body, facts: facts
         )
     }
 

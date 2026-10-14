@@ -62,6 +62,8 @@ final class GoalEntity {
     /// Какой общей цель была — команды или компании (`sharedScope`); остаётся,
     /// когда человек выбрал «От меня».
     var sharedScopeRaw: String?
+    /// Защищённое окно под цель (`GoalWindowPolicy`), JSON; nil — не разрешено.
+    var protectedWindowData: Data?
 
     init(
         id: UUID,
@@ -91,7 +93,8 @@ final class GoalEntity {
         kindOverrideRaw: String? = nil,
         lastReviewedAt: Date? = nil,
         attentionSnoozedUntil: Date? = nil,
-        sharedScopeRaw: String? = nil
+        sharedScopeRaw: String? = nil,
+        protectedWindowData: Data? = nil
     ) {
         self.id = id
         self.title = title
@@ -121,6 +124,7 @@ final class GoalEntity {
         self.lastReviewedAt = lastReviewedAt
         self.attentionSnoozedUntil = attentionSnoozedUntil
         self.sharedScopeRaw = sharedScopeRaw
+        self.protectedWindowData = protectedWindowData
     }
 }
 
@@ -153,7 +157,8 @@ extension GoalEntity {
             kindOverrideRaw: goal.kindOverride?.rawValue,
             lastReviewedAt: goal.lastReviewedAt,
             attentionSnoozedUntil: goal.attentionSnoozedUntil,
-            sharedScopeRaw: goal.sharedScope?.rawValue
+            sharedScopeRaw: goal.sharedScope?.rawValue,
+            protectedWindowData: Self.encodedValue(goal.protectedWindow)
         )
     }
 
@@ -185,7 +190,8 @@ extension GoalEntity {
             progressLog: Self.decoded([GoalProgressEvent].self, from: progressLogData) ?? [],
             sharedScope: sharedScopeRaw.flatMap(GoalScope.init(rawValue:)),
             lastReviewedAt: lastReviewedAt,
-            attentionSnoozedUntil: attentionSnoozedUntil
+            attentionSnoozedUntil: attentionSnoozedUntil,
+            protectedWindow: Self.decodedValue(GoalWindowPolicy.self, from: protectedWindowData)
         )
     }
 
@@ -220,11 +226,22 @@ extension GoalEntity {
         lastReviewedAt = goal.lastReviewedAt
         attentionSnoozedUntil = goal.attentionSnoozedUntil
         sharedScopeRaw = goal.sharedScope?.rawValue
+        protectedWindowData = Self.encodedValue(goal.protectedWindow)
     }
 
     private static func encoded<Value: Encodable>(_ values: [Value]) -> Data? {
         guard !values.isEmpty else { return nil }
         return try? DocumentCoding.encoder().encode(values)
+    }
+
+    private static func encodedValue<Value: Encodable>(_ value: Value?) -> Data? {
+        guard let value else { return nil }
+        return try? DocumentCoding.encoder().encode(value)
+    }
+
+    private static func decodedValue<Value: Decodable>(_ type: Value.Type, from data: Data?) -> Value? {
+        guard let data else { return nil }
+        return try? DocumentCoding.decoder().decode(type, from: data)
     }
 
     /// Не прочиталось — пусто, а не потерянная цель.
