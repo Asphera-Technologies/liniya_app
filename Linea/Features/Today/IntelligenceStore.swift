@@ -277,11 +277,20 @@ final class IntelligenceStore {
 
     /// Health history is read once a day: HealthKit is the source of truth,
     /// but four weeks of samples is not something to re-read on every tap.
+    /// Apple Health that does not answer does not hold the day: after ten
+    /// seconds the day is planned without history, the next refresh retries.
     private func loadHistoryIfNeeded(time: TimeContext) async {
         if let loadedAt = historyLoadedAt, time.isSameDay(loadedAt, time.now), !historyCache.isEmpty { return }
+        let history = self.history
+        let days = config.baselineWindowDays
         do {
-            historyCache = try await history.dailySummaries(days: config.baselineWindowDays, before: time.today, time: time)
+            historyCache = try await withDeadline(.seconds(10)) {
+                try await history.dailySummaries(days: days, before: time.today, time: time)
+            }
             historyLoadedAt = time.now
+        } catch is DeadlineExceeded {
+            LineaLog.health.error("История здоровья не ответила за 10 с — план без неё, прочитаю при следующем пересчёте")
+            historyCache = []
         } catch {
             // Без истории день всё равно планируется, просто осторожнее.
             LineaLog.health.error("История здоровья не прочиталась: \(error.localizedDescription, privacy: .public)")
