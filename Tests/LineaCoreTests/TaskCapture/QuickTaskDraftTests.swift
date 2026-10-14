@@ -38,7 +38,9 @@ struct QuickTaskDraftTests {
         #expect(task.date == nil)
         #expect(task.deadline == nil)
         #expect(InboxReview.isInInbox(task))
-        #expect(task.estimatedMinutes == nil)
+        #expect(task.estimatedMinutes == 10, "Длительность оценила Linea")
+        #expect(task.estimatedDurationSource == .ai)
+        #expect(task.userFields?.contains(.duration) == false, "Оценка — не значение человека")
         #expect(task.isDone == false)
     }
 

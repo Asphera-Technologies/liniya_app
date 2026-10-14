@@ -16,10 +16,13 @@ import Foundation
 
 /// How long the planner reserves for a task: the user's estimate (or the usual
 /// one for the task's kind) stretched by the calibrated multiplier — people
-/// underestimate their own tasks.
+/// underestimate their own tasks. An estimate learned from what similar tasks
+/// actually took (`DurationSource.learned`) is already real time and is not
+/// stretched again.
 nonisolated enum PlanDuration {
     static func minutes(for task: LineaTask, calibration: Calibration) -> Int {
-        let raw = Double(TaskEstimate.minutes(for: task)) * calibration.estimateMultiplier
+        let base = Double(TaskEstimate.minutes(for: task))
+        let raw = task.estimatedDurationSource == .learned ? base : base * calibration.estimateMultiplier
         return max(5, Int(raw.rounded()))
     }
 }

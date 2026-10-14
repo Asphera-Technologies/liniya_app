@@ -72,7 +72,13 @@ nonisolated enum TaskOwnership {
     static func userEdited(previous: LineaTask, updated: LineaTask) -> LineaTask {
         var result = updated
         let changed = changedFields(from: previous, to: updated)
-        result.userFields = previous.userFields.map { $0.union(changed) }
+        // Поменянное — его; и то, что экран отметил как выбор человека, даже
+        // если значение совпало («30 мин» тапом при оценке Linea 30 мин).
+        result.userFields = previous.userFields.map { $0.union(changed).union(updated.userFields ?? []) }
+        // Поменял длительность сам — она его (`estimated_duration_source = user`).
+        if changed.contains(.duration) {
+            result.estimatedDurationSource = updated.estimatedMinutes == nil ? nil : .user
+        }
         if updated.rescheduleMode == previous.rescheduleMode, !changed.isDisjoint(with: [.day, .startTime]) {
             result.rescheduleMode = nil
         }
@@ -115,10 +121,10 @@ nonisolated enum TaskOwnership {
         return (result, applied)
     }
 
-    /// Человек переименовал задачу — сложность, которую когда-то подставила
-    /// Linea, следует за новым названием так же, как при создании: «Позвонить
-    /// Пете» → «Подготовить стратегию для Пети» — уже сложная. Сложность,
-    /// выбранную человеком, Linea не трогает.
+    /// Человек переименовал задачу — сложность и длительность, которые когда-то
+    /// подставила Linea, следуют за новым названием так же, как при создании:
+    /// «Позвонить Пете» → «Подготовить стратегию для Пети» — уже сложная и на
+    /// полтора часа. Выбранное человеком Linea не трогает.
     static func refreshedAfterEdit(
         previous: LineaTask,
         updated: LineaTask,
@@ -130,7 +136,14 @@ nonisolated enum TaskOwnership {
             title: updated.title, goalID: updated.goalID, isFixed: updated.isFixed,
             demand: said, override: updated.kindOverride
         ).kind
-        return applying(TaskProposal(demand: said ?? kind.typicalDemand), to: updated).task
+        // Только оценку Linea: длительность задачи, сохранённой раньше, чем
+        // Linea стала её оценивать, — человека.
+        let minutes = updated.isDurationEstimatedByLinea
+            ? DurationEstimator().rules(title: updated.title, kind: kind) : nil
+        let applied = applying(TaskProposal(estimatedMinutes: minutes, demand: said ?? kind.typicalDemand), to: updated)
+        var result = applied.task
+        if applied.applied.contains(.duration) { result.estimatedDurationSource = .ai }
+        return result
     }
 
     /// Сохранение человеком целиком — так задачу сохраняет `PlanStore`:

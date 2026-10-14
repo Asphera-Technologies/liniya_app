@@ -71,7 +71,10 @@ struct TaskUnderstandingTests {
         #expect(result.priorityOrigin == .assumed)
         #expect(QuickTaskText.summary(result, time: time) == "")
         let task = result.task(id: WowFixture.taskA, createdAt: time.now)
-        #expect(task.estimatedMinutes == nil, "Обычная длительность не записывается в задачу — её считает план")
+        // Длительность — оценка Linea (ADR-045), а не значение человека: её
+        // можно уточнять самой.
+        #expect(task.estimatedMinutes == 60, "КП — около часа")
+        #expect(task.estimatedDurationSource == .ai)
         #expect(task.userFields == [])
     }
 

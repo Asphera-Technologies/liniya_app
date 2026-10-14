@@ -51,14 +51,18 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
         self.goal = goal
     }
 
+    /// `history` — задачи человека: по закрытым с известной длительностью
+    /// Linea оценивает, сколько займёт новая (`DurationEstimator`).
     func resolve(
         goals: [LineaGoal],
         profile: UserProfile,
         time: TimeContext,
         defaultDay: TaskDay? = .someday,
+        history: [LineaTask] = [],
         parser: QuickTaskParser = QuickTaskParser(),
         linker: GoalLinker = GoalLinker(),
-        classifier: TaskClassifier = TaskClassifier()
+        classifier: TaskClassifier = TaskClassifier(),
+        estimator: DurationEstimator = DurationEstimator()
     ) -> QuickTaskResolution {
         let activeGoals = goals.filter { $0.isActive && !$0.isCompleted }
         let parsed = parser.parse(text, goals: activeGoals, profile: profile, time: time).grounded(in: text)
@@ -164,6 +168,11 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
         ).kind
         result.demand = parsed.demand ?? result.kind.typicalDemand
         result.demandOrigin = parsed.demand == nil ? .assumed : .typed
+        // Длительность не сказана и не выбрана — её оценивает Linea: по
+        // истории человека, по словам названия, по типу задачи.
+        if result.minutes == nil {
+            result.estimate = estimator.estimate(title: result.title, kind: result.kind, history: history, time: time)
+        }
 
         result.recognized = parsed.recognized
         result.isUnderstood = !parsed.recognized.isEmpty && result.title != QuickTaskParser.cleaned(text)
@@ -192,9 +201,11 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
     /// Срок — просто конец недели из «на неделе», а не названный отдельно.
     var isEndOfWeekDeadline = false
     var scheduledStart: Date?
-    /// Nil — человек не сказал; план возьмёт свою оценку.
+    /// Nil — человек не сказал; тогда длительность оценивает Linea (`estimate`).
     var minutes: Int?
     var minutesOrigin: Origin = .assumed
+    /// Оценка Linea, когда человек длительность не задал.
+    var estimate: DurationEstimate?
     var priority: TaskPriority = .normal
     var priorityOrigin: Origin = .assumed
     var demand: CognitiveDemand = .normal
@@ -214,8 +225,11 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
 
     var canSave: Bool { !title.isEmpty }
 
-    /// Сколько займёт: сказанное или обычное для типа задачи.
-    var estimatedMinutes: Int { minutes ?? kind.typicalMinutes }
+    /// Сколько займёт: сказанное, иначе оценка Linea (`DurationEstimator`).
+    var estimatedMinutes: Int { minutes ?? estimate?.minutes ?? kind.typicalMinutes }
+
+    /// Откуда длительность (`estimated_duration_source`).
+    var durationSource: DurationSource { minutes != nil ? .user : estimate?.source ?? .ai }
 
     /// Linea что-то поняла из слов строки и вырезала это из названия —
     /// служебное или параметры. Тогда экран показывает задачу так, как она
@@ -249,10 +263,11 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
             createdAt: createdAt,
             deadline: deadline,
             scheduledStart: scheduledStart,
-            estimatedMinutes: minutes,
+            estimatedMinutes: estimatedMinutes,
             cognitiveDemand: demand,
             goalID: goalID,
-            userFields: userFields
+            userFields: userFields,
+            estimatedDurationSource: durationSource
         )
     }
 }

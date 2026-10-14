@@ -111,7 +111,7 @@ struct TaskClassifierTests {
         #expect(bills.kind == .maintenance)
         #expect(bills.demand == .light)
         #expect(bills.minutes == nil)
-        #expect(bills.estimatedMinutes == 30)
+        #expect(bills.estimatedMinutes == 10, "Оплатить — быстрое действие (ADR-045), а не обычные для быта 30 минут")
         let release = resolve("Подготовить релиз для цели MVP")
         #expect(release.kind == .goal)
         #expect(release.demand == .deep)

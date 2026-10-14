@@ -135,6 +135,10 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     /// Кто выбрал место задачи после «Перенести»: «Пусть Linea решит» —
     /// Linea, и она же переставит задачу, если день прошёл. `nil` — человек.
     var rescheduleMode: RescheduleMode?
+    /// Откуда `estimatedMinutes` (`estimated_duration_source`): сказал
+    /// человек, оценила Linea по словам или по истории (`DurationEstimator`).
+    /// `nil` у задач, сохранённых раньше: есть оценка — она человека.
+    var estimatedDurationSource: DurationSource?
 
     init(
         id: UUID = UUID(),
@@ -160,7 +164,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         suggestionID: UUID? = nil,
         deferredUntil: Date? = nil,
         cancelledAt: Date? = nil,
-        rescheduleMode: RescheduleMode? = nil
+        rescheduleMode: RescheduleMode? = nil,
+        estimatedDurationSource: DurationSource? = nil
     ) {
         self.id = id
         self.title = title
@@ -186,6 +191,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         self.deferredUntil = deferredUntil
         self.cancelledAt = cancelledAt
         self.rescheduleMode = rescheduleMode
+        self.estimatedDurationSource = estimatedDurationSource
     }
 
     /// Мягкое чтение: задачи лежат и в документах дня (`DayRecord`), и
@@ -217,6 +223,12 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         deferredUntil = try container.decodeIfPresent(Date.self, forKey: .deferredUntil)
         cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
         rescheduleMode = try container.decodeIfPresent(RescheduleMode.self, forKey: .rescheduleMode)
+        estimatedDurationSource = try? container.decodeIfPresent(DurationSource.self, forKey: .estimatedDurationSource)
+    }
+
+    /// Оценку дала Linea, а не человек: её можно уточнять самой.
+    var isDurationEstimatedByLinea: Bool {
+        estimatedDurationSource == .ai || estimatedDurationSource == .learned
     }
 
     // Duration without the user's estimate depends on what the task is —

@@ -54,6 +54,8 @@ final class TaskEntity {
     /// «Пусть Linea решит» или «Позже сегодня» (`RescheduleMode`); nil — день
     /// выбрал человек.
     var rescheduleModeRaw: String?
+    /// Откуда оценка длительности: user, ai, learned (`DurationSource`).
+    var estimatedDurationSourceRaw: String?
 
     init(
         id: UUID,
@@ -79,7 +81,8 @@ final class TaskEntity {
         suggestionID: UUID? = nil,
         deferredUntil: Date? = nil,
         cancelledAt: Date? = nil,
-        rescheduleModeRaw: String? = nil
+        rescheduleModeRaw: String? = nil,
+        estimatedDurationSourceRaw: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -105,6 +108,7 @@ final class TaskEntity {
         self.deferredUntil = deferredUntil
         self.cancelledAt = cancelledAt
         self.rescheduleModeRaw = rescheduleModeRaw
+        self.estimatedDurationSourceRaw = estimatedDurationSourceRaw
     }
 }
 
@@ -134,7 +138,8 @@ extension TaskEntity {
             suggestionID: task.suggestionID,
             deferredUntil: task.deferredUntil,
             cancelledAt: task.cancelledAt,
-            rescheduleModeRaw: task.rescheduleMode?.rawValue
+            rescheduleModeRaw: task.rescheduleMode?.rawValue,
+            estimatedDurationSourceRaw: task.estimatedDurationSource?.rawValue
         )
     }
 
@@ -164,7 +169,8 @@ extension TaskEntity {
             suggestionID: suggestionID,
             deferredUntil: deferredUntil,
             cancelledAt: cancelledAt,
-            rescheduleMode: rescheduleModeRaw.flatMap(RescheduleMode.init(rawValue:))
+            rescheduleMode: rescheduleModeRaw.flatMap(RescheduleMode.init(rawValue:)),
+            estimatedDurationSource: estimatedDurationSourceRaw.flatMap(DurationSource.init(rawValue:))
         )
     }
 
@@ -192,6 +198,7 @@ extension TaskEntity {
         deferredUntil = task.deferredUntil
         cancelledAt = task.cancelledAt
         rescheduleModeRaw = task.rescheduleMode?.rawValue
+        estimatedDurationSourceRaw = task.estimatedDurationSource?.rawValue
     }
 
     private static func raw(_ ids: [UUID]) -> String? {
