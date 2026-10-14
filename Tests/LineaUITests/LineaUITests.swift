@@ -1121,6 +1121,59 @@ final class LineaUITests: XCTestCase {
                       "Начатое окно — задача к цели")
     }
 
+    // MARK: - 22. Обновить состояние цели: что изменилось — Linea показывает, потом меняет
+
+    @MainActor
+    func test22GoalStateUpdate() throws {
+        let app = launch()
+        openTab(app, "План", index: 1)
+        createQuickGoal(app, "Запустить Linea Beta")
+        let row = button(app, startingWith: "Запустить Linea Beta")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Цель"].waitForExistence(timeout: 5))
+        let update = app.buttons["goal.update"]
+        scrollTo(update, in: app)
+        update.tap()
+
+        let text = field(app, "goal.update.text")
+        XCTAssertTrue(text.waitForExistence(timeout: 5), "«Что изменилось?»")
+        XCTAssertTrue(app.staticTexts["Что изменилось?"].exists)
+        XCTAssertTrue(app.buttons["goal.update.voice"].exists, "Можно рассказать голосом")
+        focus(text, in: app)
+        text.typeText("TestFlight уже сделали, onboarding почти готов, но аналитику пока не подключали.")
+        snapshot(app, "83 Что изменилось")
+        app.buttons["goal.update.read"].tap()
+
+        // Сначала — как Linea поняла; цель ещё не меняется.
+        let items = app.staticTexts.matching(identifier: "goal.update.item")
+        XCTAssertTrue(items.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(items.allElementsBoundByIndex.map(\.label), [
+            "✓ TestFlight — завершено", "● Onboarding — почти готов", "○ Аналитика — не начата",
+        ])
+        XCTAssertEqual(app.staticTexts["goal.update.focus"].label,
+                       "Новый фокус: закончить onboarding и подключить аналитику.")
+        snapshot(app, "84 Обновлю состояние")
+
+        // «Изменить» — снова к словам, сказанное на месте.
+        app.buttons["goal.update.edit"].tap()
+        XCTAssertTrue(text.waitForExistence(timeout: 5))
+        app.buttons["goal.update.read"].tap()
+        XCTAssertTrue(items.firstMatch.waitForExistence(timeout: 5))
+        app.buttons["goal.update.confirm"].tap()
+        XCTAssertTrue(app.buttons["goal.update.confirm"].waitForNonExistence(timeout: 15), "Подтвердил — лист закрылся")
+
+        // Карточка — уже обновлённая: этапы, «почти готов», новый фокус.
+        let focusLine = app.staticTexts["goal.focus"]
+        XCTAssertTrue(focusLine.waitForExistence(timeout: 5))
+        XCTAssertEqual(focusLine.label, "Новый фокус: закончить onboarding и подключить аналитику.")
+        XCTAssertTrue(app.staticTexts["goal.milestone.state"].exists, "У Onboarding — «почти готов»")
+        snapshot(app, "85 Карточка после обновления")
+        saveGoalCard(app)
+        XCTAssertTrue(waitForLabel(row, containing: "1 из 3 этапов"), "Строка цели: \(row.label)")
+        snapshot(app, "86 План: 1 из 3 этапов")
+    }
+
     // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
 
     @MainActor
