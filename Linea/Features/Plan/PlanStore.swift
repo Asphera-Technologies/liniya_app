@@ -116,10 +116,25 @@ final class PlanStore {
         }
     }
 
-    /// Правка человека: поменянное — его, сложность, которую подставляла
-    /// Linea, следует за новым названием, перенос засчитывается.
+    /// Правка человека: поменянное — его, сложность и длительность, которые
+    /// подставляла Linea, следуют за новым названием, перенос засчитывается.
+    /// Длительность сняли — снова оценивает Linea.
     private func edited(previous: LineaTask, updated: LineaTask, time: TimeContext) -> LineaTask {
-        TaskDeferral.counted(previous: previous, updated: TaskOwnership.saved(previous: previous, updated: updated), time: time)
+        let saved = TaskDeferral.counted(previous: previous, updated: TaskOwnership.saved(previous: previous, updated: updated), time: time)
+        return estimated(saved, time: time)
+    }
+
+    /// Задача без длительности получает оценку Linea (`DurationEstimator`):
+    /// по истории человека, по словам, по типу. Это не значение человека.
+    private func estimated(_ task: LineaTask, time: TimeContext) -> LineaTask {
+        guard task.estimatedMinutes == nil else { return task }
+        var result = task
+        let estimate = DurationEstimator().estimate(title: task.title, kind: TaskClassifier().kind(of: task),
+                                                    history: tasks, time: time)
+        result.estimatedMinutes = estimate.minutes
+        result.estimatedDurationSource = estimate.source
+        result.userFields?.remove(.duration)
+        return result
     }
 
     /// The "переносим" answer to a nudge: move the task to another day and

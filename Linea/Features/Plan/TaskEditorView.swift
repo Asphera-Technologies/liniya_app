@@ -64,7 +64,8 @@ struct TaskEditorView: View {
         _title = State(initialValue: existing.title)
         _priority = State(initialValue: existing.priority)
         _demand = State(initialValue: existing.cognitiveDemand)
-        _estimatedMinutes = State(initialValue: existing.estimatedMinutes)
+        // В чипах — только длительность человека; оценка Linea — подписью под ними.
+        _estimatedMinutes = State(initialValue: existing.isDurationEstimatedByLinea ? nil : existing.estimatedMinutes)
         _hasDate = State(initialValue: existing.date != nil)
         _date = State(initialValue: existing.date ?? Date())
         _hasDeadline = State(initialValue: existing.deadline != nil)
@@ -257,6 +258,10 @@ struct TaskEditorView: View {
 
     // MARK: Duration
 
+    /// Чипы — выбор человека одним тапом. Пока он не выбрал, под ними —
+    /// оценка Linea и откуда она: «~10 мин — оценка Linea», «~25 мин — по
+    /// твоим похожим задачам». Повторный тап по выбранному чипу возвращает
+    /// оценку Linea.
     private var durationSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionLabel(text: "Сколько займёт")
@@ -264,6 +269,12 @@ struct TaskEditorView: View {
                 ForEach(Self.durations, id: \.self) { minutes in
                     durationChip(minutes)
                 }
+            }
+            if estimatedMinutes == nil, let estimate = DurationText.estimate(of: current) {
+                Text(estimate)
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textSecondary)
+                    .accessibilityIdentifier("task.duration.estimate")
             }
         }
     }
@@ -516,7 +527,15 @@ struct TaskEditorView: View {
         result.priority = priority
         result.deadline = hasDeadline ? moment(deadline, onto: day ?? deadline) : nil
         result.scheduledStart = hasStart ? moment(start, onto: day) : nil
-        result.estimatedMinutes = estimatedMinutes
+        if let estimatedMinutes {
+            // Выбрал в чипе — его, даже если совпало с оценкой Linea.
+            result.estimatedMinutes = estimatedMinutes
+            result.estimatedDurationSource = .user
+            result.userFields?.insert(.duration)
+        } else if !current.isDurationEstimatedByLinea {
+            // Снял свою длительность — оценит Linea (PlanStore).
+            result.estimatedMinutes = nil
+        }
         result.cognitiveDemand = demand
         result.goalID = goalID
         result.kindOverride = kindOverride

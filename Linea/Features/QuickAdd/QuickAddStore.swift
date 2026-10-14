@@ -75,7 +75,10 @@ final class QuickAddStore {
 
     /// Что получится из ввода прямо сейчас — это и показывают чипы.
     var resolution: QuickTaskResolution {
-        draft.resolve(goals: planStore.goals, profile: profileProvider(), time: time, defaultDay: defaultDay)
+        // История задач — чтобы оценить длительность по тому, сколько похожие
+        // заняли на самом деле.
+        draft.resolve(goals: planStore.goals, profile: profileProvider(), time: time, defaultDay: defaultDay,
+                      history: planStore.tasks)
     }
 
     /// Цели, к которым можно привязать задачу.
