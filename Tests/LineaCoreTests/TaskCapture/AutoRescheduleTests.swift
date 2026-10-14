@@ -115,6 +115,33 @@ struct AutoRescheduleTests {
         #expect(normal.task.deferredUntil == WowFixture.moment(11, 30))
     }
 
+    @Test("Две задачи подряд в «Пусть Linea решит» не встают внахлёст (баг тестировщика)")
+    func placedTasksDoNotOverlap() throws {
+        // Сценарий тестировщика: 11:16, профиля питания нет. Стратегия на
+        // 90 минут — сложная, её Linea ставит с утра, на 12:46; лёгкий
+        // «Оплатить интернет» раньше уходил на 13:00 — внутрь стратегии.
+        let time = WowFixture.time(11, 16)
+        let strategy = task(1, "Подготовить стратегию", minutes: 90, demand: .deep)
+        let internet = task(2, "Оплатить интернет", minutes: 10, demand: .light)
+        let bare = { (tasks: [LineaTask]) in
+            RescheduleContext(profile: WowFixture.profile, tasks: tasks, nutrition: nil, time: time)
+        }
+        let first = reschedule.apply(.automatic, to: strategy, context: bare([strategy, internet])).task
+        #expect(first.deferredUntil == WowFixture.moment(12, 46))
+        let second = reschedule.apply(.automatic, to: internet, context: bare([first, internet])).task
+        let firstEnd = WowFixture.moment(14, 16)
+        #expect(second.deferredUntil == firstEnd, "После стратегии, а не внутри неё")
+
+        // «Позже сегодня» тоже обходит окно, которое Linea уже нашла.
+        let later = reschedule.apply(.laterToday, to: internet, context: bare([first, internet])).task
+        #expect(later.deferredUntil == firstEnd)
+
+        // Окно, которое Linea нашла самой задаче, ей не мешает: повторное
+        // «Пусть Linea решит» ставит её туда же.
+        let again = reschedule.apply(.automatic, to: first, context: bare([first, internet])).task
+        #expect(again.deferredUntil == WowFixture.moment(12, 46))
+    }
+
     @Test("Сегодня окна нет — завтра; на завтра встречи из календаря — после них")
     func nextDayAroundCalendar() throws {
         // Сегодня встречи с 11:00 до конца рабочего дня, завтра — 9:00–11:00.

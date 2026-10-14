@@ -54,13 +54,16 @@ nonisolated struct RescheduleContext: Sendable {
         self.time = time
     }
 
-    /// Чем занят день: встречи, задачи со своим временем, еда — кроме
-    /// времени самой задачи `except`, которую переносят. Повторы не страшны —
-    /// занятое время объединяется (`FreeWindows`).
+    /// Чем занят день: встречи, задачи со своим временем, еда — и окна,
+    /// которые Linea уже нашла другим задачам («Пусть Linea решит», «Позже
+    /// сегодня»): две задачи, отданные Linea одна за другой, не встают
+    /// внахлёст. Кроме времени самой задачи `except`, которую переносят.
+    /// Повторы не страшны — занятое время объединяется (`FreeWindows`).
     func commitments(on day: Date, except taskID: UUID? = nil) -> [Commitment] {
         let interval = time.dayInterval(containing: day)
         var result = commitments.filter { $0.interval.intersects(interval) }
         result += CommitmentMapper().commitments(signals: [], tasks: tasks, day: interval, time: time)
+        result += placedWindows(in: interval)
         if let taskID { result.removeAll { $0.taskID == taskID } }
         for window in nutrition?.mealWindows ?? [] {
             let start = time.date(on: interval.start, at: window.start)
@@ -73,11 +76,31 @@ nonisolated struct RescheduleContext: Sendable {
         return result
     }
 
-    /// Сколько минут дел уже стоит на этот день — кроме задачи `except` и
-    /// задач со своим временем (они уже среди занятого).
+    /// Окна, которые Linea нашла задачам сама: с начала окна — на столько,
+    /// сколько задача займёт. Только у открытых, не начатых задач.
+    private func placedWindows(in interval: DateInterval) -> [Commitment] {
+        tasks.compactMap { task in
+            guard isPlaced(task, in: interval), let start = task.deferredUntil else { return nil }
+            let end = start.addingTimeInterval(TimeInterval(PlanDuration.minutes(for: task, calibration: calibration) * 60))
+            return Commitment(id: "placed-\(task.id.uuidString)", title: task.title, start: start, end: end,
+                              kind: .task, source: .tasks, taskID: task.id)
+        }
+    }
+
+    /// Окно задаче нашла Linea, и оно в этом дне.
+    private func isPlaced(_ task: LineaTask, in interval: DateInterval) -> Bool {
+        guard task.isOpen, task.startedAt == nil, task.rescheduleMode != nil, !task.isFixed,
+              let start = task.deferredUntil else { return false }
+        return interval.contains(start)
+    }
+
+    /// Сколько минут дел уже стоит на этот день — кроме задачи `except`,
+    /// задач со своим временем и задач, которым Linea уже нашла окно (они уже
+    /// среди занятого).
     func assignedMinutes(on day: Date, except taskID: UUID) -> Int {
-        tasks.filter { task in
-            task.isOpen && task.id != taskID && !task.isFixed
+        let interval = time.dayInterval(containing: day)
+        return tasks.filter { task in
+            task.isOpen && task.id != taskID && !task.isFixed && !isPlaced(task, in: interval)
                 && (task.date.map { time.isSameDay($0, day) } ?? false)
         }
         .reduce(0) { $0 + PlanDuration.minutes(for: $1, calibration: calibration) }
