@@ -45,6 +45,8 @@ final class AppContainer {
     let quickAddStore: QuickAddStore
     /// Новая цель: сначала понять, потом создать.
     let goalIntakeStore: GoalIntakeStore
+    /// «Обновить состояние» цели: что изменилось — словами или голосом.
+    let goalUpdateStore: GoalUpdateStore
 
     /// Local notifications for nudges.
     let nudgeScheduler: NudgeScheduler
@@ -194,6 +196,18 @@ final class AppContainer {
             planStore: plan,
             analyzer: RuleBasedGoalAnalyzer(),
             profile: { [weak intelligence] in intelligence?.userProfile ?? .default }
+        )
+        // «Обновить состояние» цели (ADR-047): что изменилось, разбирают
+        // правила на телефоне, голос — тот же распознаватель.
+        goalUpdateStore = GoalUpdateStore(
+            dictation: VoiceDictation(
+                recorder: VoiceRecorder(),
+                hasSpeechModel: speechModel != nil,
+                makeTranscriber: makeTranscriber,
+                subject: "Состояние цели",
+                fallbackNotice: "Распознала системная диктовка — проверь текст."
+            ),
+            planStore: plan
         )
         // Скачанная раньше по кнопке копия модели больше не нужна.
         Task.detached(priority: .background) { GigaAMModel.removeLegacyDownload() }

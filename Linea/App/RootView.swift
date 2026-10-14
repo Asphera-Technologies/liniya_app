@@ -18,6 +18,7 @@ struct RootView: View {
     @Environment(CheckInStore.self) private var checkIn
     @Environment(QuickAddStore.self) private var quickAdd
     @Environment(GoalIntakeStore.self) private var goalIntake
+    @Environment(GoalUpdateStore.self) private var goalUpdate
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection: AppTab = .today
 
@@ -65,6 +66,7 @@ struct RootView: View {
                 checkIn.appMovedToBackground()
                 quickAdd.appMovedToBackground()
                 goalIntake.dictation.appMovedToBackground()
+                goalUpdate.appMovedToBackground()
             default:
                 break
             }
@@ -128,4 +130,5 @@ struct RootView: View {
         .environment(CheckInStore.preview)
         .environment(QuickAddStore.preview)
         .environment(GoalIntakeStore.preview)
+        .environment(GoalUpdateStore.preview)
 }

@@ -179,6 +179,14 @@ struct GoalProgressEditor: View {
                         addMilestone(after: milestone.id)
                     }
                 }
+            // «Обновить состояние» сказало, что этап уже в работе (ADR-047).
+            if !milestone.isDone, let state = milestone.state {
+                Text(GoalStateUpdate.statusText(state == .almostDone ? .almostDone : .inProgress, for: milestone.title))
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textSecondary)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("goal.milestone.state")
+            }
 
             if showsWeights {
                 LineaNumberField(label: "Вес", value: binding.weight, placeholder: "—", identifier: "goal.milestone.weight")

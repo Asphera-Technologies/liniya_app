@@ -40,6 +40,8 @@ struct GoalEditorView: View {
     /// Веса этапов видны, если они уже есть или человек их включил.
     @State private var showsWeights: Bool
     @State private var isEditingStages = false
+    /// «Обновить состояние» открыто.
+    @State private var isUpdatingState = false
     /// «За какую часть отвечаешь ты?» — у цели команды или компании.
     @State private var ownerScope: String
     @Namespace private var prioritySegments
@@ -152,7 +154,14 @@ struct GoalEditorView: View {
     private var stateSection: some View {
         let stages = draft.stages.isEmpty ? suggestedStages : draft.stages
         return VStack(alignment: .leading, spacing: 14) {
-            SectionLabel(text: "Где сейчас")
+            HStack(alignment: .firstTextBaseline) {
+                SectionLabel(text: "Где сейчас")
+                // Одним действием рассказать, что изменилось (ADR-047).
+                Button("Обновить состояние") { isUpdatingState = true }
+                    .font(LineaFont.sectionLabel)
+                    .tint(LineaColor.textPrimary)
+                    .accessibilityIdentifier("goal.update")
+            }
             VStack(spacing: 0) {
                 Menu {
                     ForEach(stages, id: \.self) { stage in
@@ -211,6 +220,28 @@ struct GoalEditorView: View {
                 LineaTextField(placeholder: "Например: прототип готов, идёт переработка задач", text: $currentState,
                                axis: .vertical, font: LineaFont.rowTitle, identifier: "goal.current")
                     .lineLimit(1...8)
+                if let previous = draft.stateHistory.last {
+                    // Прежнее не потерялось: последнее — тихой строкой.
+                    Text("Раньше (\(GoalProgressText.moment(previous.at, time: time))): \(previous.text)")
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("goal.state.previous")
+                }
+            }
+            if let focus = GoalStateUpdate.focusSentence(draft.nextActions) {
+                Text(focus)
+                    .font(LineaFont.rowTitle)
+                    .foregroundStyle(LineaColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("goal.focus")
+            }
+        }
+        .sheet(isPresented: $isUpdatingState) {
+            GoalUpdateView(goal: edited) { saved in
+                // Цель уже сохранена — карточка показывает её такой, какой она стала.
+                draft = saved
+                currentState = saved.currentState ?? ""
             }
         }
     }
