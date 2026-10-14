@@ -105,6 +105,7 @@ struct GoalEditorView: View {
                     resultSection
                     dueDateSection
                     prioritySection
+                    protectedWindowSection
                     togglesSection
                     kindSection
                     deleteButton
@@ -392,6 +393,82 @@ struct GoalEditorView: View {
         }
         .padding(.vertical, 14)
         .contentShape(Rectangle())
+    }
+
+    // MARK: Защищённое окно
+
+    /// «Если пользователь разрешил, Linea резервирует свободное окно» (ADR-046):
+    /// переключатель, а если включено — сколько, когда и только ли по будням.
+    /// Это не событие календаря: окно весит в плане больше обычных дел, а
+    /// срочное дело или встреча его передвигают.
+    private var protectedWindowSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: Binding(
+                get: { draft.protectedWindow != nil },
+                set: { isOn in withAnimation(.snappy) { draft.protectedWindow = isOn ? GoalWindowPolicy() : nil } }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Защищённое окно")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                    Text(draft.protectedWindow.map { "Каждый день · \($0.summary)" }
+                         ?? "Linea будет оставлять в плане время для цели")
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textTertiary)
+                        .accessibilityIdentifier("goal.window.summary")
+                }
+            }
+            .tint(LineaColor.ink)
+            .accessibilityIdentifier("goal.window.toggle")
+            if let policy = draft.protectedWindow {
+                FlowLayout(spacing: 8) {
+                    ForEach([30, 60], id: \.self) { minutes in
+                        windowChoice(RussianText.duration(minutes: minutes), isSelected: policy.minutes == minutes,
+                                     identifier: "goal.window.minutes.\(minutes)") {
+                            draft.protectedWindow?.minutes = minutes
+                        }
+                    }
+                }
+                FlowLayout(spacing: 8) {
+                    ForEach(GoalWindowPolicy.PartOfDay.allCases, id: \.self) { part in
+                        windowChoice(part.title, isSelected: policy.partOfDay == part,
+                                     identifier: "goal.window.part.\(part.rawValue)") {
+                            draft.protectedWindow?.partOfDay = part
+                        }
+                    }
+                }
+                Toggle(isOn: Binding(
+                    get: { policy.weekdaysOnly },
+                    set: { draft.protectedWindow?.weekdaysOnly = $0 }
+                )) {
+                    Text("Только по будням")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                }
+                .tint(LineaColor.ink)
+                Text("Это не событие в календаре: в плане окно весит больше обычных дел, а срочное дело или встреча его передвигают.")
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func windowChoice(_ title: String, isSelected: Bool, identifier: String, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(.snappy) { action() }
+        } label: {
+            Text(title)
+                .font(LineaFont.control)
+                .foregroundStyle(isSelected ? LineaColor.onInk : LineaColor.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Capsule(style: .continuous).fill(isSelected ? LineaColor.ink : LineaColor.fill))
+                .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityIdentifier(identifier)
     }
 
     // MARK: Активная, выполнена

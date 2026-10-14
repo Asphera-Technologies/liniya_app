@@ -162,6 +162,9 @@ struct PlanBlockRow: View {
         switch block.kind {
         case .focus:
             return "\(block.durationMinutes) мин"
+        case .goal:
+            // Не задача и не встреча — время, которое Linea бережёт для цели.
+            return "\(block.durationMinutes) мин · защищённое окно"
         case .commitment, .meal, .rest:
             return nil
         }

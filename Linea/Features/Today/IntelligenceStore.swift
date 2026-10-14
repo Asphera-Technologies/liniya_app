@@ -522,11 +522,20 @@ final class IntelligenceStore {
         await updateNextAction(time: time)
     }
 
-    /// «Начать» на «Сейчас».
+    /// «Начать» на «Сейчас». На защищённом окне цели задачи ещё нет — она
+    /// создаётся на остаток окна и сразу берётся в работу.
     func startAction() async {
-        guard let action = nextAction, let option = action.option, !action.isStarted,
-              let task = planStore.tasks.first(where: { $0.id == option.taskID }) else { return }
-        await perform(.start, on: task, plannedMinutes: option.minutes)
+        guard let action = nextAction, let option = action.option, !action.isStarted else { return }
+        if let task = planStore.tasks.first(where: { $0.id == option.taskID }) {
+            await perform(.start, on: task, plannedMinutes: option.minutes)
+            return
+        }
+        guard let goalID = option.windowGoalID, let goal = planStore.goals.first(where: { $0.id == goalID }) else { return }
+        let window = GoalWindow.protectedTask(for: goal, title: option.title, minutes: option.minutes, time: time)
+        LineaLog.plan.notice("Защищённое окно: начато")
+        await planStore.saveTask(window)
+        guard let saved = planStore.tasks.first(where: { $0.id == window.id }) else { return }
+        await perform(.start, on: saved, plannedMinutes: option.minutes)
     }
 
     /// «Завершить» на начатом действии — задача закрыта, «сейчас» — следующее.
@@ -540,9 +549,24 @@ final class IntelligenceStore {
     /// «Не сейчас» на «Сейчас»: предложенное или начатое откладывается на
     /// полтора часа, Linea предлагает другое — и иногда спрашивает почему.
     func notNowAction() async {
-        guard let action = nextAction, let option = action.option,
-              let task = planStore.tasks.first(where: { $0.id == option.taskID }) else { return }
-        await decline(task, plannedMinutes: option.minutes)
+        guard let action = nextAction, let option = action.option else { return }
+        if let task = planStore.tasks.first(where: { $0.id == option.taskID }) {
+            await decline(task, plannedMinutes: option.minutes)
+            return
+        }
+        // Защищённое окно: сегодня «Сейчас» его больше не предлагает, а время
+        // в плане остаётся.
+        guard let goalID = option.windowGoalID else { return }
+        let time = self.time
+        if let current = record, time.isSameDay(current.day, time.now) {
+            let answered = SuggestionLog.responding(.declined, to: option.taskID, in: current, at: time.now).record
+            let declined = answered.appendingFeedback(.goalWindowDeclined(goalID: goalID), at: time.now)
+            apply(declined)
+            await save(declined, failure: "«Не сейчас» на окне цели не записалось")
+        }
+        LineaLog.plan.notice("Защищённое окно: не сейчас")
+        nowNote = TaskExecutionText.declined
+        await updateNextAction(time: self.time)
     }
 
     /// «Не сейчас» и «Не получается продолжить»: решить, спросить ли
