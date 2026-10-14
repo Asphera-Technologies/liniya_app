@@ -139,9 +139,6 @@ nonisolated struct GoalMilestone: Identifiable, Hashable, Codable, Sendable {
     var isDone: Bool { completedAt != nil }
 }
 
-/// Чья цель (`scope`): только человека, его команды или всей компании.
-/// У командной и общей цели прогресс — общий, а у человека — своя часть
-/// (`LineaGoal.ownerScope`) и свой вклад; это разные вещи (ADR-038).
 /// Защищённое окно под цель (ADR-046): если человек разрешил, Linea каждый
 /// день оставляет в плане время для цели — «17:30–18:00 Продвинуть «Linea
 /// Beta»». Это не событие календаря: внутри плана окно весит больше обычных
@@ -195,6 +192,9 @@ nonisolated struct GoalWindowPolicy: Codable, Hashable, Sendable {
     }
 }
 
+/// Чья цель (`scope`): только человека, его команды или всей компании.
+/// У командной и общей цели прогресс — общий, а у человека — своя часть
+/// (`LineaGoal.ownerScope`) и свой вклад; это разные вещи (ADR-038).
 nonisolated enum GoalScope: String, Codable, CaseIterable, Sendable {
     case personal
     case team
