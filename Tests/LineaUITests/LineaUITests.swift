@@ -1224,12 +1224,33 @@ final class LineaUITests: XCTestCase {
         let app = launch()
         let field = openQuickAdd(app)
         field.tap()
-        field.typeText("Ответить Ивану")
-        XCTAssertTrue(chip(app, "Сколько займёт: ~15 мин").waitForExistence(timeout: 5), "Входящее — 15 минут")
-        snapshot(app, "22 Входящее — 15 минут")
-        field.replaceText("Подготовить стратегию")
-        XCTAssertTrue(chip(app, "Сколько займёт: ~1 ч").waitForExistence(timeout: 5), "Шаг к цели — час")
-        snapshot(app, "23 Шаг к цели — час")
+        // Длительность не названа — её оценивает Linea по словам (ADR-045).
+        field.typeText("Ответить клиенту")
+        XCTAssertTrue(chip(app, "Сколько займёт: ~10 мин").waitForExistence(timeout: 5), "Ответить — 10 минут")
+        snapshot(app, "22 Ответить клиенту — ~10 мин")
+        // «Сегодня» — чтобы в «Плане» под задачей было видно, что у неё задано.
+        field.replaceText("Подготовить презентацию сегодня")
+        XCTAssertTrue(chip(app, "Сколько займёт: ~1 ч").waitForExistence(timeout: 5), "Презентация — час")
+        snapshot(app, "23 Подготовить презентацию — ~1 ч")
+        app.buttons["Добавить задачу"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+
+        // Карточка: оценка Linea подписью, свой выбор — одним тапом.
+        openTab(app, "План", index: 1)
+        let row = button(app, startingWith: "Подготовить презентацию")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        bringAboveCommandBar(row, in: app)
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForExistence(timeout: 5))
+        let estimate = app.staticTexts["task.duration.estimate"]
+        scrollTo(estimate, in: app)
+        XCTAssertEqual(estimate.label, "~1 ч — оценка Linea")
+        snapshot(app, "23а Карточка: оценка Linea")
+        app.buttons["30 минут"].tap()
+        XCTAssertTrue(estimate.waitForNonExistence(timeout: 5), "Выбрал сам — подписи Linea нет")
+        app.navigationBars["Задача"].buttons["Готово"].tap()
+        XCTAssertTrue(app.navigationBars["Задача"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForLabel(row, containing: "~30 мин"), "Строка: \(row.label)")
     }
 
     // MARK: - Запуск
