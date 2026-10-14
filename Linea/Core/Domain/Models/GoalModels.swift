@@ -122,21 +122,37 @@ nonisolated struct GoalMetric: Identifiable, Hashable, Codable, Sendable {
 
 /// Крупный этап цели: «Core loop», «Onboarding», «TestFlight».
 nonisolated struct GoalMilestone: Identifiable, Hashable, Codable, Sendable {
+    /// Где незакрытый этап, по словам человека («Обновить состояние», ADR-047).
+    nonisolated enum State: String, Codable, Hashable, Sendable {
+        case inProgress
+        case almostDone
+    }
+
     let id: UUID
     var title: String
     /// Вес этапа, если его задали уверенно. Без весов процента нет — только
     /// «2 из 5 этапов»: Linea не придумывает точность, которой нет.
     var weight: Double?
     var completedAt: Date?
+    /// Незакрытый этап уже в работе или почти готов; nil — не начат или закрыт.
+    var state: State?
 
-    init(id: UUID, title: String, weight: Double? = nil, completedAt: Date? = nil) {
+    init(id: UUID, title: String, weight: Double? = nil, completedAt: Date? = nil, state: State? = nil) {
         self.id = id
         self.title = title
         self.weight = weight
         self.completedAt = completedAt
+        self.state = state
     }
 
     var isDone: Bool { completedAt != nil }
+}
+
+/// Прежнее «Что уже сделано» — когда человек рассказал, что изменилось
+/// («Обновить состояние», ADR-047): контекст цели не теряется.
+nonisolated struct GoalStateNote: Hashable, Codable, Sendable {
+    let at: Date
+    let text: String
 }
 
 /// Защищённое окно под цель (ADR-046): если человек разрешил, Linea каждый

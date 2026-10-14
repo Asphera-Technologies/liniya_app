@@ -145,6 +145,21 @@ struct ProtectedWindowTests {
         #expect(now.alternatives.map(\.title) == ["Оплатить интернет"], "Другое — как обычно")
     }
 
+    @Test("Во время окна — ближайший шаг цели из «Обновить состояние», если он есть")
+    func windowOffersNextStep() throws {
+        let time = WowFixture.time(17, 5)
+        var goal = beta
+        goal.nextActions = ["Закончить onboarding", "Подключить аналитику"]
+        let snapshot = PlanFixture.snapshot(tasks: [], commitments: [], goals: [goal], at: time)
+        let state = PlanFixture.state(energy: 0.7, confidence: 0.9, advice: .normal, at: time)
+        let day = PlanFixture.engine(rules: []).plan(snapshot: snapshot, state: state, time: time, planID: WowFixture.planID)
+        let record = DayRecord(day: WowFixture.today, snapshot: snapshot, state: state, plan: day, updatedAt: time.now)
+        let now = try #require(NextActionUseCase(renderer: RuleBasedExplainer())
+            .run(record: record, tasks: [], calibration: .default, time: time))
+        #expect(now.option?.title == "Закончить onboarding")
+        #expect(now.option?.windowGoalID == goal.id)
+    }
+
     @Test("Во время окна — сначала задачи этой цели; «Не сейчас» на окне — сегодня его больше не предлагать")
     func windowPrefersGoalTasks() throws {
         let time = WowFixture.time(17, 5)

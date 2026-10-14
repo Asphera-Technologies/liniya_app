@@ -180,7 +180,7 @@ nonisolated struct NextActionUseCase: Sendable {
         let minutes = max(10, Int(window.end.timeIntervalSince(time.now) / 60))
         let option = NextAction.Option(
             taskID: GoalWindow.protectedTaskID(goalID: window.goalID, day: time.today, time: time),
-            title: window.title, minutes: minutes, windowGoalID: window.goalID
+            title: window.nextStep ?? window.title, minutes: minutes, windowGoalID: window.goalID
         )
         let alternatives = actionable.prefix(Self.maxAlternatives).compactMap { Self.option($0, titles: titles) }
         let facts: [Fact] = [

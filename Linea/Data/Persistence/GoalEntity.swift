@@ -64,6 +64,10 @@ final class GoalEntity {
     var sharedScopeRaw: String?
     /// Защищённое окно под цель (`GoalWindowPolicy`), JSON; nil — не разрешено.
     var protectedWindowData: Data?
+    /// Ближайшие шаги после «Обновить состояние», по одному на строку.
+    var nextActionsRaw: String?
+    /// Прежние «Что уже сделано», JSON.
+    var stateHistoryData: Data?
 
     init(
         id: UUID,
@@ -94,7 +98,9 @@ final class GoalEntity {
         lastReviewedAt: Date? = nil,
         attentionSnoozedUntil: Date? = nil,
         sharedScopeRaw: String? = nil,
-        protectedWindowData: Data? = nil
+        protectedWindowData: Data? = nil,
+        nextActionsRaw: String? = nil,
+        stateHistoryData: Data? = nil
     ) {
         self.id = id
         self.title = title
@@ -125,6 +131,8 @@ final class GoalEntity {
         self.attentionSnoozedUntil = attentionSnoozedUntil
         self.sharedScopeRaw = sharedScopeRaw
         self.protectedWindowData = protectedWindowData
+        self.nextActionsRaw = nextActionsRaw
+        self.stateHistoryData = stateHistoryData
     }
 }
 
@@ -158,7 +166,9 @@ extension GoalEntity {
             lastReviewedAt: goal.lastReviewedAt,
             attentionSnoozedUntil: goal.attentionSnoozedUntil,
             sharedScopeRaw: goal.sharedScope?.rawValue,
-            protectedWindowData: Self.encodedValue(goal.protectedWindow)
+            protectedWindowData: Self.encodedValue(goal.protectedWindow),
+            nextActionsRaw: Self.raw(goal.nextActions),
+            stateHistoryData: Self.encoded(goal.stateHistory)
         )
     }
 
@@ -191,7 +201,9 @@ extension GoalEntity {
             sharedScope: sharedScopeRaw.flatMap(GoalScope.init(rawValue:)),
             lastReviewedAt: lastReviewedAt,
             attentionSnoozedUntil: attentionSnoozedUntil,
-            protectedWindow: Self.decodedValue(GoalWindowPolicy.self, from: protectedWindowData)
+            protectedWindow: Self.decodedValue(GoalWindowPolicy.self, from: protectedWindowData),
+            nextActions: Self.lines(nextActionsRaw),
+            stateHistory: Self.decoded([GoalStateNote].self, from: stateHistoryData) ?? []
         )
     }
 
@@ -227,6 +239,8 @@ extension GoalEntity {
         attentionSnoozedUntil = goal.attentionSnoozedUntil
         sharedScopeRaw = goal.sharedScope?.rawValue
         protectedWindowData = Self.encodedValue(goal.protectedWindow)
+        nextActionsRaw = Self.raw(goal.nextActions)
+        stateHistoryData = Self.encoded(goal.stateHistory)
     }
 
     private static func encoded<Value: Encodable>(_ values: [Value]) -> Data? {

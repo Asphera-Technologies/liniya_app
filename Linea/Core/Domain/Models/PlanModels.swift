@@ -323,6 +323,11 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// Защищённое окно под цель (ADR-046): человек разрешил оставлять в плане
     /// время для цели. nil — не разрешал.
     var protectedWindow: GoalWindowPolicy?
+    /// Ближайшие шаги — «Новый фокус» после «Обновить состояние» (ADR-047,
+    /// `next_actions`): «Закончить onboarding», «Подключить аналитику».
+    var nextActions: [String]
+    /// Прежние «Что уже сделано», по порядку: обновление состояния их не стирает.
+    var stateHistory: [GoalStateNote]
 
     init(
         id: UUID = UUID(),
@@ -352,7 +357,9 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         sharedScope: GoalScope? = nil,
         lastReviewedAt: Date? = nil,
         attentionSnoozedUntil: Date? = nil,
-        protectedWindow: GoalWindowPolicy? = nil
+        protectedWindow: GoalWindowPolicy? = nil,
+        nextActions: [String] = [],
+        stateHistory: [GoalStateNote] = []
     ) {
         self.id = id
         self.title = title
@@ -382,6 +389,8 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         self.lastReviewedAt = lastReviewedAt
         self.attentionSnoozedUntil = attentionSnoozedUntil
         self.protectedWindow = protectedWindow
+        self.nextActions = nextActions
+        self.stateHistory = stateHistory
     }
 
     /// Мягкое чтение, как у задачи: цели лежат и в документах дня.
@@ -431,6 +440,8 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         lastReviewedAt = try? container.decodeIfPresent(Date.self, forKey: .lastReviewedAt)
         attentionSnoozedUntil = try? container.decodeIfPresent(Date.self, forKey: .attentionSnoozedUntil)
         protectedWindow = try? container.decodeIfPresent(GoalWindowPolicy.self, forKey: .protectedWindow)
+        nextActions = (try? container.decodeIfPresent([String].self, forKey: .nextActions)) ?? []
+        stateHistory = (try? container.decodeIfPresent([GoalStateNote].self, forKey: .stateHistory)) ?? []
     }
 
     /// «Низкая / Средняя / Высокая» — важность цели в женском роде.

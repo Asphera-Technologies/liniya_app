@@ -199,6 +199,9 @@ nonisolated struct GoalWindowNow: Hashable, Sendable {
     /// «Продвинуть «Linea Beta»» — так окно называется в плане.
     let title: String
     let end: Date
+    /// Ближайший шаг цели после «Обновить состояние» (ADR-047): «Закончить
+    /// onboarding». В «Сейчас» окно предлагает его, а не просто цель.
+    var nextStep: String? = nil
 
     /// Окно из плана дня, которое идёт в этот момент: цель активна, а «Не
     /// сейчас» на окне сегодня не говорили.
@@ -212,6 +215,7 @@ nonisolated struct GoalWindowNow: Hashable, Sendable {
                 && !(block.goalID.map(declined.contains) ?? true)
         }), let goalID = block.goalID,
               let goal = goals.first(where: { $0.id == goalID && $0.isActive && !$0.isCompleted }) else { return nil }
-        return GoalWindowNow(goalID: goalID, goalTitle: goal.title, title: block.title, end: block.end)
+        return GoalWindowNow(goalID: goalID, goalTitle: goal.title, title: block.title, end: block.end,
+                             nextStep: goal.nextActions.first)
     }
 }
