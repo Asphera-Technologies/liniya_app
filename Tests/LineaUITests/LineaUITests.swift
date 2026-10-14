@@ -728,6 +728,24 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(row, containing: "Компания · 3,2 млн из 5 млн ₽ · 64%"), "Строка цели: \(row.label)")
         XCTAssertTrue(row.label.contains("Моя часть: 2 из 5 enterprise-клиентов · 40%"), "Строка цели: \(row.label)")
         snapshot(app, "53 План: цель компании и моя часть")
+
+        // «От меня», потом снова «От команды» — цель опять компании, а не
+        // просто команды (баг тестировщика, раунд 7).
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Цель"].waitForExistence(timeout: 5))
+        app.buttons["От меня"].tap()
+        XCTAssertTrue(app.buttons["Вся компания"].waitForNonExistence(timeout: 5), "У своей цели нет выбора команды или компании")
+        saveGoalCard(app)
+        XCTAssertTrue(waitForLabel(row, containing: "3,2 млн из 5 млн ₽"), "Строка цели: \(row.label)")
+        XCTAssertFalse(row.label.contains("Компания"), "Своя цель: \(row.label)")
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Цель"].waitForExistence(timeout: 5))
+        app.buttons["От команды"].tap()
+        let company = app.buttons.matching(NSPredicate(format: "label == %@ AND isSelected == true", "Вся компания")).firstMatch
+        XCTAssertTrue(company.waitForExistence(timeout: 5), "Снова «Вся компания», а не «Команда»")
+        saveGoalCard(app)
+        XCTAssertTrue(waitForLabel(row, containing: "Компания · 3,2 млн из 5 млн ₽ · 64%"), "Строка цели: \(row.label)")
+        snapshot(app, "53а План: снова цель компании")
     }
 
     // MARK: - 16. Баланс дня: окно для важной цели среди текущих дел
@@ -966,6 +984,7 @@ final class LineaUITests: XCTestCase {
         let toast = notice(app)
         XCTAssertTrue(toast.waitForExistence(timeout: 5), "Linea говорит, куда поставила")
         XCTAssertTrue(toast.label.hasPrefix("Поставила на "), "Сообщение: \(toast.label)")
+        let decidedClock = Self.clock(in: toast.label)
         snapshot(app, "72 Пусть Linea решит: поставила")
         let decided = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@",
                                                        "Подготовить презентацию", "Время выбрала Linea")).firstMatch
@@ -982,6 +1001,10 @@ final class LineaUITests: XCTestCase {
         app.buttons["Позже сегодня"].tap()
         XCTAssertTrue(toast.waitForExistence(timeout: 5))
         XCTAssertTrue(toast.label.hasPrefix("Перенесла на "), "Сообщение: \(toast.label)")
+        // Окно, которое Linea уже нашла презентации, занято — письма не
+        // встают внахлёст (баг тестировщика, раунд 7).
+        XCTAssertNotNil(decidedClock)
+        XCTAssertNotEqual(Self.clock(in: toast.label), decidedClock, "Сообщения: \(decidedClock ?? "-") и \(toast.label)")
         let later = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@",
                                                      "Ответить на письма", "Позже — с ")).firstMatch
         XCTAssertTrue(later.waitForExistence(timeout: 5), "Под задачей — с какого времени")
@@ -1242,6 +1265,11 @@ final class LineaUITests: XCTestCase {
         let moment = Date().addingTimeInterval(TimeInterval(minutes * 60))
         let parts = calendar.dateComponents([.hour, .minute], from: moment)
         return String(format: "%d:%02d", parts.hour ?? 0, parts.minute ?? 0)
+    }
+
+    /// «13:24» из «Поставила на сегодня, 13:24.»
+    static func clock(in text: String) -> String? {
+        text.range(of: "[0-9]{1,2}:[0-9]{2}", options: .regularExpression).map { String(text[$0]) }
     }
 
     /// Подпись дня в календаре содержит его число отдельным словом:
