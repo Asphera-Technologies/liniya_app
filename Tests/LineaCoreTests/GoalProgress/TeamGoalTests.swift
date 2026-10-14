@@ -178,6 +178,45 @@ struct TeamGoalTests {
         #expect(matcher.bestMatch(for: "Встреча с enterprise-клиентом", in: [noPart]) == nil)
     }
 
+    @Test("«От меня», а потом снова «От команды» — цель опять компании, а не просто команды (баг тестировщика)")
+    func sharedKindIsRemembered() throws {
+        var goal = revenue
+        goal.setShared(false)
+        #expect(goal.scope == .personal)
+        #expect(goal.ownerScope == part, "Своя часть остаётся, как и раньше")
+        #expect(goal.sharedScope == .company, "Какой общей цель была — помнится")
+
+        // Сохранили своей и открыли снова — память переживает сохранение.
+        let stored = try JSONDecoder().decode(LineaGoal.self, from: JSONEncoder().encode(goal))
+        #expect(stored.scope == .personal)
+        #expect(stored.sharedScope == .company)
+        var reopened = stored
+        reopened.setShared(true)
+        #expect(reopened.scope == .company)
+        #expect(GoalProgressText.scopeLabel(reopened.scope) == "Компания", "В «Плане» — «Компания · …»")
+
+        // Своя цель, впервые ставшая общей, — команды; выбор «Вся компания» помнится.
+        var own = LineaGoal(title: "Сделать ремонт", createdAt: WowFixture.created)
+        own.setShared(true)
+        #expect(own.scope == .team)
+        own.scope = .company
+        own.setShared(false)
+        own.setShared(true)
+        #expect(own.scope == .company)
+        own.scope = .team
+        own.setShared(false)
+        own.setShared(true)
+        #expect(own.scope == .team, "Потом выбрали «Команда» — помнится команда")
+    }
+
+    @Test("Цель, сохранённая до этой памяти, читается: общая — помнит себя, своя — ничего")
+    func sharedKindLegacyDecode() throws {
+        let company = #"{"id":"\#(goalID.uuidString)","title":"Выручка","progress":0,"isCompleted":false,"createdAt":800000000,"scope":"company"}"#
+        #expect(try JSONDecoder().decode(LineaGoal.self, from: Data(company.utf8)).sharedScope == .company)
+        let personal = #"{"id":"\#(goalID.uuidString)","title":"Бег","progress":0,"isCompleted":false,"createdAt":800000000}"#
+        #expect(try JSONDecoder().decode(LineaGoal.self, from: Data(personal.utf8)).sharedScope == nil)
+    }
+
     @Test("Миллионы — словом, если так точно: «3,2 млн», но «3 251 000»")
     func compactNumbers() {
         #expect(GoalProgressText.compact(5_000_000) == "5 млн")

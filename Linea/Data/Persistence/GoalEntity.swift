@@ -59,6 +59,9 @@ final class GoalEntity {
     var lastReviewedAt: Date?
     /// «Пока нет» на предложение вернуться к цели.
     var attentionSnoozedUntil: Date?
+    /// Какой общей цель была — команды или компании (`sharedScope`); остаётся,
+    /// когда человек выбрал «От меня».
+    var sharedScopeRaw: String?
 
     init(
         id: UUID,
@@ -87,7 +90,8 @@ final class GoalEntity {
         contributionMetricsData: Data? = nil,
         kindOverrideRaw: String? = nil,
         lastReviewedAt: Date? = nil,
-        attentionSnoozedUntil: Date? = nil
+        attentionSnoozedUntil: Date? = nil,
+        sharedScopeRaw: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -116,6 +120,7 @@ final class GoalEntity {
         self.kindOverrideRaw = kindOverrideRaw
         self.lastReviewedAt = lastReviewedAt
         self.attentionSnoozedUntil = attentionSnoozedUntil
+        self.sharedScopeRaw = sharedScopeRaw
     }
 }
 
@@ -147,7 +152,8 @@ extension GoalEntity {
             contributionMetricsData: Self.encoded(goal.contributionMetrics),
             kindOverrideRaw: goal.kindOverride?.rawValue,
             lastReviewedAt: goal.lastReviewedAt,
-            attentionSnoozedUntil: goal.attentionSnoozedUntil
+            attentionSnoozedUntil: goal.attentionSnoozedUntil,
+            sharedScopeRaw: goal.sharedScope?.rawValue
         )
     }
 
@@ -177,6 +183,7 @@ extension GoalEntity {
             contributionMetrics: Self.decoded([GoalMetric].self, from: contributionMetricsData) ?? [],
             kindOverride: kindOverrideRaw.flatMap(GoalKind.init(rawValue:)),
             progressLog: Self.decoded([GoalProgressEvent].self, from: progressLogData) ?? [],
+            sharedScope: sharedScopeRaw.flatMap(GoalScope.init(rawValue:)),
             lastReviewedAt: lastReviewedAt,
             attentionSnoozedUntil: attentionSnoozedUntil
         )
@@ -212,6 +219,7 @@ extension GoalEntity {
         kindOverrideRaw = goal.kindOverride?.rawValue
         lastReviewedAt = goal.lastReviewedAt
         attentionSnoozedUntil = goal.attentionSnoozedUntil
+        sharedScopeRaw = goal.sharedScope?.rawValue
     }
 
     private static func encoded<Value: Encodable>(_ values: [Value]) -> Data? {

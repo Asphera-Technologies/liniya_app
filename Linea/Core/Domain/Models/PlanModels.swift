@@ -282,7 +282,13 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// слайдером: тогда состояние следует из прежнего `progress`.
     var manualState: GoalManualState?
     /// Чья цель (`scope`): моя, команды, компании. По умолчанию — своя.
-    var scope: GoalScope
+    var scope: GoalScope {
+        didSet { if scope.isShared { sharedScope = scope } }
+    }
+    /// Какой общей цель была — команды или компании. Остаётся, когда человек
+    /// выбирает «От меня», как своя часть и свои числа: вернул «От команды» —
+    /// цель снова компании, а не просто команды. nil — общей она не была.
+    var sharedScope: GoalScope?
     /// За какую часть общей цели отвечает сам человек (`owner_scope`):
     /// «Новые enterprise-клиенты и ключевые переговоры». Шаги Linea строит
     /// только в этих рамках (`GoalStepScope`). У своей цели — nil.
@@ -328,6 +334,7 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         contributionMetrics: [GoalMetric] = [],
         kindOverride: GoalKind? = nil,
         progressLog: [GoalProgressEvent] = [],
+        sharedScope: GoalScope? = nil,
         lastReviewedAt: Date? = nil,
         attentionSnoozedUntil: Date? = nil
     ) {
@@ -351,6 +358,7 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
         self.progressMethod = progressMethod
         self.manualState = manualState
         self.scope = scope
+        self.sharedScope = scope.isShared ? scope : sharedScope.flatMap { $0.isShared ? $0 : nil }
         self.ownerScope = ownerScope
         self.contributionMetrics = contributionMetrics
         self.kindOverride = kindOverride
@@ -396,6 +404,10 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
             ownerScope = owner
         }
         self.scope = scope
+        // Записано раньше, чем Linea стала это помнить, — какой общей цель
+        // была, знает только сама «чья цель».
+        let shared = try? container.decodeIfPresent(GoalScope.self, forKey: .sharedScope)
+        sharedScope = scope.isShared ? scope : shared.flatMap { $0.isShared ? $0 : nil }
         contributionMetrics = (try? container.decodeIfPresent([GoalMetric].self, forKey: .contributionMetrics)) ?? []
         kindOverride = try? container.decodeIfPresent(GoalKind.self, forKey: .kindOverride)
         progressLog = (try? container.decodeIfPresent([GoalProgressEvent].self, forKey: .progressLog)) ?? []
@@ -438,6 +450,17 @@ nonisolated struct LineaGoal: Identifiable, Hashable, Sendable, Codable {
     /// Следующий незакрытый этап — «следующий рубеж».
     var nextMilestone: GoalMilestone? {
         milestones.first { !$0.isDone }
+    }
+
+    /// «Эта цель зависит только от тебя или от команды?»: «От меня» — своя;
+    /// «От команды» — снова такая общая, какой была (команды или компании),
+    /// а впервые — команды.
+    mutating func setShared(_ isShared: Bool) {
+        if !isShared {
+            scope = .personal
+        } else if !scope.isShared {
+            scope = sharedScope ?? .team
+        }
     }
 
     /// Часть человека в общей цели — если цель общая и часть названа.

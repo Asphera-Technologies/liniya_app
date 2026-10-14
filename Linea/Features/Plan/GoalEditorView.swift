@@ -309,7 +309,9 @@ struct GoalEditorView: View {
                 selection: Binding(
                     get: { draft.scope.isShared ? 1 : 0 },
                     set: { index in
-                        withAnimation(.snappy) { draft.scope = index == 0 ? .personal : (draft.scope.isShared ? draft.scope : .team) }
+                        // «От команды» — снова такая общая, какой цель была:
+                        // команды или всей компании.
+                        withAnimation(.snappy) { draft.setShared(index == 1) }
                     }
                 ),
                 namespace: ownerSegments
