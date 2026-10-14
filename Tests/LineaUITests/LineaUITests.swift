@@ -1068,6 +1068,59 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "77 Прошлая неделя без обзора")
     }
 
+    // MARK: - 21. Защищённое окно под цель: разрешил — Linea оставляет время в плане
+
+    @MainActor
+    func test21ProtectedGoalWindow() throws {
+        let app = launch()
+        openTab(app, "План", index: 1)
+        createQuickGoal(app, "Запустить Linea Beta")
+        let goalRow = button(app, startingWith: "Запустить Linea Beta")
+        XCTAssertTrue(goalRow.waitForExistence(timeout: 5))
+        goalRow.tap()
+        XCTAssertTrue(app.navigationBars["Цель"].waitForExistence(timeout: 5))
+        let toggle = app.switches["goal.window.toggle"]
+        scrollTo(toggle, in: app)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5), "В карточке цели — «Защищённое окно»")
+        snapshot(app, "78 Карточка цели: защищённое окно выключено")
+        // Переключатель — справа в строке; тап по подписи его не трогает.
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()
+        let any = app.buttons["goal.window.part.any"]
+        XCTAssertTrue(any.waitForExistence(timeout: 5), "Включил — видно, сколько и когда")
+        any.tap()
+        let summary = app.staticTexts["goal.window.summary"]
+        XCTAssertTrue(waitForLabel(summary, "Каждый день · 30 мин · когда свободно"), summary.label)
+        snapshot(app, "79 Защищённое окно: 30 мин, когда свободно")
+        saveGoalCard(app)
+
+        // «Дальше»: окно в плане — не задача и не событие календаря.
+        openTab(app, "Сегодня", index: 0)
+        let block = app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@",
+                                                     "Продвинуть «Запустить Linea Beta»", "защищённое окно")).firstMatch
+        XCTAssertTrue(block.waitForExistence(timeout: 15), "Окно в плане дня")
+        scrollTo(block, in: app)
+        snapshot(app, "80 Дальше: защищённое окно")
+
+        // «Сейчас» — само окно; «Начать» берёт его в работу.
+        let now = nowCard(app)
+        XCTAssertTrue(now.staticTexts["Продвинуть «Запустить Linea Beta»"].waitForExistence(timeout: 10), "Сейчас — окно цели")
+        let reason = now.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@",
+                                                          "Сейчас время для цели «Запустить Linea Beta» — до ")).firstMatch
+        XCTAssertTrue(reason.exists, "Причина — время для цели")
+        scrollTo(now, in: app)
+        snapshot(app, "81 Сейчас: время для цели")
+        bringAboveCommandBar(now.buttons["Начать"], in: app)
+        now.buttons["Начать"].tap()
+        let focusTitle = app.staticTexts["focus.title"]
+        XCTAssertTrue(focusTitle.waitForExistence(timeout: 10), "Окно в работе — фокус")
+        XCTAssertEqual(focusTitle.label, "Продвинуть «Запустить Linea Beta»")
+        snapshot(app, "82 Фокус: окно цели")
+        minimizeFocus(app)
+        openTab(app, "План", index: 1)
+        XCTAssertTrue(button(app, startingWith: "Продвинуть «Запустить Linea Beta»").waitForExistence(timeout: 5),
+                      "Начатое окно — задача к цели")
+    }
+
     // MARK: - 10. Свайпы и долгое нажатие: главное — без карточки задачи
 
     @MainActor
