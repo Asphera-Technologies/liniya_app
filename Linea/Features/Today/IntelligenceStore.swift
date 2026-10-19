@@ -1037,25 +1037,21 @@ final class IntelligenceStore {
         return "Пока я отвечаю только про план, сон и еду. Свободный разговор появится позже."
     }
 
-    /// Подсказки, на которые есть точный ответ без сети.
+    /// Подсказки, на которые есть точный ответ без сети. Про сон — только
+    /// когда модели нет: с моделью вопрос уходит ей вместе с ночью, фазами и
+    /// оценкой сна, а не обрывается одной длительностью.
     private func quickAnswer(to question: String) -> String? {
         let lowercased = question.lowercased()
-        if lowercased.contains("сон") || lowercased.contains("спал") { return sleepAnswer }
+        if lowercased.contains("сон") || lowercased.contains("спал") {
+            return isAssistantAvailable ? nil : sleepAnswer
+        }
         if lowercased.contains("план на сегодня") { return brief?.message }
         return nil
     }
 
     private var sleepAnswer: String {
-        guard let average = sleepInsight.weekAverageSeconds else {
-            return "Пока не вижу данных о сне."
-        }
-        var parts = ["За неделю в среднем \(RussianText.hoursMinutes(seconds: average))."]
-        if sleepInsight.canCompare, let usual = sleepInsight.usualSeconds {
-            parts.append("Обычно \(RussianText.hoursMinutes(seconds: usual)).")
-        } else if let progress = sleepInsight.baselineProgress {
-            parts.append("Собираю базу: день \(progress.days) из \(progress.needed).")
-        }
-        return parts.joined(separator: " ")
+        SleepContextText.answer(night: state?.sleepNight, insight: sleepInsight, time: time)
+            ?? "Пока не вижу данных о сне."
     }
 
     private static func title(for provider: ProviderID) -> String {

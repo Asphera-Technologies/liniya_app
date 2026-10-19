@@ -6,10 +6,10 @@
 //  опираясь на то, что Linea уже посчитала, и ничего не решает сама: план,
 //  приоритеты и оценка сил остаются за детерминированным ядром.
 //
-//  Наружу уходят только производные факты — сколько человек спал, какой
-//  сегодня совет по нагрузке, названия задач. Ни одного сырого замера из
-//  HealthKit. И только если пользователь включил облачного ассистента в
-//  «Профиле».
+//  Наружу уходят только производные факты — как человек спал (итоги ночи,
+//  фазы, оценка сна, неделя: `SleepContextText`), какой сегодня совет по
+//  нагрузке, названия задач. Ни одного сырого замера из HealthKit. И только
+//  если пользователь включил облачного ассистента в «Профиле».
 //
 
 import Foundation
@@ -72,12 +72,12 @@ nonisolated struct AssistantService: Sendable {
         lines.append("Сейчас \(RussianText.clock(time.now, time: time)).")
 
         if let state = context.state {
-            if let sleep = state.sleepNight {
-                lines.append("Сон прошлой ночью: \(RussianText.hoursMinutes(seconds: sleep.asleepSeconds)).")
-            }
-            if let insight = context.sleep, insight.canCompare, let usual = insight.usualSeconds {
-                lines.append("Обычно спит \(RussianText.hoursMinutes(seconds: usual)).")
-            }
+            lines.append(contentsOf: SleepContextText.contextLines(
+                night: state.sleepNight,
+                component: state.component(.sleep),
+                insight: context.sleep ?? .empty,
+                time: time
+            ))
             lines.append("Совет по нагрузке на сегодня: \(Self.adviceText(state.loadAdvice)).")
             if state.confidence < 0.35 {
                 lines.append("Данных о состоянии мало, выводы осторожные.")
