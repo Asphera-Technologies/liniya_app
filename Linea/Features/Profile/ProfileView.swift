@@ -9,11 +9,14 @@ struct ProfileView: View {
     @Environment(UserProfileStore.self) private var profile
     @Environment(HealthKitManager.self) private var healthKit
     @Environment(MemoryStore.self) private var memory
+    @Environment(IntelligenceStore.self) private var intelligence
     @Environment(\.dismiss) private var dismiss
 
     @State private var eventStore = EKEventStore()
     @State private var isEditingProfile = false
     @State private var isShowingMemory = false
+    @State private var isShowingCalibration = false
+    @State private var isShowingDiagnostics = false
     @State private var isChangingConnection = false
     @State private var calendarDenied = false
     @State private var healthFailed = false
@@ -24,6 +27,7 @@ struct ProfileView: View {
                 aboutSection
                 connectionsSection
                 intelligenceSection
+                diagnosticsFooter
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -44,6 +48,13 @@ struct ProfileView: View {
             }
         }
         .sheet(isPresented: $isShowingMemory) { MemoryView() }
+        .sheet(isPresented: $isShowingCalibration) {
+            CalibrationView(
+                calibration: intelligence.calibration,
+                onReset: { Task { await intelligence.resetCalibration() } }
+            )
+        }
+        .sheet(isPresented: $isShowingDiagnostics) { DiagnosticsView() }
     }
 
     private var aboutSection: some View {
@@ -142,6 +153,8 @@ struct ProfileView: View {
             assistantRow
             LineaHairline()
             LineaListRow(title: "Память", value: memoryText) { isShowingMemory = true }
+            LineaHairline()
+            LineaListRow(title: "Калибровка", value: calibrationText) { isShowingCalibration = true }
         }
         .disabled(isChangingConnection)
     }
@@ -183,6 +196,25 @@ struct ProfileView: View {
         }
     }
 
+    /// Журнал приложения: не настройка, а способ отправить разработчику то,
+    /// что приложение записало о себе. Поэтому тихая строка внизу, а не раздел.
+    private var diagnosticsFooter: some View {
+        Button { isShowingDiagnostics = true } label: {
+            Text("Диагностика")
+                .font(LineaFont.caption)
+                .foregroundStyle(LineaColor.textTertiary)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("profile.diagnostics")
+    }
+
+    private var calibrationText: String {
+        let count = intelligence.calibration.ratingsCount
+        return count == 0 ? "Пока нет оценок" : "\(count) оценок дня"
+    }
+
     private var memoryText: String {
         let facts = memory.memory.facts.count
         let days = memory.entries.count
@@ -190,4 +222,90 @@ struct ProfileView: View {
         return "\(facts) \(RussianText.plural(facts, "факт", "факта", "фактов")), \(days) \(RussianText.plural(days, "день", "дня", "дней"))"
     }
 
+}
+
+/// What Linea learned from the evening ratings, in plain words, plus a reset.
+struct CalibrationView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let calibration: Calibration
+    let onReset: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: LineaMetrics.sectionSpacing) {
+                    Text("Linea подстраивается под тебя по вечерним оценкам. Порядок задач она не переучивает — меняются только эти настройки.")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        SectionLabel(text: "Что подстроено")
+                        row("Оценка сил", value: signed(calibration.energyBias))
+                        LineaHairline()
+                        row("Порог «снизить нагрузку»", value: percent(calibration.reduceThreshold))
+                        LineaHairline()
+                        row("Порог «можно больше»", value: percent(calibration.pushThreshold))
+                        LineaHairline()
+                        row("Ёмкость дня", value: percent(calibration.capacityFactor))
+                        LineaHairline()
+                        row("Запас на задачи", value: multiplier(calibration.estimateMultiplier))
+                        LineaHairline()
+                        row("Пауза перед напоминанием", value: "\(calibration.nudgeGraceMinutes) мин")
+                    }
+
+                    if !calibration.changeLog.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            SectionLabel(text: "Что менялось")
+                            ForEach(Array(calibration.changeLog.suffix(8).reversed().enumerated()), id: \.offset) { _, change in
+                                Text(change.reason)
+                                    .font(LineaFont.caption)
+                                    .foregroundStyle(LineaColor.textTertiary)
+                                    .padding(.vertical, 4)
+                            }
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        onReset()
+                        dismiss()
+                    } label: {
+                        Text("Сбросить калибровку")
+                            .font(LineaFont.control)
+                            .foregroundStyle(.red)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, LineaMetrics.screenPadding)
+                .padding(.vertical, 20)
+            }
+            .background(LineaColor.background.ignoresSafeArea())
+            .navigationTitle("Калибровка")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") { dismiss() }.tint(LineaColor.ink)
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
+    }
+
+    private func row(_ title: String, value: String) -> some View {
+        LineaListRow(title: title, value: value, showsChevron: false)
+    }
+
+    private func signed(_ value: Double) -> String {
+        value == 0 ? "по умолчанию" : String(format: "%+.2f", value)
+    }
+
+    private func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    private func multiplier(_ value: Double) -> String {
+        String(format: "×%.2f", value)
+    }
 }
