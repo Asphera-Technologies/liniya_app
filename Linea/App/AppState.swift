@@ -13,10 +13,10 @@ import Observation
 @MainActor
 final class AppState {
 
-    /// Whether the Linea AI sheet is presented (driven by the command bar).
+    /// Whether the Linea AI sheet is presented.
     var isPresentingAI = false
 
-    /// Text the user typed into a command bar before opening AI, if any.
+    /// Optional context for a new chat.
     var pendingPrompt: String = ""
 
     /// Opens the ambient Linea AI surface, optionally seeded with a prompt.
@@ -24,6 +24,12 @@ final class AppState {
         pendingPrompt = prompt
         isPresentingQuickAdd = false
         isPresentingAI = true
+    }
+
+    var isPresentingProfile = false
+
+    func openProfile() {
+        isPresentingProfile = true
     }
 
     /// Whether the «Итог дня» sheet is presented (Today card, evening notification).
@@ -36,8 +42,7 @@ final class AppState {
         isPresentingCheckIn = true
     }
 
-    /// Whether quick task capture is presented («+» next to the command bar,
-    /// «+ Задача» on Plan).
+    /// Whether quick task capture is presented.
     var isPresentingQuickAdd = false
 
     /// Opens quick task capture: a title is enough, the rest is optional.

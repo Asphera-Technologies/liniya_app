@@ -24,13 +24,11 @@ struct NutritionView: View {
     @State private var isEditingProfile = false
 
     var body: some View {
-        NavigationStack {
-            LineaScaffold(title: "Питание") {
-                nextMealSection
-                orderSection
-                settingsSection
-                loggedSection
-            }
+        LineaScaffold(title: "Питание") {
+            nextMealSection
+            orderSection
+            settingsSection
+            loggedSection
         }
         .task { await nutrition.load() }
         .sheet(isPresented: $isEditingProfile) {

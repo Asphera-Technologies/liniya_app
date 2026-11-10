@@ -44,7 +44,7 @@ struct LineaApp: App {
 
     #if DEBUG
     /// UI-тесты (`Tests/LineaUITests`) запускают приложение с `-uiTesting`:
-    /// данные только в памяти, каждый тест начинается с чистого листа.
+    /// данные только в памяти, план строится без системных замеров здоровья.
     /// Данные тесты вводят через интерфейс, как человек.
     static var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-uiTesting") }
     #else

@@ -123,11 +123,8 @@ final class AppContainer {
             config: engineConfig
         )
         let nudgeEngine = NudgeEngine(renderer: renderer, config: engineConfig)
-        // Registered connectors. Nutrition is added per refresh by the store,
-        // because its profile changes; see Docs/connectors.md.
-        let contextEngine = ContextEngine(providers: [
-            HealthKitContextProvider(reader: reader),
-        ])
+        // The store selects connectors for each refresh from the current settings.
+        let contextEngine = ContextEngine(providers: [])
 
         let intelligence = IntelligenceStore(
             planDay: PlanDayUseCase(
@@ -144,11 +141,12 @@ final class AppContainer {
             calibrations: calibration,
             profiles: profile,
             nutritionRepository: nutrition,
-            history: reader,
+            history: LineaApp.isUITesting ? nil : reader,
             planStore: plan,
             scheduler: scheduler,
             config: engineConfig,
             calendarProvider: { CalendarContextProvider(store: events) },
+            healthProvider: LineaApp.isUITesting ? nil : HealthKitContextProvider(reader: reader),
             assistant: assistant,
             memory: memory
         )

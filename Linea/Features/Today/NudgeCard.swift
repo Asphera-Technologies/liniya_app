@@ -25,19 +25,13 @@ struct NudgeCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !nudge.actions.isEmpty {
-                HStack(spacing: 12) {
+                FlowLayout(spacing: 12) {
                     ForEach(Array(nudge.actions.enumerated()), id: \.offset) { _, action in
                         LineaOutlineButton(title: action.title) { onAction(action) }
                     }
                 }
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(
-            RoundedRectangle(cornerRadius: LineaMetrics.surfaceRadius, style: .continuous)
-                .strokeBorder(LineaColor.separator, lineWidth: LineaMetrics.hairline)
-        )
         .accessibilityElement(children: .contain)
     }
 }
@@ -76,19 +70,13 @@ struct EveningReviewCard: View {
                 Text("Или просто оцени:")
                     .font(LineaFont.caption)
                     .foregroundStyle(LineaColor.textTertiary)
-                HStack(spacing: 12) {
+                FlowLayout(spacing: 12) {
                     ForEach(DayRating.allCases, id: \.self) { rating in
                         LineaOutlineButton(title: rating.title) { onRate(rating) }
                     }
                 }
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(
-            RoundedRectangle(cornerRadius: LineaMetrics.surfaceRadius, style: .continuous)
-                .strokeBorder(LineaColor.separator, lineWidth: LineaMetrics.hairline)
-        )
     }
 }
 
@@ -140,11 +128,6 @@ struct PlanBlockRow: View {
                     }
                 }
                 Spacer(minLength: 0)
-                if block.isTop {
-                    Text("Главное")
-                        .font(LineaFont.caption)
-                        .foregroundStyle(LineaColor.textSecondary)
-                }
             }
             .padding(.vertical, 10)
             .contentShape(Rectangle())
@@ -161,7 +144,7 @@ struct PlanBlockRow: View {
     private var detail: String? {
         switch block.kind {
         case .focus:
-            return "\(block.durationMinutes) мин"
+            return "\(block.durationMinutes) мин" + (block.isPinned ? " · вручную" : "")
         case .goal:
             // Не задача и не встреча — время, которое Linea бережёт для цели.
             return "\(block.durationMinutes) мин · защищённое окно"

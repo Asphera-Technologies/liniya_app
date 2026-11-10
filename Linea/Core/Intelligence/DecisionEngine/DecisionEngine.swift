@@ -88,8 +88,9 @@ nonisolated struct DecisionEngine: Sendable {
         let now = time.now
         let doneTaskIDs = Set(snapshot.tasks.filter(\.isDone).map(\.id))
         let preserved = plan.blocks.filter { block in
-            if block.end <= now { return true }
             if block.isPinned { return true }
+            guard plan.status == .accepted else { return false }
+            if block.end <= now { return true }
             if let taskID = block.taskID, doneTaskIDs.contains(taskID) { return true }
             return false
         }

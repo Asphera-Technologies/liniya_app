@@ -99,6 +99,7 @@ nonisolated struct PlanDayUseCase: Sendable {
     nonisolated struct Output: Sendable {
         let record: DayRecord
         let insight: SleepInsight
+        let planImpact: PlanImpact
         /// Today's aggregates, so the caller can persist them for tomorrow's baseline.
         let todaySummary: DailyHealthSummary
     }
@@ -151,17 +152,46 @@ nonisolated struct PlanDayUseCase: Sendable {
             )
         )
 
-        // A plan the user already accepted is revised, never rebuilt from
-        // scratch: what they lived through is history, not a proposal.
-        let accepted = input.existing?.plan.flatMap { $0.status == .accepted ? $0 : nil }
-        var plan: DayPlan
-        if let accepted {
-            plan = decisionEngine.replan(accepted, snapshot: snapshot, state: state, calibration: input.calibration, time: time)
-        } else {
-            plan = decisionEngine.plan(
+        // An accepted day keeps its history. A proposal keeps explicit placements.
+        var previous = input.existing?.plan
+        previous?.blocks.removeAll { block in
+            guard block.kind == .focus, block.isPinned, let id = block.taskID else { return false }
+            guard let task = snapshot.tasks.first(where: { $0.id == id }), task.cancelledAt == nil else { return true }
+            if task.isDone { return false }
+            guard task.startedAt == nil, !task.isFixed,
+                  task.deferredUntil.map({ $0 <= time.now }) ?? true else { return true }
+            guard let prior = input.existing?.snapshot?.tasks.first(where: { $0.id == id }) else { return false }
+            return prior.date != task.date || prior.rescheduleMode != task.rescheduleMode
+                || prior.estimatedMinutes != task.estimatedMinutes
+        }
+        if let blocks = previous?.blocks {
+            let titles = Dictionary(uniqueKeysWithValues: snapshot.tasks.map { ($0.id, $0.title) })
+            previous?.blocks = blocks.map { block in
+                guard block.kind == .focus, block.isPinned, let title = block.taskID.flatMap({ titles[$0] })
+                else { return block }
+                var updated = block
+                updated.title = title
+                return updated
+            }
+        }
+
+        func build(using state: UserState) -> DayPlan {
+            if let previous, previous.status == .accepted || previous.blocks.contains(where: \.isPinned) {
+                return decisionEngine.replan(previous, snapshot: snapshot, state: state, calibration: input.calibration, time: time)
+            }
+            return decisionEngine.plan(
                 snapshot: snapshot, state: state, calibration: input.calibration,
                 time: time, planID: DeterministicID.planID(day: day, time: time)
             )
+        }
+
+        var plan = build(using: state)
+        let impact: PlanImpact
+        if state.confidence > 0 {
+            let baseline = build(using: .unknown(day: day, computedAt: time.now))
+            impact = PlanImpact.compare(plan, with: baseline, after: time.now)
+        } else {
+            impact = .noData
         }
 
         if input.allowsRemoteExplanation {
@@ -192,7 +222,7 @@ nonisolated struct PlanDayUseCase: Sendable {
         let series = DailySeriesBuilder().build(snapshot: snapshot, time: time)
         let insight = insightBuilder.build(history: input.history, today: series.summary, config: config, time: time)
 
-        return Output(record: record, insight: insight, todaySummary: series.summary)
+        return Output(record: record, insight: insight, planImpact: impact, todaySummary: series.summary)
     }
 
     /// Fills the morning brief's `explanation` with the explainer's text. The
@@ -215,5 +245,31 @@ nonisolated struct PlanDayUseCase: Sendable {
         plan.recommendations[index].explanation = explanation.body.isEmpty ? nil : explanation.body
         plan.explainerID = explanation.explainerID
         return plan
+    }
+}
+
+/// Difference caused by the current state with the rest of the planning inputs held constant.
+nonisolated enum PlanImpact: Equatable, Sendable {
+    case noData
+    case unchanged
+    case workload(minutes: Int, difference: Int)
+    case placement(title: String, start: Date)
+
+    static func compare(_ actual: DayPlan, with baseline: DayPlan, after now: Date) -> Self {
+        func upcoming(_ plan: DayPlan) -> [PlanBlock] {
+            plan.blocks.filter { $0.kind == .focus && !$0.isPinned && $0.taskID != nil && $0.end > now }
+        }
+        let blocks = upcoming(actual)
+        let reference = upcoming(baseline)
+        let minutes = blocks.reduce(0) { $0 + $1.durationMinutes }
+        let difference = minutes - reference.reduce(0) { $0 + $1.durationMinutes }
+        if difference != 0 { return .workload(minutes: minutes, difference: difference) }
+
+        let changed = blocks.first { block in
+            guard let old = reference.first(where: { $0.taskID == block.taskID }) else { return true }
+            return abs(old.start.timeIntervalSince(block.start)) >= 60
+        }
+        if let changed { return .placement(title: changed.title, start: changed.start) }
+        return .unchanged
     }
 }

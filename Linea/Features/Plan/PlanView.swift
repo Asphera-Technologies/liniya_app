@@ -27,7 +27,7 @@ struct PlanView: View {
         @Bindable var plan = plan
 
         NavigationStack {
-            LineaScaffold(title: "План") {
+            LineaScaffold(title: "Задачи") {
                 LineaSegmentedControl(
                     options: ["Неделя", "Месяц"],
                     selection: Binding(
@@ -55,25 +55,30 @@ struct PlanView: View {
                 tasksSection
                 calendarSection
             }
+            .sheet(item: $editingTask) { target in
+                TaskEditorView(existing: target.task)
+            }
+            .taskRescheduleDialog($rescheduling)
+            .sheet(item: $editingGoal) { target in
+                switch target {
+                // Новая цель — одной строкой, как задача; подробнее — по желанию.
+                case .new: GoalIntakeView()
+                case .edit(let goal): GoalEditorView(existing: goal)
+                }
+            }
         }
         .task {
             await plan.load()
-            calendarEvents = await intelligence.calendarCommitments(in: plan.visibleInterval)
         }
-        .onChange(of: plan.visibleInterval) { _, interval in
-            Task { calendarEvents = await intelligence.calendarCommitments(in: interval) }
+        .task(id: CalendarRange(interval: plan.visibleInterval, enabled: intelligence.userProfile.isCalendarEnabled)) {
+            let events = await intelligence.calendarCommitments(in: plan.visibleInterval)
+            if !Task.isCancelled { calendarEvents = events }
         }
-        .sheet(item: $editingTask) { target in
-            TaskEditorView(existing: target.task)
-        }
-        .taskRescheduleDialog($rescheduling)
-        .sheet(item: $editingGoal) { target in
-            switch target {
-            // Новая цель — одной строкой, как задача; подробнее — по желанию.
-            case .new: GoalIntakeView()
-            case .edit(let goal): GoalEditorView(existing: goal)
-            }
-        }
+    }
+
+    private struct CalendarRange: Equatable {
+        let interval: DateInterval
+        let enabled: Bool
     }
 
     // MARK: Goals

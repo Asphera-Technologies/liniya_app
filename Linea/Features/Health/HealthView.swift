@@ -15,9 +15,13 @@
 import SwiftUI
 
 struct HealthView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(UserProfileStore.self) private var profile
     @Environment(HealthKitManager.self) private var healthKit
     @Environment(IntelligenceStore.self) private var intelligence
     @Environment(\.openURL) private var openURL
+
+    @State private var didLoadProfile = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 20, alignment: .leading),
@@ -26,20 +30,120 @@ struct HealthView: View {
 
     var body: some View {
         NavigationStack {
-            LineaScaffold(title: "Здоровье") {
-                metricsSection
-                connectSection
-                sleepSection
-                workoutsSection
+            LineaScaffold(title: "Состояние") {
+                impactSection
+                if healthEnabled {
+                    metricsSection
+                    connectSection
+                    sleepSection
+                    workoutsSection
+                } else {
+                    healthSetup("Apple Health отключен в Линии.")
+                }
+                NavigationLink {
+                    NutritionView()
+                        .navigationTitle("Питание")
+                        .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    Label("Питание", systemImage: "fork.knife")
+                        .font(LineaFont.rowTitle)
+                        .foregroundStyle(LineaColor.textPrimary)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if let entry = intelligence.todayCheckIn {
+                    CheckInSummaryCard(numbers: DayDigestBuilder().numbers(for: entry.report)) {
+                        appState.openCheckIn()
+                    }
+                } else {
+                    LineaOutlineButton(title: "Итог дня") { appState.openCheckIn() }
+                }
             }
         }
         .task {
-            await healthKit.probeExistingAuthorization()
+            await profile.load()
+            didLoadProfile = true
             await intelligence.refresh(reason: .appeared)
         }
+        .task(id: shouldReadHealth) {
+            guard didLoadProfile else { return }
+            if shouldReadHealth { await healthKit.probeExistingAuthorization() }
+        }
         .refreshable {
-            await healthKit.refreshAll()
+            if shouldReadHealth { await healthKit.refreshAll() }
             await intelligence.refresh(reason: .manual)
+        }
+    }
+
+    private var healthEnabled: Bool { profile.profile.isHealthKitEnabled != false }
+    private var shouldReadHealth: Bool { didLoadProfile && healthEnabled }
+
+    private var impactSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: "Влияние на план")
+            Text(impactText)
+                .font(LineaFont.rowTitle)
+                .foregroundStyle(LineaColor.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !impactSources.isEmpty {
+                Text("Учтены: \(impactSources.joined(separator: ", ")).")
+                    .font(LineaFont.caption)
+                    .foregroundStyle(LineaColor.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay {
+            RoundedRectangle(cornerRadius: LineaMetrics.surfaceRadius)
+                .strokeBorder(LineaColor.separator, lineWidth: LineaMetrics.hairline)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("state.planImpact")
+    }
+
+    private var impactText: String {
+        switch intelligence.planImpact {
+        case nil:
+            return "Влияние будет видно после расчета плана."
+        case .noData:
+            return healthEnabled
+                ? "Пока мало данных о состоянии, поэтому показатели не меняют план."
+                : "Apple Health отключен, данных о состоянии для изменения плана пока нет."
+        case .unchanged:
+            return "По доступным показателям время и объем задач в плане остались прежними."
+        case .workload(let minutes, let difference):
+            let change = difference < 0 ? "меньше" : "больше"
+            return "С учетом состояния в плане \(minutes) мин задач. Это на \(abs(difference)) мин \(change), чем без учета показателей."
+        case .placement(let title, let start):
+            let clock = intelligence.time.timeOfDay(of: start)
+            let formatted = String(format: "%d:%02d", clock.hour, clock.minute)
+            return "С учетом состояния «\(title)» стоит в плане на \(formatted)."
+        }
+    }
+
+    private var impactSources: [String] {
+        guard didLoadProfile, let impact = intelligence.planImpact, impact != .noData else { return [] }
+        return (intelligence.state?.components ?? []).compactMap { component in
+            guard component.confidence > 0 else { return nil }
+            switch component.kind {
+            case .sleep where healthEnabled: return "сон"
+            case .recovery where healthEnabled: return "восстановление"
+            case .strain where healthEnabled: return "активность"
+            case .fuel: return "питание"
+            default: return nil
+            }
+        }
+    }
+
+    private func healthSetup(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(message)
+                .font(LineaFont.caption)
+                .foregroundStyle(LineaColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            LineaOutlineButton(title: "Открыть интеграции") { appState.openProfile() }
         }
     }
 
@@ -96,30 +200,14 @@ struct HealthView: View {
     @ViewBuilder
     private var connectSection: some View {
         switch healthKit.authState {
+        case .notRequested where profile.profile.isHealthKitEnabled == true && !missingMetrics.isEmpty:
+            partialAccessSection
         case .notRequested:
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Подключи Apple Health, чтобы видеть свои реальные показатели. В окне доступа включи все категории — выключенные Linea прочитать не сможет.")
-                    .font(LineaFont.caption)
-                    .foregroundStyle(LineaColor.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                LineaOutlineButton(title: "Подключить Apple Health") {
-                    Task { await healthKit.connect() }
-                }
-            }
+            healthSetup("Подключи Apple Health, чтобы видеть показатели и учитывать их в плане.")
         case .authorized where !missingMetrics.isEmpty:
             partialAccessSection
-        case .failed(let message):
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Не удалось прочитать данные Apple Health")
-                    .font(LineaFont.caption)
-                    .foregroundStyle(LineaColor.textSecondary)
-                Text(message)
-                    .font(LineaFont.caption)
-                    .foregroundStyle(LineaColor.textTertiary)
-                LineaOutlineButton(title: "Повторить") {
-                    Task { await healthKit.connect() }
-                }
-            }
+        case .failed:
+            healthSetup("Не удалось прочитать данные Apple Health.")
         case .unavailable:
             Text("Apple Health недоступен на этом устройстве")
                 .font(LineaFont.caption)
@@ -145,7 +233,7 @@ struct HealthView: View {
                 .font(LineaFont.caption)
                 .foregroundStyle(LineaColor.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 12) {
+            FlowLayout(spacing: 12) {
                 LineaOutlineButton(title: "Открыть Здоровье") {
                     if let url = URL(string: "x-apple-health://") { openURL(url) }
                 }

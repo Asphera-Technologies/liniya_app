@@ -2,18 +2,7 @@
 //  TodayView.swift
 //  Linea
 //
-//  The Today screen — the whole wow-scenario in one place:
-//    • morning: what Linea sees about the state, the day's plan, «Принять план»;
-//    • during the day: the nudge card with the same two answers the
-//      notification offers, and «Сейчас» — what is reasonable to do this very
-//      minute (the priority engine's action score), refreshed every minute;
-//    • evening: «Как прошёл день?» — the check-in by voice or text, or three
-//      quick taps, which close the feedback loop.
-//
-//  The screen composes; it never decides. Every string comes ready from the
-//  core (`Recommendation.message`, `Nudge.title/body`), so what the user reads
-//  here is exactly what the golden tests assert.
-//
+//  The day center: current action, editable queue, and one AI suggestion.
 
 import SwiftUI
 
@@ -27,99 +16,48 @@ struct TodayView: View {
     @State private var editingTask: TaskEditTarget?
     /// Задача, для которой открыт выбор «Перенести».
     @State private var rescheduling: LineaTask?
+    @State private var movingBlock: PlanBlock?
+    @State private var dismissedSuggestions: Set<String> = []
 
     var body: some View {
         NavigationStack {
-            LineaScaffold(title: greeting, subtitle: dateSubtitle) {
-                if let nudge = intelligence.dueNudge {
-                    NudgeCard(nudge: nudge) { action in
-                        Task { await intelligence.respond(to: nudge, action: action) }
-                    }
-                }
-
-                briefSection
-                mainToday
+            LineaScaffold(title: greeting, subtitle: dateSubtitle, headerActions: AnyView(headerActions)) {
                 nowSection
-                goalOfferSection
                 timeline
-                inboxOffer
-
-                if intelligence.isCheckInDue {
-                    EveningReviewCard(
-                        canRate: intelligence.canRateDay,
-                        onTell: { appState.openCheckIn() },
-                        onRate: { rating in Task { await intelligence.rateDay(rating) } }
-                    )
-                } else if let entry = intelligence.todayCheckIn {
-                    CheckInSummaryCard(numbers: DayDigestBuilder().numbers(for: entry.report)) {
-                        appState.openCheckIn()
-                    }
-                }
-
-                adviceSection
+                assistantCard
             }
+            .sheet(item: $editingTask) { target in
+                TaskEditorView(existing: target.task)
+            }
+            .sheet(item: $movingBlock) { block in
+                QueueTimePicker(block: block)
+            }
+            .taskRescheduleDialog($rescheduling)
         }
         .task { await intelligence.refresh(reason: .appeared) }
         .task { await intelligence.keepNextActionFresh() }
         .onDisappear { intelligence.clearTodayNotes() }
         .refreshable { await intelligence.refresh(reason: .manual) }
-        .sheet(item: $editingTask) { target in
-            TaskEditorView(existing: target.task)
-        }
-        .taskRescheduleDialog($rescheduling)
+        .onChange(of: intelligence.plan?.day) { dismissedSuggestions = [] }
     }
 
-    // MARK: Brief
-
-    @ViewBuilder
-    private var briefSection: some View {
-        if let brief = intelligence.brief {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionLabel(text: "План на сегодня", trailing: intelligence.stateTag)
-                Text(brief.message)
-                    .font(LineaFont.feature)
-                    .foregroundStyle(LineaColor.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let explanation = brief.explanation, !explanation.isEmpty {
-                    Text(explanation)
-                        .font(LineaFont.rowTitle)
-                        .foregroundStyle(LineaColor.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !intelligence.reasons.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(intelligence.reasons, id: \.self) { reason in
-                            Text(reason)
-                                .font(LineaFont.caption)
-                                .foregroundStyle(LineaColor.textTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-                if intelligence.canAcceptPlan {
-                    LineaOutlineButton(title: "Принять план") {
-                        Task { await intelligence.acceptPlan() }
-                    }
-                }
-            }
+    private var headerActions: some View {
+        HStack(spacing: 4) {
+            headerButton("Линия AI", icon: "sparkles") { appState.openAI() }
+            headerButton("Профиль", icon: "person.crop.circle") { appState.openProfile() }
         }
     }
 
-    // MARK: Main task
-
-    private var mainToday: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionLabel(text: "Главное сегодня")
-            if let task = intelligence.topTask ?? plan.topTaskToday {
-                Text(task.title)
-                    .font(LineaFont.feature)
-                    .foregroundStyle(LineaColor.textPrimary)
-            } else {
-                Text("На сегодня задач нет")
-                    .font(LineaFont.feature)
-                    .foregroundStyle(LineaColor.textTertiary)
-            }
+    private func headerButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(LineaColor.textPrimary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 
     // MARK: Now
@@ -203,12 +141,15 @@ struct TodayView: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("today.now")
-        } else if intelligence.nowNote != nil {
+        } else {
             // Сделал последнее — предлагать нечего, но ответ Linea виден.
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(text: "Сейчас")
                 nowNote
                 notNowQuestion
+                if intelligence.nowNote == nil {
+                    assistantText(intelligence.isRefreshing ? "Подбираю действие…" : "Пока нет действия, которое стоит начать.")
+                }
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("today.now")
@@ -318,7 +259,7 @@ struct TodayView: View {
     /// (`GoalBalance`, `GoalAttention`).
     @ViewBuilder
     private var goalOfferSection: some View {
-        if let confirmation = intelligence.goalOfferConfirmation {
+        if let confirmation = intelligence.goalOfferConfirmation, !dismissedSuggestions.contains("goal-done") {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "checkmark")
                     .font(.footnote.weight(.semibold))
@@ -333,7 +274,6 @@ struct TodayView: View {
             .accessibilityIdentifier("today.goalOffer.done")
         } else if let offer = intelligence.goalOffer {
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Цели")
                 VStack(alignment: .leading, spacing: 4) {
                     Text(offer.observation)
                         .font(LineaFont.rowTitle)
@@ -367,40 +307,20 @@ struct TodayView: View {
         }
     }
 
-    // MARK: Inbox
+    // MARK: Queue
 
-    /// «Без даты» накопилось — Linea предлагает разобрать за минуту. Текст и
-    /// когда предлагать — из ядра (`InboxReview.offer`).
-    @ViewBuilder
-    private var inboxOffer: some View {
-        if let offer = InboxReview().offer(tasks: plan.tasks, time: intelligence.time) {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Без даты")
-                Text(offer.text)
-                    .font(LineaFont.rowTitle)
-                    .foregroundStyle(LineaColor.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                LineaOutlineButton(title: "Разобрать") { appState.openInboxReview(.unsorted) }
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("today.inbox")
-        }
-    }
-
-    // MARK: Timeline
-
-    @ViewBuilder
     private var timeline: some View {
         let blocks = intelligence.visibleBlocks
-        if !blocks.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                SectionLabel(text: "Дальше", trailing: intelligence.planTag)
-                VStack(spacing: 0) {
-                    ForEach(blocks) { block in
-                        // Задача в плане — те же свайпы и меню, что в «Плане»;
-                        // тап открывает её карточку. Еда и встречи — как есть.
-                        if let task = block.taskID.flatMap({ id in plan.tasks.first { $0.id == id } }) {
-                            let actions = rowActions(for: task)
+        return VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "Дальше")
+            if blocks.isEmpty {
+                assistantText("На сегодня больше ничего не запланировано.")
+            }
+            VStack(spacing: 0) {
+                ForEach(blocks) { block in
+                    if let task = block.taskID.flatMap({ id in plan.tasks.first { $0.id == id } }) {
+                        let actions = rowActions(for: task)
+                        HStack(spacing: 2) {
                             PlanBlockRow(
                                 block: block,
                                 time: intelligence.time,
@@ -409,20 +329,60 @@ struct TodayView: View {
                             )
                             .taskAccessibilityActions(actions, for: task)
                             .taskActions(actions, for: task)
-                        } else {
-                            PlanBlockRow(
-                                block: block,
-                                time: intelligence.time,
-                                isDone: intelligence.isDone(block)
-                            )
+
+                            if task.isOpen {
+                                Button(action: actions.onDone) {
+                                    Image(systemName: "checkmark.circle")
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Завершить: \(task.title)")
+                            }
+
+                            Menu {
+                                if intelligence.canMoveInQueue(block) {
+                                    queueMenu(block)
+                                    Divider()
+                                }
+                                TaskActionsMenu(task: task, actions: actions)
+                                if task.isDone {
+                                    Button("Вернуть", action: actions.onDone)
+                                }
+                                Button("Обсудить с Линией AI", systemImage: "sparkles") {
+                                    appState.openAI(prompt: "Помоги с задачей «\(task.title)» в сегодняшнем плане.")
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
+                            }
+                            .accessibilityLabel("Действия: \(task.title)")
                         }
+                        .foregroundStyle(LineaColor.textSecondary)
+                    } else {
+                        PlanBlockRow(block: block, time: intelligence.time)
                     }
                 }
             }
         }
     }
 
-    /// Свайп вправо — «Готово», влево — «Перенести», долгое нажатие — меню.
+    private func queueMenu(_ block: PlanBlock) -> some View {
+        Group {
+            Button("Выбрать время", systemImage: "clock") { movingBlock = block }
+            Button("Выше в очереди", systemImage: "arrow.up") {
+                Task { await intelligence.reorderQueue(block.id, toward: .earlier) }
+            }
+            .disabled(intelligence.queueNeighbor(of: block, toward: .earlier) == nil)
+            Button("Ниже в очереди", systemImage: "arrow.down") {
+                Task { await intelligence.reorderQueue(block.id, toward: .later) }
+            }
+            .disabled(intelligence.queueNeighbor(of: block, toward: .later) == nil)
+        }
+        .disabled(intelligence.isRefreshing || intelligence.isEditingQueue)
+    }
+
     private func rowActions(for task: LineaTask) -> TaskRowActions {
         plan.rowActions(
             for: task,
@@ -432,37 +392,109 @@ struct TodayView: View {
         )
     }
 
-    // MARK: Advice (nutrition and the like)
+    // MARK: One contextual suggestion
+
+    private var assistantCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel(text: "Линия AI")
+            assistantSuggestion
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay {
+            RoundedRectangle(cornerRadius: LineaMetrics.surfaceRadius)
+                .strokeBorder(LineaColor.separator, lineWidth: LineaMetrics.hairline)
+                .allowsHitTesting(false)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("today.assistant")
+    }
 
     @ViewBuilder
-    private var adviceSection: some View {
-        let advice = intelligence.advice
-        if !advice.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionLabel(text: "Советы")
-                VStack(alignment: .leading, spacing: 16) {
-                    ForEach(advice) { item in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(item.message)
-                                .font(LineaFont.rowTitle)
-                                .foregroundStyle(LineaColor.textPrimary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            if !item.actions.isEmpty {
-                                HStack(spacing: 12) {
-                                    ForEach(Array(item.actions.enumerated()), id: \.offset) { _, action in
-                                        if let title = actionTitle(action) {
-                                            LineaOutlineButton(title: title) {
-                                                Task { await intelligence.perform(action) }
-                                            }
-                                        }
-                                    }
-                                }
+    private var assistantSuggestion: some View {
+        if let conflict = intelligence.pinnedConflict, !dismissedSuggestions.contains(conflict.id) {
+            let text = "«\(conflict.title)» пересекается с событием. Выбранное время сохранено."
+            assistantText(text)
+            FlowLayout(spacing: 12) {
+                LineaOutlineButton(title: "Выбрать время") { movingBlock = conflict }
+                dismissSuggestion(conflict.id)
+            }
+        } else if let nudge = intelligence.dueNudge, nudge.kind != .eveningCheckIn {
+            NudgeCard(nudge: nudge) { action in
+                Task { await intelligence.respond(to: nudge, action: action) }
+            }
+            if !nudge.actions.contains(.dismiss) {
+                LineaOutlineButton(title: "Скрыть") {
+                    Task { await intelligence.respond(to: nudge, action: .dismiss) }
+                }
+            }
+        } else if intelligence.goalOffer != nil
+                    || (intelligence.goalOfferConfirmation != nil && !dismissedSuggestions.contains("goal-done")) {
+            goalOfferSection
+            if intelligence.goalOfferConfirmation != nil { dismissSuggestion("goal-done") }
+        } else if intelligence.isCheckInDue && !dismissedSuggestions.contains("evening") {
+            EveningReviewCard(
+                canRate: intelligence.canRateDay,
+                onTell: { appState.openCheckIn() },
+                onRate: { rating in Task { await intelligence.rateDay(rating) } }
+            )
+            dismissSuggestion("evening")
+        } else if let offer = InboxReview().offer(tasks: plan.tasks, time: intelligence.time),
+                  !dismissedSuggestions.contains("inbox") {
+            VStack(alignment: .leading, spacing: 12) {
+                assistantText(offer.text)
+                FlowLayout(spacing: 12) {
+                    LineaOutlineButton(title: "Разобрать") { appState.openInboxReview(.unsorted) }
+                    dismissSuggestion("inbox")
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("today.inbox")
+        } else if intelligence.canAcceptPlan && !dismissedSuggestions.contains("accept") {
+            assistantText("План на сегодня готов. После принятия Линия сможет напоминать о делах.")
+            FlowLayout(spacing: 12) {
+                LineaOutlineButton(title: "Принять план") { Task { await intelligence.acceptPlan() } }
+                    .disabled(intelligence.isRefreshing || intelligence.isEditingQueue)
+                discussSuggestion("Помоги оценить план на сегодня.")
+                dismissSuggestion("accept")
+            }
+        } else if let item = intelligence.advice.first(where: { !dismissedSuggestions.contains($0.id) }) {
+            assistantText(item.message)
+            FlowLayout(spacing: 12) {
+                ForEach(Array(item.actions.enumerated()), id: \.offset) { _, action in
+                    if let title = actionTitle(action) {
+                        LineaOutlineButton(title: title) {
+                            if case let .openTask(id) = action,
+                               let task = plan.tasks.first(where: { $0.id == id }) {
+                                editingTask = .edit(task)
+                            } else {
+                                Task { await intelligence.perform(action) }
                             }
                         }
                     }
                 }
+                discussSuggestion("Расскажи подробнее об этом предложении: \(item.message)")
+                dismissSuggestion(item.id)
             }
+        } else {
+            assistantText("Пока нет предложений по плану.")
+            LineaOutlineButton(title: "Открыть чат") { appState.openAI() }
         }
+    }
+
+    private func assistantText(_ text: String) -> some View {
+        Text(text)
+            .font(LineaFont.rowTitle)
+            .foregroundStyle(LineaColor.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func discussSuggestion(_ prompt: String) -> some View {
+        LineaOutlineButton(title: "Обсудить") { appState.openAI(prompt: prompt) }
+    }
+
+    private func dismissSuggestion(_ id: String) -> some View {
+        LineaOutlineButton(title: "Скрыть") { _ = dismissedSuggestions.insert(id) }
     }
 
     private func actionTitle(_ action: RecommendationAction) -> String? {
@@ -498,5 +530,52 @@ private extension String {
     var capitalizedFirst: String {
         guard let first else { return self }
         return first.uppercased() + dropFirst()
+    }
+}
+
+private struct QueueTimePicker: View {
+    @Environment(IntelligenceStore.self) private var intelligence
+    @Environment(\.dismiss) private var dismiss
+    let block: PlanBlock
+    @State private var selection: Date
+    @State private var error: String?
+    @State private var saving = false
+
+    init(block: PlanBlock) {
+        self.block = block
+        _selection = State(initialValue: max(block.start, .now.addingTimeInterval(60)))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Text(block.title)
+                DatePicker("Начало", selection: $selection, displayedComponents: .hourAndMinute)
+                    .environment(\.timeZone, intelligence.time.timeZone)
+                Text("Длительность: \(block.durationMinutes) мин")
+                if let error {
+                    Text(error).foregroundStyle(.red)
+                }
+            }
+            .navigationTitle("Выбрать время")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { dismiss() }.disabled(saving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Сохранить") {
+                        Task {
+                            saving = true
+                            error = await intelligence.moveInQueue(block.id, to: selection)
+                            saving = false
+                            if error == nil { dismiss() }
+                        }
+                    }
+                    .disabled(saving || intelligence.isRefreshing)
+                }
+            }
+            .interactiveDismissDisabled(saving)
+        }
     }
 }

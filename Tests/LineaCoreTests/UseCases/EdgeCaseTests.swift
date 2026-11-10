@@ -37,6 +37,7 @@ struct EdgeCaseTests {
         let state = try #require(output.record.state)
         #expect(state.loadAdvice == .unknown)
         #expect(state.confidence == 0)
+        #expect(output.planImpact == .noData)
 
         let brief = try #require(output.record.plan?.brief)
         #expect(brief.message == "Доброе утро. На сегодня задач нет.")
@@ -53,10 +54,44 @@ struct EdgeCaseTests {
 
         #expect(output.record.state?.loadAdvice == .reduce)
         #expect(output.record.plan?.blocks.isEmpty == true)
+        #expect(output.planImpact == .unchanged)
         let brief = try #require(output.record.plan?.brief)
         #expect(brief.message.contains("На сегодня задач нет."))
         // Причина названа: сон ниже нормы, даже если планировать нечего.
         #expect(brief.facts.contains { if case .sleepVsUsual = $0 { return true }; return false })
+    }
+
+    @Test("Выбранное время сохраняется в предложенном плане при появлении встречи")
+    func keepsManualTimeWhenCalendarChanges() async throws {
+        let time = WowFixture.morning
+        let task = LineaTask(title: "Отправить отчет", date: time.today, estimatedMinutes: 30)
+        let result = await useCase().run(input(time: time, tasks: [task]))
+        var record = result.record
+        var plan = try #require(record.plan)
+        let index = try #require(plan.blocks.firstIndex { $0.taskID == task.id })
+        let start = WowFixture.moment(14, 0)
+        let end = WowFixture.moment(14, 30)
+        plan.blocks[index].start = start
+        plan.blocks[index].end = end
+        plan.blocks[index].isPinned = true
+        record.plan = plan
+        let restored = try JSONDecoder().decode(DayRecord.self, from: JSONEncoder().encode(record))
+
+        let meeting = ContextSignal(kind: .commitment, value: .interval(nil), start: start,
+                                    end: end, source: .calendar, attributes: [SignalAttribute.label: "Встреча"])
+        let provider = FakeContextProvider(id: .calendar, signals: [meeting])
+        let refreshed = await useCase(providers: [provider]).run(
+            .init(time: time, tasks: [task], goals: [], existing: restored)
+        )
+        let refreshedPlan = try #require(refreshed.record.plan)
+        #expect(refreshedPlan.status == .proposed)
+        #expect(refreshedPlan.block(for: task.id)?.start == start)
+        #expect(refreshedPlan.block(for: task.id)?.isPinned == true)
+        #expect(refreshedPlan.blocks.contains { $0.kind == .commitment && $0.start == start })
+
+        let action = NextActionUseCase().run(record: refreshed.record, tasks: [task],
+                                             calibration: .default, time: time)
+        #expect(action?.taskID == nil)
     }
 
     @Test("Поздний вечер: рабочий день кончился, блоков нет")

@@ -73,6 +73,7 @@ struct WowScenarioTests {
         // Аналитика сна для экрана Health посчитана тем же проходом.
         #expect(output.insight.recentNights.isEmpty == false)
         #expect(output.todaySummary[.sleepAsleep] == 21_780)
+        #expect(output.planImpact != .noData && output.planImpact != .unchanged)
     }
 
     @Test("«Принять план» замораживает план и готовит напоминания")

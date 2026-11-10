@@ -28,6 +28,8 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
     /// Whether the calendar connector is switched on. Access is asked for in
     /// Profile, not in the middle of a refresh.
     var isCalendarEnabled: Bool
+    /// Nil keeps the Apple Health behavior of profiles saved before the switch.
+    var isHealthKitEnabled: Bool?
     /// Разрешил ли пользователь облачного ассистента. Пока выключен, наружу
     /// не уходит ничего: тексты собираются шаблонами на устройстве.
     var isCloudAssistantEnabled: Bool
@@ -42,6 +44,7 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
         sleepNeedSeconds: TimeInterval = 7.5 * 3600,
         onboardingCompleted: Bool = false,
         isCalendarEnabled: Bool = false,
+        isHealthKitEnabled: Bool? = nil,
         isCloudAssistantEnabled: Bool = false
     ) {
         self.name = name
@@ -53,6 +56,7 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
         self.sleepNeedSeconds = sleepNeedSeconds
         self.onboardingCompleted = onboardingCompleted
         self.isCalendarEnabled = isCalendarEnabled
+        self.isHealthKitEnabled = isHealthKitEnabled
         self.isCloudAssistantEnabled = isCloudAssistantEnabled
     }
 
@@ -72,6 +76,7 @@ nonisolated struct UserProfile: Codable, Hashable, Sendable {
         sleepNeedSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .sleepNeedSeconds) ?? fallback.sleepNeedSeconds
         onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? fallback.onboardingCompleted
         isCalendarEnabled = try container.decodeIfPresent(Bool.self, forKey: .isCalendarEnabled) ?? fallback.isCalendarEnabled
+        isHealthKitEnabled = try container.decodeIfPresent(Bool.self, forKey: .isHealthKitEnabled)
         isCloudAssistantEnabled = try container.decodeIfPresent(Bool.self, forKey: .isCloudAssistantEnabled) ?? fallback.isCloudAssistantEnabled
     }
 

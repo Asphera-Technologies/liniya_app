@@ -63,12 +63,23 @@ nonisolated struct NextActionUseCase: Sendable {
         if let active {
             snapshot.commitments.removeAll { $0.id == Self.commitmentID(for: active.start.taskID) }
         }
+        // A manual slot is a boundary for other work until its start. The
+        // task becomes a candidate when the slot arrives or has passed.
+        let futurePins = (record.plan?.blocks ?? []).filter { block in
+            block.kind == .focus && block.isPinned && block.start > time.now
+                && tasks.contains { $0.id == block.taskID && $0.isOpen && $0.startedAt == nil }
+        }
+        let reservedIDs = Set(futurePins.compactMap(\.taskID))
+        snapshot.commitments += futurePins.map { block in
+            Commitment(id: block.id, title: block.title, start: block.start, end: block.end,
+                       kind: .task, source: .tasks, taskID: block.taskID)
+        }
         let context = PriorityContext(snapshot: snapshot, state: state, calibration: calibration,
                                       config: engine.config, time: time)
         let priorityWindow = context.window(at: time.now)
         let titles = Dictionary(tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
         let minimum = engine.config.minimumActionScore
-        let ranked = priorityWindow.isBusy ? [] : engine.rankNow(context: context)
+        let ranked = priorityWindow.isBusy ? [] : engine.rankNow(context: context).filter { !reservedIDs.contains($0.taskID) }
         var actionable = ranked.filter { $0.action >= minimum }
         // Сил нет — сложное только если больше нечего.
         if isTired {
@@ -244,10 +255,11 @@ nonisolated struct NextActionUseCase: Sendable {
     }
 
     private func plannedTaskID(in plan: DayPlan?, at moment: Date, tasks: [LineaTask]) -> UUID? {
-        guard let plan, plan.status == .accepted else { return nil }
+        guard let plan else { return nil }
         let open = Set(tasks.filter(\.isOpen).map(\.id))
         return plan.blocks.first { block in
-            block.kind == .focus && block.start <= moment && moment < block.end
+            block.kind == .focus && (block.isPinned || plan.status == .accepted)
+                && block.start <= moment && moment < block.end
                 && (block.taskID.map { open.contains($0) } ?? false)
         }?.taskID
     }

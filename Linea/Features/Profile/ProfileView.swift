@@ -2,44 +2,40 @@
 //  ProfileView.swift
 //  Linea
 //
-//  The Profile screen. Everything here is real: the working day that defines
-//  available time, the state of every connector, which explainer writes the
-//  texts, and what Linea has learned from the evening ratings — with a way to
-//  reset it. Nothing is shown that Linea does not actually use.
-//
-
 import SwiftUI
 import EventKit
 
 struct ProfileView: View {
     @Environment(UserProfileStore.self) private var profile
-    @Environment(PlanStore.self) private var plan
     @Environment(HealthKitManager.self) private var healthKit
-    @Environment(IntelligenceStore.self) private var intelligence
     @Environment(MemoryStore.self) private var memory
-    @Environment(CheckInStore.self) private var checkIn
+    @Environment(\.dismiss) private var dismiss
 
-    /// Used only to ask for calendar access from this screen. Authorization is
-    /// app-wide, so this may be a different instance from the connector's.
     @State private var eventStore = EKEventStore()
-
     @State private var isEditingProfile = false
-    @State private var isShowingCalibration = false
-    @State private var isShowingDiagnostics = false
     @State private var isShowingMemory = false
+    @State private var isChangingConnection = false
     @State private var calendarDenied = false
+    @State private var healthFailed = false
 
     var body: some View {
         NavigationStack {
             LineaScaffold(title: "Профиль") {
                 aboutSection
                 connectionsSection
-                speechSection
                 intelligenceSection
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Закрыть") { dismiss() }
+                }
             }
         }
         .task {
             await profile.load()
+            if profile.profile.isHealthKitEnabled != false {
+                await healthKit.probeExistingAuthorization()
+            }
             await memory.loadIfNeeded()
         }
         .sheet(isPresented: $isEditingProfile) {
@@ -47,21 +43,8 @@ struct ProfileView: View {
                 Task { await profile.save(updated) }
             }
         }
-        .sheet(isPresented: $isShowingDiagnostics) {
-            DiagnosticsView()
-        }
-        .sheet(isPresented: $isShowingMemory) {
-            MemoryView()
-        }
-        .sheet(isPresented: $isShowingCalibration) {
-            CalibrationView(
-                calibration: intelligence.calibration,
-                onReset: { Task { await intelligence.resetCalibration() } }
-            )
-        }
+        .sheet(isPresented: $isShowingMemory) { MemoryView() }
     }
-
-    // MARK: About
 
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -71,8 +54,6 @@ struct ProfileView: View {
             LineaListRow(title: "Рабочий день", value: workdayText) { isEditingProfile = true }
             LineaHairline()
             LineaListRow(title: "Тихие часы", value: quietText) { isEditingProfile = true }
-            LineaHairline()
-            LineaListRow(title: "Цели", value: "\(plan.activeGoals.count) активных", showsChevron: false)
         }
     }
 
@@ -88,113 +69,81 @@ struct ProfileView: View {
         String(format: "%d:%02d", time.hour, time.minute)
     }
 
-    // MARK: Connections
-
     private var connectionsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: "Подключения", trailing: "источники данных")
-            LineaListRow(title: "Apple Health", value: healthStatusText, showsChevron: false)
-            ForEach(intelligence.connections, id: \.id) { connection in
-                LineaHairline()
-                LineaListRow(title: connection.title, value: connection.statusText, showsChevron: false)
+            SectionLabel(text: "Интеграции")
+            Toggle(isOn: Binding(
+                get: { profile.profile.isHealthKitEnabled ?? healthKit.isAuthorized },
+                set: { enabled in Task { await setHealth(enabled: enabled) } }
+            )) {
+                connectionLabel("Apple Health", "Показатели здоровья помогают подстроить план")
+            }
+            .accessibilityIdentifier("profile.healthKit")
+            if healthFailed {
+                connectionHint("Не удалось подключить Apple Health. Проверь доступ в приложении «Здоровье».")
             }
             LineaHairline()
-            calendarRow
-        }
-    }
-
-    /// The calendar is the second connector, and it is opt-in: the permission
-    /// dialog belongs to a deliberate tap here, not to a background refresh.
-    private var calendarRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
             Toggle(isOn: Binding(
                 get: { profile.profile.isCalendarEnabled },
-                set: { isOn in Task { await setCalendar(enabled: isOn) } }
+                set: { enabled in Task { await setCalendar(enabled: enabled) } }
             )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Календарь")
-                        .font(LineaFont.rowTitle)
-                        .foregroundStyle(LineaColor.textPrimary)
-                    Text("События займут время в плане дня")
-                        .font(LineaFont.caption)
-                        .foregroundStyle(LineaColor.textTertiary)
-                }
+                connectionLabel("Календарь", "События займут время в плане дня")
             }
-            .tint(LineaColor.ink)
-            .padding(.vertical, 10)
-
-            if calendarDenied {
-                Text("Доступ к календарю запрещён. Включить его можно в «Настройках» iOS.")
-                    .font(LineaFont.caption)
-                    .foregroundStyle(LineaColor.textSecondary)
-                    .padding(.bottom, 8)
+            .accessibilityIdentifier("profile.calendar")
+            if calendarDenied || (profile.profile.isCalendarEnabled && !CalendarAccess.isAuthorized) {
+                connectionHint("Разреши доступ к календарю в настройках iOS.")
+            }
+            if profile.errorMessage != nil {
+                connectionHint("Не удалось сохранить настройки. Попробуй еще раз.")
             }
         }
+        .tint(LineaColor.ink)
+        .disabled(isChangingConnection)
+    }
+
+    private func connectionLabel(_ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(LineaFont.rowTitle).foregroundStyle(LineaColor.textPrimary)
+            Text(detail).font(LineaFont.caption).foregroundStyle(LineaColor.textTertiary)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func connectionHint(_ text: String) -> some View {
+        Text(text).font(LineaFont.caption).foregroundStyle(LineaColor.textSecondary)
+    }
+
+    private func setHealth(enabled: Bool) async {
+        guard !isChangingConnection else { return }
+        isChangingConnection = true
+        defer { isChangingConnection = false }
+        if enabled { await healthKit.connect() }
+        let connected = enabled && healthKit.isAuthorized
+        healthFailed = enabled && !connected
+        var updated = profile.profile
+        updated.isHealthKitEnabled = connected
+        await profile.save(updated)
     }
 
     private func setCalendar(enabled: Bool) async {
+        guard !isChangingConnection else { return }
+        isChangingConnection = true
+        defer { isChangingConnection = false }
+        let granted = enabled ? await CalendarAccess.request(eventStore) : false
+        calendarDenied = enabled && !granted
         var updated = profile.profile
-        guard enabled else {
-            calendarDenied = false
-            updated.isCalendarEnabled = false
-            await profile.save(updated)
-            return
-        }
-        let granted = await CalendarAccess.request(eventStore)
-        calendarDenied = !granted
         updated.isCalendarEnabled = granted
         await profile.save(updated)
     }
 
-    private var healthStatusText: String {
-        switch healthKit.authState {
-        case .authorized: return "Подключено"
-        case .requesting: return "Подключаем…"
-        case .unavailable: return "Недоступно"
-        case .failed: return "Ошибка доступа"
-        case .notRequested: return "Не подключено"
-        }
-    }
-
-    // MARK: Распознавание речи
-
-    /// Модель в приложении: итог дня распознаётся без сети, наружу не уходит
-    /// ничего. Скачивать и удалять нечего — она приходит вместе с приложением.
-    private var speechSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: "Распознавание речи", trailing: "итог дня")
-            LineaListRow(
-                title: "Модель на телефоне",
-                value: checkIn.hasSpeechModel ? GigaAMModel.title : "Системная диктовка",
-                showsChevron: false
-            )
-            Text(checkIn.hasSpeechModel
-                 ? "Русская речь распознаётся прямо на телефоне, со знаками препинания. Голос никуда не уходит."
-                 : "В этой сборке нет модели распознавания — голос распознаёт системная диктовка iPhone.")
-                .font(LineaFont.caption)
-                .foregroundStyle(LineaColor.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 8)
-        }
-    }
-
-    // MARK: Intelligence
-
     private var intelligenceSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: "Linea AI")
-            LineaListRow(title: "Модель", value: AISettings.statusText, showsChevron: false)
-            LineaHairline()
+            SectionLabel(text: "Линия AI")
             assistantRow
             LineaHairline()
             LineaListRow(title: "Память", value: memoryText) { isShowingMemory = true }
-            LineaHairline()
-            LineaListRow(title: "Тексты пишет", value: intelligence.explainerTitle, showsChevron: false)
-            LineaHairline()
-            LineaListRow(title: "Калибровка", value: calibrationText) { isShowingCalibration = true }
-            LineaHairline()
-            LineaListRow(title: "Диагностика", value: "Журнал приложения") { isShowingDiagnostics = true }
         }
+        .disabled(isChangingConnection)
     }
 
     /// Пока переключатель выключен, наружу не уходит ничего: тексты собирает
@@ -216,7 +165,7 @@ struct ProfileView: View {
                     Text("Свободный разговор")
                         .font(LineaFont.rowTitle)
                         .foregroundStyle(LineaColor.textPrimary)
-                    Text("Вопросы уходят модели вместе с кратким контекстом дня и выжимкой из памяти")
+                    Text("Вопросы, краткий контекст дня и выжимка из памяти отправляются для ответа через интернет")
                         .font(LineaFont.caption)
                         .foregroundStyle(LineaColor.textTertiary)
                 }
@@ -226,7 +175,7 @@ struct ProfileView: View {
             .padding(.vertical, 10)
 
             if !AISettings.isConfigured {
-                Text("Ключ доступа к модели не настроен — см. Docs/secrets.md.")
+                Text("Свободный разговор сейчас недоступен.")
                     .font(LineaFont.caption)
                     .foregroundStyle(LineaColor.textSecondary)
                     .padding(.bottom, 8)
@@ -241,94 +190,4 @@ struct ProfileView: View {
         return "\(facts) \(RussianText.plural(facts, "факт", "факта", "фактов")), \(days) \(RussianText.plural(days, "день", "дня", "дней"))"
     }
 
-    private var calibrationText: String {
-        let count = intelligence.calibration.ratingsCount
-        return count == 0 ? "Пока нет оценок" : "\(count) оценок дня"
-    }
-}
-
-/// What Linea learned from the evening ratings, in plain words, plus a reset.
-struct CalibrationView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let calibration: Calibration
-    let onReset: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: LineaMetrics.sectionSpacing) {
-                    Text("Linea подстраивается под тебя по вечерним оценкам. Порядок задач она не переучивает — меняются только эти настройки.")
-                        .font(LineaFont.rowTitle)
-                        .foregroundStyle(LineaColor.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        SectionLabel(text: "Что подстроено")
-                        row("Оценка сил", value: signed(calibration.energyBias))
-                        LineaHairline()
-                        row("Порог «снизить нагрузку»", value: percent(calibration.reduceThreshold))
-                        LineaHairline()
-                        row("Порог «можно больше»", value: percent(calibration.pushThreshold))
-                        LineaHairline()
-                        row("Ёмкость дня", value: percent(calibration.capacityFactor))
-                        LineaHairline()
-                        row("Запас на задачи", value: multiplier(calibration.estimateMultiplier))
-                        LineaHairline()
-                        row("Пауза перед напоминанием", value: "\(calibration.nudgeGraceMinutes) мин")
-                    }
-
-                    if !calibration.changeLog.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            SectionLabel(text: "Что менялось")
-                            ForEach(Array(calibration.changeLog.suffix(8).reversed().enumerated()), id: \.offset) { _, change in
-                                Text(change.reason)
-                                    .font(LineaFont.caption)
-                                    .foregroundStyle(LineaColor.textTertiary)
-                                    .padding(.vertical, 4)
-                            }
-                        }
-                    }
-
-                    Button(role: .destructive) {
-                        onReset()
-                        dismiss()
-                    } label: {
-                        Text("Сбросить калибровку")
-                            .font(LineaFont.control)
-                            .foregroundStyle(.red)
-                            .padding(.vertical, 12)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, LineaMetrics.screenPadding)
-                .padding(.vertical, 20)
-            }
-            .background(LineaColor.background.ignoresSafeArea())
-            .navigationTitle("Калибровка")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Готово") { dismiss() }.tint(LineaColor.ink)
-                }
-            }
-        }
-        .presentationDragIndicator(.visible)
-    }
-
-    private func row(_ title: String, value: String) -> some View {
-        LineaListRow(title: title, value: value, showsChevron: false)
-    }
-
-    private func signed(_ value: Double) -> String {
-        value == 0 ? "по умолчанию" : String(format: "%+.2f", value)
-    }
-
-    private func percent(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
-    }
-
-    private func multiplier(_ value: Double) -> String {
-        String(format: "×%.2f", value)
-    }
 }

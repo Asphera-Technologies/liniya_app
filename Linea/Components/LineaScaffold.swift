@@ -4,7 +4,7 @@
 //
 //  The shared screen skeleton used by every top-level Linea screen:
 //  the "Linea" wordmark, a large calm title (with optional trailing accessory),
-//  scrolling content, and the persistent command bar pinned at the bottom.
+//  and scrolling content.
 //
 
 import SwiftUI
@@ -13,6 +13,7 @@ struct LineaScaffold<Content: View>: View {
     let title: String
     var subtitle: String? = nil
     var titleTrailing: String? = nil
+    var headerActions: AnyView? = nil
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -28,16 +29,19 @@ struct LineaScaffold<Content: View>: View {
         }
         .background(LineaColor.background.ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            CommandBar()
-        }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: LineaMetrics.headerSpacing) {
-            Text("Linea")
-                .font(LineaFont.wordmark)
-                .foregroundStyle(LineaColor.textPrimary)
+            HStack {
+                Text("Linea")
+                    .font(LineaFont.wordmark)
+                    .foregroundStyle(LineaColor.textPrimary)
+                if let headerActions {
+                    Spacer()
+                    headerActions
+                }
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 if let subtitle {
@@ -58,6 +62,5 @@ struct LineaScaffold<Content: View>: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
     }
 }

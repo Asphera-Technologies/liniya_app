@@ -31,6 +31,8 @@ final class IntelligenceStore {
     // MARK: Published state
 
     private(set) var state: UserState?
+    private(set) var planImpact: PlanImpact?
+    private(set) var isEditingQueue = false
     private(set) var plan: DayPlan?
     private(set) var dueNudge: Nudge?
     private(set) var sleepInsight: SleepInsight = .empty
@@ -87,13 +89,13 @@ final class IntelligenceStore {
     private let calibrations: any CalibrationRepository
     private let profiles: any UserProfileRepository
     private let nutritionRepository: any NutritionRepository
-    private let history: any HealthHistorySource
+    private let history: (any HealthHistorySource)?
     private let planStore: PlanStore
     private let scheduler: NudgeScheduler?
     private let timeProvider: @MainActor () -> TimeContext
     private let config: EngineConfig
-    /// Built on demand so the connector only exists while the user keeps the
-    /// calendar switched on. Nil in previews and tests.
+    private let healthProvider: (any ContextProvider)?
+    /// Built on demand while the user keeps the calendar switched on.
     private let calendarProvider: (@MainActor () -> any CalendarConnecting)?
     /// Свободный разговор с моделью. Nil, когда ключ не настроен.
     private let assistant: AssistantService?
@@ -120,12 +122,13 @@ final class IntelligenceStore {
         calibrations: any CalibrationRepository,
         profiles: any UserProfileRepository,
         nutritionRepository: any NutritionRepository,
-        history: any HealthHistorySource,
+        history: (any HealthHistorySource)?,
         planStore: PlanStore,
         scheduler: NudgeScheduler? = nil,
         config: EngineConfig = .default,
         time: @escaping @MainActor () -> TimeContext = { .live },
         calendarProvider: (@MainActor () -> any CalendarConnecting)? = nil,
+        healthProvider: (any ContextProvider)? = nil,
         assistant: AssistantService? = nil,
         memory: MemoryStore? = nil
     ) {
@@ -146,6 +149,7 @@ final class IntelligenceStore {
         self.config = config
         self.timeProvider = time
         self.calendarProvider = calendarProvider
+        self.healthProvider = healthProvider
         self.assistant = assistant
         self.memory = memory
     }
@@ -158,7 +162,7 @@ final class IntelligenceStore {
     /// задача, добавленная, пока на старте читалась история Apple Health, не
     /// попадала в план и «Сейчас» до следующего изменения.
     func refresh(reason: RefreshReason) async {
-        guard !isRefreshing else {
+        guard !isRefreshing, !isEditingQueue else {
             needsAnotherRefresh = true
             return
         }
@@ -184,7 +188,12 @@ final class IntelligenceStore {
             let meals = try await nutritionRepository.meals(on: time.dayInterval(containing: time.now))
             let existing = try await records.record(for: time.today)
             let previousAdvice = try await previousLoadAdvice(before: time.today)
-            await loadHistoryIfNeeded(time: time)
+            if profile.isHealthKitEnabled != false, let history {
+                await loadHistoryIfNeeded(from: history, time: time)
+            } else {
+                historyCache = []
+                historyLoadedAt = nil
+            }
 
             let output = await planDayUseCase.run(
                 PlanDayUseCase.Input(
@@ -211,6 +220,7 @@ final class IntelligenceStore {
             resumeFocusIfNeeded(time: time)
             calendarCache.removeAll()
             sleepInsight = output.insight
+            planImpact = output.planImpact
             logSnapshot(record)
             try await records.save(record)
             await evaluateNudges(time: time)
@@ -238,6 +248,9 @@ final class IntelligenceStore {
 
     private func connectors(nutrition: NutritionProfile?, meals: [MealLog], profile: UserProfile) -> [any ContextProvider] {
         var providers: [any ContextProvider] = [NutritionContextProvider(profile: nutrition, meals: meals)]
+        if profile.isHealthKitEnabled != false, let healthProvider {
+            providers.append(healthProvider)
+        }
         if profile.isCalendarEnabled, let calendarProvider {
             providers.append(calendarProvider() as any ContextProvider)
         }
@@ -279,9 +292,8 @@ final class IntelligenceStore {
     /// but four weeks of samples is not something to re-read on every tap.
     /// Apple Health that does not answer does not hold the day: after ten
     /// seconds the day is planned without history, the next refresh retries.
-    private func loadHistoryIfNeeded(time: TimeContext) async {
+    private func loadHistoryIfNeeded(from history: any HealthHistorySource, time: TimeContext) async {
         if let loadedAt = historyLoadedAt, time.isSameDay(loadedAt, time.now), !historyCache.isEmpty { return }
-        let history = self.history
         let days = config.baselineWindowDays
         do {
             historyCache = try await withDeadline(.seconds(10)) {
@@ -315,7 +327,7 @@ final class IntelligenceStore {
 
     /// «Принять план»: freeze it and schedule the day's nudges.
     func acceptPlan() async {
-        guard let record else { return }
+        guard !isRefreshing, !isEditingQueue, let record else { return }
         let time = self.time
         let output = acceptPlanUseCase.run(record: record, calibration: calibration, time: time)
         apply(output.record)
@@ -457,6 +469,7 @@ final class IntelligenceStore {
         guard userProfile.isCalendarEnabled, let calendarProvider else { return [] }
         if let cached = calendarCache[interval] { return cached }
         let events = (try? await calendarProvider().commitments(in: interval, time: time)) ?? []
+        guard userProfile.isCalendarEnabled, !Task.isCancelled else { return [] }
         calendarCache[interval] = events
         return events
     }
@@ -729,7 +742,7 @@ final class IntelligenceStore {
                                    end: time.adding(days: AutoReschedule.horizonDays + 1, to: time.today))
         var commitments = await calendarCommitments(in: horizon)
         if let snapshot = record?.snapshot, time.isSameDay(snapshot.day, time.now) {
-            commitments += snapshot.commitments
+            commitments += snapshot.commitments.filter { profile.isCalendarEnabled || $0.source != .calendar }
         }
         let nutrition = try? await nutritionRepository.profile()
         return RescheduleContext(profile: profile, tasks: planStore.tasks, commitments: commitments,
@@ -919,6 +932,123 @@ final class IntelligenceStore {
                 return block.taskID != nil && !isDone(block)
             }
             .sorted { $0.start < $1.start }
+    }
+
+    enum QueueDirection { case earlier, later }
+
+    func canMoveInQueue(_ block: PlanBlock) -> Bool {
+        guard block.kind == .focus, let id = block.taskID,
+              let task = planStore.tasks.first(where: { $0.id == id }) else { return false }
+        return task.isOpen && task.startedAt == nil && !task.isFixed
+            && time.isSameDay(plan?.day ?? .distantPast, time.now)
+            && (task.deferredUntil.map { $0 <= time.now } ?? true)
+    }
+
+    func queueNeighbor(of block: PlanBlock, toward direction: QueueDirection) -> PlanBlock? {
+        let queue = visibleBlocks
+        guard let index = queue.firstIndex(where: { $0.id == block.id }) else { return nil }
+        let next = index + (direction == .earlier ? -1 : 1)
+        guard queue.indices.contains(next), canMoveInQueue(queue[next]) else { return nil }
+        return queue[next]
+    }
+
+    var pinnedConflict: PlanBlock? {
+        let blocks = visibleBlocks
+        return blocks.first { pinned in
+            pinned.isPinned && pinned.end > time.now && canMoveInQueue(pinned)
+                && blocks.contains { other in
+                    (other.kind == .commitment || other.kind == .meal) && Self.overlaps(pinned, other)
+                }
+        }
+    }
+
+    func moveInQueue(_ id: PlanBlock.ID, to selection: Date) async -> String? {
+        let time = self.time
+        guard time.isSameDay(selection, time.now),
+              let start = time.calendar.dateInterval(of: .minute, for: selection)?.start
+        else { return "Выбери время на сегодня." }
+        return await editQueue(id) { block in [Self.pin(block, at: start)] }
+    }
+
+    func reorderQueue(_ id: PlanBlock.ID, toward direction: QueueDirection) async {
+        let error = await editQueue(id) { block in
+            guard let neighbor = queueNeighbor(of: block, toward: direction) else { return [] }
+            let (first, second) = direction == .earlier ? (neighbor, block) : (block, neighbor)
+            let gap = max(0, second.start.timeIntervalSince(first.end))
+            let time = self.time
+            let nextMinute = time.calendar.dateInterval(of: .minute, for: time.now)?.end ?? time.now
+            let newFirst = Self.pin(second, at: max(first.start, nextMinute))
+            return [newFirst, Self.pin(first, at: newFirst.end.addingTimeInterval(gap))]
+        }
+        if let error { notice = error }
+    }
+
+    private func editQueue(
+        _ id: PlanBlock.ID, replacements: (PlanBlock) -> [PlanBlock]
+    ) async -> String? {
+        let time = self.time
+        guard !isRefreshing, !isEditingQueue else { return "План обновляется. Попробуй еще раз." }
+        guard var record, var plan = record.plan, time.isSameDay(plan.day, time.now),
+              let block = plan.blocks.first(where: { $0.id == id }), canMoveInQueue(block)
+        else { return "Эту задачу больше нельзя переместить." }
+
+        let moved = replacements(block)
+        guard !moved.isEmpty else { return "Порядок задач уже изменился." }
+        let ids = Set(moved.map(\.id))
+        let others = plan.blocks.filter { !ids.contains($0.id) }
+        let start = max(time.now, time.date(on: time.today, at: userProfile.workdayStart))
+        let end = time.date(on: time.today, at: userProfile.workdayEnd)
+        let tasks = Dictionary(uniqueKeysWithValues: planStore.tasks.map { ($0.id, $0) })
+        let updated = others + moved
+        for item in moved {
+            guard item.start >= start, item.end <= end else {
+                return "Выбери свободное время до конца рабочего дня."
+            }
+            if let deadline = item.taskID.flatMap({ tasks[$0]?.deadline }), deadline > time.now, item.end > deadline {
+                return "Задача должна закончиться до срока."
+            }
+            if updated.contains(where: { $0.id != item.id && Self.overlaps(item, $0) }) {
+                return "В это время уже есть дело или событие."
+            }
+        }
+        let movedTasks = Set(moved.compactMap(\.taskID))
+        for item in updated where item.end > time.now {
+            guard let id = item.taskID, let task = tasks[id], task.isOpen else { continue }
+            for dependency in task.blockedBy where tasks[dependency]?.isOpen == true {
+                guard movedTasks.contains(id) || movedTasks.contains(dependency) else { continue }
+                if !updated.contains(where: { $0.taskID == dependency && $0.end <= item.start }) {
+                    return "Сначала запланируй задачу, от которой зависит это дело."
+                }
+            }
+        }
+
+        plan.blocks = updated.sorted { $0.start < $1.start }
+        record.plan = plan
+        record.updatedAt = time.now
+        isEditingQueue = true
+        do {
+            try await records.save(record)
+            apply(record)
+        } catch {
+            isEditingQueue = false
+            if needsAnotherRefresh { await refresh(reason: .inputsChanged) }
+            return "Не удалось сохранить изменения. Попробуй еще раз."
+        }
+        isEditingQueue = false
+        await refresh(reason: .inputsChanged)
+        return nil
+    }
+
+    private static func pin(_ block: PlanBlock, at start: Date) -> PlanBlock {
+        var moved = block
+        moved.start = start
+        moved.end = start.addingTimeInterval(block.end.timeIntervalSince(block.start))
+        moved.isPinned = true
+        return moved
+    }
+
+    private static func overlaps(_ first: PlanBlock, _ second: PlanBlock) -> Bool {
+        first.start < second.end && second.start < first.end
     }
 
     func isDone(_ block: PlanBlock) -> Bool {

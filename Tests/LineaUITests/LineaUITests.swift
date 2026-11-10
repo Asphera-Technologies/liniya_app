@@ -49,7 +49,7 @@ final class LineaUITests: XCTestCase {
         app.buttons["Добавить задачу"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: 5), "После «Добавить» лист закрывается")
 
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         XCTAssertTrue(button(app, startingWith: "Купить продукты").waitForExistence(timeout: 5), "Задача в плане")
         XCTAssertFalse(element(app, labelContaining: "на полчаса").exists, "Распознанное уходит из названия")
         snapshot(app, "04 План после добавления")
@@ -132,7 +132,7 @@ final class LineaUITests: XCTestCase {
 
         app.buttons["Добавить задачу"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: 5), "После «Добавить» лист закрывается")
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         XCTAssertTrue(button(app, startingWith: "Отчёт").waitForExistence(timeout: 5))
         snapshot(app, "12 План: задача без дня со сроком")
     }
@@ -142,7 +142,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test3GoalImportanceAndLinking() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         createGoal(app, "Запустить Линия Beta",
                    details: "Есть прототип приложения, идёт переработка онбординга. Хотим выпустить бету через TestFlight.")
         let goalRow = button(app, startingWith: "Запустить Линия Beta")
@@ -190,7 +190,7 @@ final class LineaUITests: XCTestCase {
         app.buttons["Добавить задачу"].tap()
         XCTAssertTrue(explicit.waitForNonExistence(timeout: 5))
 
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         XCTAssertTrue(button(app, startingWith: "Подготовить релиз").waitForExistence(timeout: 5))
         let check = button(app, startingWith: "Проверить онбординг")
         XCTAssertTrue(check.waitForExistence(timeout: 5), "Задача без цели — на месте")
@@ -215,7 +215,7 @@ final class LineaUITests: XCTestCase {
         addTask(app, "Собрать данные сегодня")
         addTask(app, "Написать отчёт сегодня, важно")
 
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         let report = button(app, startingWith: "Написать отчёт")
         XCTAssertTrue(report.waitForExistence(timeout: 5))
         report.tap()
@@ -360,7 +360,7 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "52 Сейчас: в работе")
 
         // «План»: начатая и отложенная подписаны.
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         let deferredRow = button(app, startingWith: "Ответить клиенту")
         XCTAssertTrue(deferredRow.waitForExistence(timeout: 5))
         XCTAssertTrue(deferredRow.label.contains("Не сейчас — до "), "Отложенная подписана: \(deferredRow.label)")
@@ -425,7 +425,7 @@ final class LineaUITests: XCTestCase {
         addTask(app, "Написать Саше")
         addTask(app, "Изучить новый API")
 
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         let inbox = app.descendants(matching: .any).matching(identifier: "plan.inbox").firstMatch
         XCTAssertTrue(inbox.waitForExistence(timeout: 5), "В «Плане» есть «Без даты»")
         for title in ["Посмотреть новые AI-модели", "Написать Саше", "Изучить новый API"] {
@@ -457,7 +457,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(title.waitForNonExistence(timeout: 5), "Разобрали последнюю — лист закрылся")
         XCTAssertTrue(offer.waitForNonExistence(timeout: 5), "Разобрано — предложения больше нет")
 
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         XCTAssertTrue(inbox.waitForExistence(timeout: 5))
         XCTAssertTrue(inbox.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Написать Саше")).firstMatch.exists,
                       "Оставленная — в «Без даты»")
@@ -473,7 +473,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test9GoalIntake() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         app.buttons["plan.addGoal"].tap()
         let line = field(app, "goal.line")
         XCTAssertTrue(line.waitForExistence(timeout: 5), "«+ Цель» открывает быструю цель")
@@ -553,7 +553,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test13QuickGoal() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         app.buttons["plan.addGoal"].tap()
         let line = field(app, "goal.line")
         XCTAssertTrue(line.waitForExistence(timeout: 5), "«+ Цель» открывает быструю цель")
@@ -608,7 +608,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test14GoalProgress() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         createQuickGoal(app, "Получить 50 пользователей")
         let row = button(app, startingWith: "Получить 50 пользователей")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
@@ -675,7 +675,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test15CompanyGoal() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         app.buttons["plan.addGoal"].tap()
         let line = field(app, "goal.line")
         XCTAssertTrue(line.waitForExistence(timeout: 5))
@@ -753,7 +753,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test16DayBalance() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         app.buttons["plan.addGoal"].tap()
         let line = field(app, "goal.line")
         XCTAssertTrue(line.waitForExistence(timeout: 5))
@@ -788,7 +788,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(done.label.hasPrefix("Оставила 30 минут для цели «Запустить Линия Beta»"), "Подтверждение: \(done.label)")
         snapshot(app, "55 Окно оставлено")
 
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         let window = button(app, startingWith: "Окно для цели «Запустить Линия Beta»")
         XCTAssertTrue(window.waitForExistence(timeout: 5), "Окно — задача к цели на сегодня")
         snapshot(app, "56 План: окно для цели")
@@ -846,7 +846,7 @@ final class LineaUITests: XCTestCase {
 
         // «Начать» в карточке задачи — фокус под карточкой, виден, когда её закрыли.
         addTask(app, "Ответить клиенту сегодня 15 минут")
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         let row = button(app, startingWith: "Ответить клиенту")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         bringAboveCommandBar(row, in: app)
@@ -933,7 +933,7 @@ final class LineaUITests: XCTestCase {
         snapshot(app, "69 Неактуально: убрала из планов")
         restore.tap()
         XCTAssertTrue(waitForLabel(note, "Вернула в планы."), note.label)
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         XCTAssertTrue(button(app, startingWith: "Подготовить презентацию").waitForExistence(timeout: 5), "Задача снова в планах")
 
         // «Нет сил» — Linea пока предлагает полегче.
@@ -964,7 +964,7 @@ final class LineaUITests: XCTestCase {
         let app = launch()
         addTask(app, "Подготовить презентацию сегодня 45 минут")
         addTask(app, "Ответить на письма сегодня 30 минут")
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
 
         // Свайп влево — меню заказчика.
         let presentation = button(app, startingWith: "Подготовить презентацию")
@@ -1026,7 +1026,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test20WeeklyReview() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         createQuickGoal(app, "Запустить Линия Beta")
         createQuickGoal(app, "Увеличить продажи Asphera")
         let titles = ["Отправить договор клиенту", "Подготовить отчёт для клиента", "Подготовить релиз", "Проверить сборку"]
@@ -1036,7 +1036,7 @@ final class LineaUITests: XCTestCase {
         addTask(app, "Проверить сборку сегодня 15 минут для цели Beta")
 
         // Неделя: две задачи к цели и две — текущие обязательства, все закрыты.
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         let closed = app.buttons.matching(NSPredicate(format: "label == %@", "Отметить невыполненной"))
         for (index, title) in titles.enumerated() {
             let row = button(app, startingWith: title)
@@ -1073,7 +1073,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test21ProtectedGoalWindow() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         createQuickGoal(app, "Запустить Linea Beta")
         let goalRow = button(app, startingWith: "Запустить Linea Beta")
         XCTAssertTrue(goalRow.waitForExistence(timeout: 5))
@@ -1116,7 +1116,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertEqual(focusTitle.label, "Продвинуть «Запустить Linea Beta»")
         snapshot(app, "82 Фокус: окно цели")
         minimizeFocus(app)
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         XCTAssertTrue(button(app, startingWith: "Продвинуть «Запустить Linea Beta»").waitForExistence(timeout: 5),
                       "Начатое окно — задача к цели")
     }
@@ -1126,7 +1126,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test22GoalStateUpdate() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         createQuickGoal(app, "Запустить Linea Beta")
         let row = button(app, startingWith: "Запустить Linea Beta")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
@@ -1179,12 +1179,12 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test10SwipeAndLongPress() throws {
         let app = launch()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         createGoal(app, "Запустить MVP Linea", details: "Есть прототип. Хочу выпустить первую версию в TestFlight.")
         addTask(app, "Купить молоко сегодня")
         addTask(app, "Позвонить маме сегодня")
         addTask(app, "Подготовить релиз сегодня")
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
 
         // Вправо — «Готово».
         let milk = button(app, startingWith: "Купить молоко")
@@ -1267,7 +1267,7 @@ final class LineaUITests: XCTestCase {
         scrollTo(planned, in: app)
         bringAboveCommandBar(planned, in: app)
         planned.swipeRight()
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         XCTAssertTrue(app.buttons["Отметить невыполненной"].waitForExistence(timeout: 5), "Свайп на «Сегодня» закрыл задачу")
         snapshot(app, "45 План после свайпа на «Сегодня»")
     }
@@ -1306,7 +1306,7 @@ final class LineaUITests: XCTestCase {
         app.buttons["Добавить задачу"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: 5))
 
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         let row = button(app, startingWith: "Подготовить КП для клиента")
         XCTAssertTrue(row.waitForExistence(timeout: 5), "Задача в плане под своим названием")
         XCTAssertTrue(row.label.contains("до 12:00 · ~1 ч 30 мин"), "Под задачей — что задано: \(row.label)")
@@ -1342,7 +1342,7 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(field.waitForNonExistence(timeout: 5))
 
         // Карточка: оценка Linea подписью, свой выбор — одним тапом.
-        openTab(app, "План", index: 1)
+        openTab(app, "Задачи", index: 1)
         let row = button(app, startingWith: "Подготовить презентацию")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         bringAboveCommandBar(row, in: app)
@@ -1357,6 +1357,82 @@ final class LineaUITests: XCTestCase {
         app.navigationBars["Задача"].buttons["Готово"].tap()
         XCTAssertTrue(app.navigationBars["Задача"].waitForNonExistence(timeout: 10))
         XCTAssertTrue(waitForLabel(row, containing: "~30 мин"), "Строка: \(row.label)")
+    }
+
+    @MainActor
+    func test23DayCenterNavigation() throws {
+        let app = launch()
+        let assistant = app.descendants(matching: .any).matching(identifier: "today.assistant").firstMatch
+        XCTAssertTrue(assistant.exists)
+        XCTAssertTrue(app.staticTexts["Дальше"].exists)
+        snapshot(app, "Центр управления днем")
+
+        app.buttons["Профиль"].tap()
+        XCTAssertTrue(app.switches["profile.healthKit"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["profile.calendar"].exists)
+        XCTAssertFalse(app.staticTexts["Модель"].exists)
+        XCTAssertFalse(app.staticTexts["Диагностика"].exists)
+        snapshot(app, "Интеграции в профиле")
+        app.buttons["Закрыть"].tap()
+
+        openTab(app, "Состояние", index: 2)
+        let impact = app.descendants(matching: .any).matching(identifier: "state.planImpact").firstMatch
+        XCTAssertTrue(impact.waitForExistence(timeout: 5))
+        snapshot(app, "Влияние на план")
+        addTask(app, "Проверить интеграции сегодня 10 минут")
+        XCTAssertTrue(impact.isHittable, "Быстрое добавление возвращает в Состояние")
+
+        let nutrition = app.buttons["Питание"]
+        scrollTo(nutrition, in: app)
+        nutrition.tap()
+        XCTAssertTrue(app.navigationBars["Питание"].waitForExistence(timeout: 5))
+        snapshot(app, "Питание внутри Состояния")
+
+        openTab(app, "Сегодня", index: 0)
+        app.buttons["Линия AI"].tap()
+        XCTAssertTrue(app.buttons["Закрыть"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func test24DayQueueReordersAndKeepsManualSlots() throws {
+        let app = launch()
+        let firstTitle = "Проверить отчет"
+        let secondTitle = "Ответить клиенту"
+        addTask(app, "\(firstTitle) сегодня 10 минут, высокий приоритет")
+        addTask(app, "\(secondTitle) сегодня 10 минут, низкий приоритет")
+        let first = app.buttons["Действия: \(firstTitle)"]
+        let second = app.buttons["Действия: \(secondTitle)"]
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        scrollTo(second, in: app)
+        XCTAssertLessThan(first.frame.minY, second.frame.minY)
+        second.tap()
+        tapMenuItem(app, "Выше в очереди")
+        let reordered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            second.exists && first.exists && second.frame.minY < first.frame.minY
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter().wait(for: [reordered], timeout: 5), .completed)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "вручную")).firstMatch.exists)
+        snapshot(app, "Ручной порядок очереди")
+
+        addTask(app, "Разобрать заметки сегодня 10 минут")
+        XCTAssertLessThan(second.frame.minY, first.frame.minY)
+        first.tap()
+        tapMenuItem(app, "Выбрать время")
+        let picker = app.navigationBars["Выбрать время"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.buttons["Сохранить"].tap()
+        XCTAssertTrue(picker.waitForNonExistence(timeout: 10))
+
+        first.tap()
+        tapMenuItem(app, "Перенести")
+        XCTAssertTrue(app.staticTexts["Перенести «\(firstTitle)»"].waitForExistence(timeout: 5))
+        app.buttons["Завтра"].tap()
+        XCTAssertTrue(first.waitForNonExistence(timeout: 5))
+
+        let finish = app.buttons["Завершить: \(secondTitle)"]
+        finish.tap()
+        XCTAssertTrue(finish.waitForNonExistence(timeout: 5))
     }
 
     // MARK: - Запуск

@@ -2,13 +2,7 @@
 //  RootView.swift
 //  Linea
 //
-//  App-level navigation: an icon-only native tab bar across Linea's five
-//  areas, with the ambient Linea AI surface presented over everything from
-//  the command bar. Icon-only tabs keep the calm Linea character; each tab
-//  carries an accessibility label for VoiceOver. A started task's focus
-//  («Начать» → `FocusView`) lies over the tabs until it is minimized,
-//  finished or let go.
-//
+//  App-level tabs and sheets. Task focus is presented above the tabs.
 
 import SwiftUI
 
@@ -19,11 +13,12 @@ struct RootView: View {
     @Environment(QuickAddStore.self) private var quickAdd
     @Environment(GoalIntakeStore.self) private var goalIntake
     @Environment(GoalUpdateStore.self) private var goalUpdate
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection: AppTab = .today
 
     enum AppTab: Hashable {
-        case today, plan, nutrition, health, profile
+        case today, plan, health, add
     }
 
     var body: some View {
@@ -75,6 +70,9 @@ struct RootView: View {
             LineaAIView()
                 .presentationDetents([.large])
         }
+        .sheet(isPresented: $appState.isPresentingProfile) {
+            ProfileView()
+        }
         .sheet(isPresented: $appState.isPresentingCheckIn) {
             CheckInView()
                 .presentationDetents([.large])
@@ -93,27 +91,38 @@ struct RootView: View {
     }
 
     private var tabs: some View {
-        TabView(selection: $selection) {
+        TabView(selection: Binding(
+            get: { selection },
+            set: { tab in
+                if tab == .add {
+                    appState.openQuickAdd()
+                } else {
+                    selection = tab
+                }
+            }
+        )) {
             TodayView()
+                .environment(\.horizontalSizeClass, horizontalSizeClass)
                 .tag(AppTab.today)
-                .tabItem { Image(systemName: "calendar").accessibilityLabel("Сегодня") }
+                .tabItem { Label("Сегодня", systemImage: "house") }
 
             PlanView()
+                .environment(\.horizontalSizeClass, horizontalSizeClass)
                 .tag(AppTab.plan)
-                .tabItem { Image(systemName: "list.bullet").accessibilityLabel("План") }
-
-            NutritionView()
-                .tag(AppTab.nutrition)
-                .tabItem { Image(systemName: "fork.knife").accessibilityLabel("Питание") }
+                .tabItem { Label("Задачи", systemImage: "list.bullet") }
 
             HealthView()
+                .environment(\.horizontalSizeClass, horizontalSizeClass)
                 .tag(AppTab.health)
-                .tabItem { Image(systemName: "waveform.path.ecg").accessibilityLabel("Здоровье") }
+                .tabItem { Label("Состояние", systemImage: "waveform.path.ecg") }
 
-            ProfileView()
-                .tag(AppTab.profile)
-                .tabItem { Image(systemName: "person").accessibilityLabel("Профиль") }
+            Color.clear
+                .tag(AppTab.add)
+                .tabItem { Label("Новая задача", systemImage: "plus") }
         }
+        .tabViewStyle(.tabBarOnly)
+        // iPad defaults to a top bar in regular width. Keep the same bottom navigation.
+        .environment(\.horizontalSizeClass, .compact)
         .tint(LineaColor.ink)
     }
 }
