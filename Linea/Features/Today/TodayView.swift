@@ -21,7 +21,12 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack {
-            LineaScaffold(title: greeting, subtitle: dateSubtitle, headerActions: AnyView(headerActions)) {
+            LineaScaffold(
+                title: greeting,
+                subtitle: dateSubtitle,
+                headerActions: AnyView(headerActions),
+                showsQuickAdd: true
+            ) {
                 nowSection
                 timeline
                 assistantCard
@@ -106,17 +111,17 @@ struct TodayView: View {
                 if action.option != nil {
                     // Три кнопки на узком экране или крупным шрифтом не влезают
                     // в строку — переносятся.
-                    FlowLayout(spacing: 12) {
+                    FlowLayout(spacing: 8) {
                         if action.isStarted {
-                            LineaOutlineButton(title: "Завершить") {
+                            LineaPrimaryButton(title: "Завершить", systemImage: "checkmark") {
                                 Task { await intelligence.finishAction() }
                             }
                         } else {
-                            LineaOutlineButton(title: "Начать") {
+                            LineaPrimaryButton(title: "Начать", systemImage: "play.fill") {
                                 Task { await intelligence.startAction() }
                             }
                         }
-                        LineaOutlineButton(title: "Не сейчас") {
+                        nowSecondaryButton("Не сейчас") {
                             showsAlternatives = false
                             Task { await intelligence.notNowAction() }
                         }
@@ -124,12 +129,15 @@ struct TodayView: View {
                         // сейчас» или «Начать» в списке. Зато можно вернуться
                         // в фокус, если его свернули.
                         if action.isStarted, let taskID = action.taskID {
-                            LineaOutlineButton(title: "Развернуть") {
+                            nowSecondaryButton("Развернуть", icon: "arrow.up.left.and.arrow.down.right") {
                                 intelligence.openFocus(taskID)
                             }
                             .accessibilityIdentifier("now.openFocus")
                         } else if !action.alternatives.isEmpty {
-                            LineaOutlineButton(title: showsAlternatives ? "Скрыть" : "Другое") {
+                            nowSecondaryButton(
+                                showsAlternatives ? "Скрыть" : "Другое",
+                                icon: showsAlternatives ? "chevron.up" : "chevron.down"
+                            ) {
                                 withAnimation(.snappy) { showsAlternatives.toggle() }
                             }
                         }
@@ -154,6 +162,29 @@ struct TodayView: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("today.now")
         }
+    }
+
+    private func nowSecondaryButton(
+        _ title: String,
+        icon: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(title)
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.caption2.weight(.semibold))
+                        .accessibilityHidden(true)
+                }
+            }
+            .font(LineaFont.control)
+            .foregroundStyle(LineaColor.textPrimary)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// «Сделано за 35 мин.», «Хорошо, подберу другое.» — тихо, одной строкой.

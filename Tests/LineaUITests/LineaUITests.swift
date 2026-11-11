@@ -28,6 +28,7 @@ final class LineaUITests: XCTestCase {
     @MainActor
     func test1QuickTaskFromAnyScreen() throws {
         let app = launch()
+        XCTAssertFalse(app.tabBars.buttons["Новая задача"].exists)
         snapshot(app, "01 Сегодня")
 
         let field = openQuickAdd(app)
@@ -53,6 +54,9 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(button(app, startingWith: "Купить продукты").waitForExistence(timeout: 5), "Задача в плане")
         XCTAssertFalse(element(app, labelContaining: "на полчаса").exists, "Распознанное уходит из названия")
         snapshot(app, "04 План после добавления")
+        let planField = openQuickAdd(app)
+        app.buttons["Закрыть"].tap()
+        XCTAssertTrue(planField.waitForNonExistence(timeout: 5))
 
         // «+ Задача» в «Плане» — тот же быстрый лист, а не форма.
         app.buttons["plan.addTask"].tap()
@@ -1387,6 +1391,9 @@ final class LineaUITests: XCTestCase {
         nutrition.tap()
         XCTAssertTrue(app.navigationBars["Питание"].waitForExistence(timeout: 5))
         snapshot(app, "Питание внутри Состояния")
+        let nutritionField = openQuickAdd(app)
+        app.buttons["Закрыть"].tap()
+        XCTAssertTrue(nutritionField.waitForNonExistence(timeout: 5))
 
         openTab(app, "Сегодня", index: 0)
         app.buttons["Линия AI"].tap()
@@ -1561,7 +1568,7 @@ final class LineaUITests: XCTestCase {
     /// строке не срабатывает.
     @MainActor
     private func bringAboveCommandBar(_ element: XCUIElement, in app: XCUIApplication) {
-        let bar = app.buttons["Новая задача"].firstMatch
+        let bar = app.tabBars.firstMatch
         var attempts = 0
         while element.exists, bar.exists, element.frame.maxY > bar.frame.minY - 12, attempts < 4 {
             app.swipeUp()

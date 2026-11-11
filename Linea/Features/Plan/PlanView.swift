@@ -27,7 +27,7 @@ struct PlanView: View {
         @Bindable var plan = plan
 
         NavigationStack {
-            LineaScaffold(title: "Задачи") {
+            LineaScaffold(title: "Задачи", showsQuickAdd: true) {
                 LineaSegmentedControl(
                     options: ["Неделя", "Месяц"],
                     selection: Binding(

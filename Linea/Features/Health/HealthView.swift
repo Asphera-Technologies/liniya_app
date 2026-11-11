@@ -30,7 +30,7 @@ struct HealthView: View {
 
     var body: some View {
         NavigationStack {
-            LineaScaffold(title: "Состояние") {
+            LineaScaffold(title: "Состояние", showsQuickAdd: true) {
                 impactSection
                 if healthEnabled {
                     metricsSection

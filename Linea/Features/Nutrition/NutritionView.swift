@@ -24,7 +24,7 @@ struct NutritionView: View {
     @State private var isEditingProfile = false
 
     var body: some View {
-        LineaScaffold(title: "Питание") {
+        LineaScaffold(title: "Питание", showsQuickAdd: true) {
             nextMealSection
             orderSection
             settingsSection

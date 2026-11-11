@@ -18,7 +18,7 @@ struct RootView: View {
     @State private var selection: AppTab = .today
 
     enum AppTab: Hashable {
-        case today, plan, health, add
+        case today, plan, health
     }
 
     var body: some View {
@@ -91,16 +91,7 @@ struct RootView: View {
     }
 
     private var tabs: some View {
-        TabView(selection: Binding(
-            get: { selection },
-            set: { tab in
-                if tab == .add {
-                    appState.openQuickAdd()
-                } else {
-                    selection = tab
-                }
-            }
-        )) {
+        TabView(selection: $selection) {
             TodayView()
                 .environment(\.horizontalSizeClass, horizontalSizeClass)
                 .tag(AppTab.today)
@@ -115,10 +106,6 @@ struct RootView: View {
                 .environment(\.horizontalSizeClass, horizontalSizeClass)
                 .tag(AppTab.health)
                 .tabItem { Label("Состояние", systemImage: "waveform.path.ecg") }
-
-            Color.clear
-                .tag(AppTab.add)
-                .tabItem { Label("Новая задача", systemImage: "plus") }
         }
         .tabViewStyle(.tabBarOnly)
         // iPad defaults to a top bar in regular width. Keep the same bottom navigation.
