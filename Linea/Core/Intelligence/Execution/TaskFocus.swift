@@ -2,21 +2,6 @@
 //  TaskFocus.swift
 //  Linea
 //
-//  Минимальный фокус после «Начать» (ADR-041). Не помодоро и не сессия, а
-//  один спокойный экран — что делаю, сколько на это отведено и с какого
-//  времени:
-//
-//      Подготовить презентацию
-//      ~45 мин
-//      Начато в 11:20
-//      [Завершить]
-//      Не получается продолжить
-//
-//  Цель — зафиксировать переход «предложено → начато → выполнено». Таймера
-//  нет: выполнение идёт само, пока у задачи есть `startedAt`, поэтому из
-//  приложения можно выйти. Тексты здесь, а не в экране: их проверяют тесты.
-//
-
 import Foundation
 
 nonisolated struct TaskFocus: Hashable, Sendable, Identifiable {
@@ -32,7 +17,15 @@ nonisolated struct TaskFocus: Hashable, Sendable, Identifiable {
 
     var id: UUID { taskID }
 
-    /// Под кнопками: фокус — не таймер, который надо держать открытым.
+    let timer: TaskTimer
+
+    var isPaused: Bool { timer.pausedAt != nil }
+
+    func remainingSeconds(at moment: Date) -> Int {
+        timer.remainingSeconds(at: moment)
+    }
+
+    /// Таймер опирается на сохраненное время начала.
     static let hint = "Можно выйти из приложения — выполнение продолжается."
     /// Тихая ссылка под «Завершить»: то же, что «Не сейчас» у начатой.
     static let stopTitle = "Не получается продолжить"
@@ -42,7 +35,7 @@ nonisolated struct TaskFocus: Hashable, Sendable, Identifiable {
     /// не записано — обычная длительность задачи с калибровкой.
     static func of(_ task: LineaTask, record: DayRecord?, calibration: Calibration, time: TimeContext) -> TaskFocus? {
         guard task.isOpen, let startedAt = task.startedAt else { return nil }
-        let minutes = record.flatMap { allotted(to: task.id, startedAt: startedAt, in: $0) }
+        let minutes = task.timer?.minutes ?? record.flatMap { allotted(to: task.id, startedAt: startedAt, in: $0) }
             ?? PlanDuration.minutes(for: task, calibration: calibration)
         return TaskFocus(
             taskID: task.id,
@@ -50,20 +43,20 @@ nonisolated struct TaskFocus: Hashable, Sendable, Identifiable {
             minutes: minutes,
             startedAt: startedAt,
             duration: QuickTaskText.duration(minutes: minutes),
-            started: startedText(startedAt, time: time)
+            started: startedText(startedAt, time: time),
+            timer: task.timer ?? TaskTimer(minutes: minutes, startedAt: startedAt)
         )
     }
 
     /// Задача, фокус которой Linea показывает после запуска приложения:
-    /// последняя начатая и не закрытая — если её начали не раньше, чем
-    /// 12 часов назад. Дольше — забыли нажать «Завершить», и экран
-    /// «в работе» был бы неправдой.
+    /// последняя начатая и не закрытая. Для старых записей без сохраненного
+    /// таймера ограничиваем восстановление последними 12 часами.
     static func resumable(in tasks: [LineaTask], time: TimeContext) -> LineaTask? {
         let oldest = time.now.addingTimeInterval(-TimeInterval(TaskLifecycle.maxActualMinutes * 60))
         return tasks
             .filter { task in
                 guard task.isOpen, let started = task.startedAt else { return false }
-                return started >= oldest && started <= time.now
+                return started <= time.now && (started >= oldest || task.timer != nil)
             }
             .max { ($0.startedAt ?? .distantPast) < ($1.startedAt ?? .distantPast) }
     }

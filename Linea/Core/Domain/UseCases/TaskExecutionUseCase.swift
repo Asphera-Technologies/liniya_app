@@ -54,7 +54,8 @@ nonisolated struct TaskExecutionUseCase: Sendable {
 
         switch action {
         case .start:
-            guard let updated = lifecycle.start(task, suggestionID: offered?.id, at: moment) else { return nil }
+            guard var updated = lifecycle.start(task, suggestionID: offered?.id, at: moment) else { return nil }
+            updated.timer = TaskTimer(minutes: plannedMinutes, startedAt: moment)
             let record = record.map { day -> DayRecord in
                 var day = day
                 if let open {
@@ -96,7 +97,7 @@ nonisolated struct TaskExecutionUseCase: Sendable {
                     day = SuggestionLog.responding(.declined, to: task.id, in: day, at: moment).record
                 }
                 // Начатую отпустили — сколько успели, тоже правда о деле.
-                let worked = task.startedAt.flatMap { TaskLifecycle.actualMinutes(from: $0, to: moment) }
+                let worked = task.startedAt.flatMap { TaskLifecycle.actualMinutes(from: $0, to: task.timer?.workedUntil(moment) ?? moment) }
                 return appending(.taskNotNow(taskID: task.id, wasStarted: task.startedAt != nil, workedMinutes: worked),
                                  to: day, at: moment)
             }

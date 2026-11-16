@@ -662,8 +662,31 @@ final class IntelligenceStore {
     /// Минимальный фокус начатой задачи: что делаю, сколько отведено, с
     /// какого времени. Нет — фокус свёрнут или задача уже не в работе.
     var focus: TaskFocus? {
-        guard let focusTaskID, let task = planStore.tasks.first(where: { $0.id == focusTaskID }) else { return nil }
+        guard let focusTaskID else { return nil }
+        return focus(for: focusTaskID)
+    }
+
+    func focus(for taskID: UUID) -> TaskFocus? {
+        guard let task = planStore.tasks.first(where: { $0.id == taskID }) else { return nil }
         return TaskFocus.of(task, record: record, calibration: calibration, time: time)
+    }
+
+    var activeFocus: TaskFocus? {
+        TaskFocus.resumable(in: planStore.tasks, time: time).flatMap { focus(for: $0.id) }
+    }
+
+    func setFocusPaused(_ paused: Bool, taskID: UUID, startedAt: Date) async {
+        guard executionsInFlight == 0,
+              var task = planStore.tasks.first(where: { $0.id == taskID }),
+              task.isOpen, task.startedAt == startedAt,
+              var timer = focus(for: taskID)?.timer else { return }
+        executionsInFlight += 1
+        timer.setPaused(paused, at: time.now)
+        task.timer = timer
+        let saved = await planStore.saveTasks([task], notifyPlanInputsChanged: false)
+        executionsInFlight -= 1
+        // Allow the next timer action once the current state is saved.
+        if saved { await planStore.onPlanInputsChanged?() }
     }
 
     /// «Развернуть» у начатого действия на «Сегодня».
@@ -819,11 +842,12 @@ final class IntelligenceStore {
     /// `plannedMinutes` — сколько отводила Linea; по умолчанию — по плану.
     func perform(_ action: TaskExecutionUseCase.Action, on task: LineaTask, plannedMinutes: Int? = nil) async {
         let time = self.time
+        guard executionsInFlight == 0 else { return }
         // Свежая версия: карточку могли открыть до того, как задачу начали.
         let current = planStore.tasks.first { $0.id == task.id } ?? task
         // Запись прошлого дня не трогаем: в неё сегодняшнее не пишется.
         let day = record.flatMap { time.isSameDay($0.day, time.now) ? $0 : nil }
-        let minutes = plannedMinutes ?? PlanDuration.minutes(for: current, calibration: calibration)
+        let minutes = plannedMinutes ?? current.timer?.minutes ?? PlanDuration.minutes(for: current, calibration: calibration)
         guard let output = executionUseCase.run(
             action, task: current, others: planStore.tasks, record: day, plannedMinutes: minutes, at: time.now
         ) else {

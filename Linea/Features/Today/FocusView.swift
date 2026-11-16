@@ -2,25 +2,6 @@
 //  FocusView.swift
 //  Linea
 //
-//  Минимальный фокус после «Начать» (ADR-041) — не помодоро, не музыка и не
-//  статистика концентрации, а один спокойный экран:
-//
-//      Подготовить презентацию
-//      ~45 мин
-//      Начато в 11:20
-//      [Завершить]
-//      Не получается продолжить
-//
-//  Таймера нет: дело в работе, пока у задачи есть время начала, поэтому из
-//  приложения можно выйти — выполнение продолжается. «Свернуть» оставляет
-//  дело в работе; на «Сегодня» у него есть «Развернуть». Тексты — из ядра
-//  (`TaskFocus`), действия — через `IntelligenceStore`, как везде.
-//
-//  Показывается поверх вкладок (`RootView`), а не листом: так он не спорит с
-//  листами, открытыми в этот момент, — например, с карточкой задачи, где
-//  нажали «Начать».
-//
-
 import SwiftUI
 
 struct FocusView: View {
@@ -56,6 +37,31 @@ struct FocusView: View {
                         .foregroundStyle(LineaColor.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("focus.title")
+
+                    ZStack {
+                        Circle()
+                            .strokeBorder(LineaColor.textTertiary.opacity(0.25), lineWidth: 4)
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            let fraction = Double(focus.remainingSeconds(at: context.date)) / Double(focus.minutes * 60)
+                            Circle()
+                                .trim(from: 0, to: min(1, fraction))
+                                .stroke(LineaColor.ink, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                                .rotationEffect(.degrees(-90))
+                                .accessibilityHidden(true)
+                        }
+                        VStack(spacing: 4) {
+                            FocusCountdown(focus: focus)
+                                .font(.system(size: 64, weight: .light, design: .rounded))
+                                .minimumScaleFactor(0.5)
+                            if focus.isPaused {
+                                Text("На паузе").font(LineaFont.caption).foregroundStyle(LineaColor.textSecondary)
+                            }
+                        }
+                        .padding(18)
+                    }
+                    .frame(width: 220, height: 220)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(focus.duration)
                             .font(LineaFont.rowTitle)
@@ -76,6 +82,11 @@ struct FocusView: View {
                     act(.finish)
                 }
                 .accessibilityIdentifier("focus.finish")
+                Button(focus.isPaused ? "Продолжить" : "Пауза") {
+                    Task { await intelligence.setFocusPaused(!focus.isPaused, taskID: focus.taskID, startedAt: focus.startedAt) }
+                }
+                .font(LineaFont.control)
+                .accessibilityIdentifier("focus.pauseResume")
                 Button(TaskFocus.stopTitle) {
                     act(.stop)
                 }
@@ -113,6 +124,24 @@ struct FocusView: View {
             case .stop: await intelligence.stopFocus()
             }
             isActing = false
+        }
+    }
+}
+
+
+struct FocusCountdown: View {
+    let focus: TaskFocus
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let seconds = focus.remainingSeconds(at: context.date)
+            Text(Duration.seconds(seconds).formatted(
+                .time(pattern: seconds >= 3600 ? .hourMinuteSecond : .minuteSecond(padMinuteToLength: 2))
+            ))
+            .monospacedDigit()
+            .accessibilityLabel(focus.isPaused ? "Пауза, осталось" : "Осталось")
+            .accessibilityValue(Duration.seconds(seconds).formatted(.units(width: .wide)))
+            .accessibilityIdentifier("focus.countdown")
         }
     }
 }

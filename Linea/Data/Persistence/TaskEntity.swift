@@ -46,6 +46,7 @@ final class TaskEntity {
 
     // Выполнение (`TaskLifecycle`): что человек делал с задачей на самом деле.
     var startedAt: Date?
+    var timerData: Data?
     var actualMinutes: Int?
     var suggestionID: UUID?
     var deferredUntil: Date?
@@ -77,6 +78,7 @@ final class TaskEntity {
         inboxReviewedAt: Date? = nil,
         userFieldsRaw: String? = nil,
         startedAt: Date? = nil,
+        timerData: Data? = nil,
         actualMinutes: Int? = nil,
         suggestionID: UUID? = nil,
         deferredUntil: Date? = nil,
@@ -103,6 +105,7 @@ final class TaskEntity {
         self.inboxReviewedAt = inboxReviewedAt
         self.userFieldsRaw = userFieldsRaw
         self.startedAt = startedAt
+        self.timerData = timerData
         self.actualMinutes = actualMinutes
         self.suggestionID = suggestionID
         self.deferredUntil = deferredUntil
@@ -134,6 +137,7 @@ extension TaskEntity {
             inboxReviewedAt: task.inboxReviewedAt,
             userFieldsRaw: Self.rawFields(task.userFields),
             startedAt: task.startedAt,
+            timerData: task.timer.flatMap { try? JSONEncoder().encode($0) },
             actualMinutes: task.actualMinutes,
             suggestionID: task.suggestionID,
             deferredUntil: task.deferredUntil,
@@ -165,6 +169,7 @@ extension TaskEntity {
             inboxReviewedAt: inboxReviewedAt,
             userFields: Self.fields(userFieldsRaw),
             startedAt: startedAt,
+            timer: timerData.flatMap { try? JSONDecoder().decode(TaskTimer.self, from: $0) },
             actualMinutes: actualMinutes,
             suggestionID: suggestionID,
             deferredUntil: deferredUntil,
@@ -193,6 +198,7 @@ extension TaskEntity {
         inboxReviewedAt = task.inboxReviewedAt
         userFieldsRaw = Self.rawFields(task.userFields)
         startedAt = task.startedAt
+        timerData = task.timer.flatMap { try? JSONEncoder().encode($0) }
         actualMinutes = task.actualMinutes
         suggestionID = task.suggestionID
         deferredUntil = task.deferredUntil

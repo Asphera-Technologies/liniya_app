@@ -121,6 +121,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     // делал с задачей на самом деле.
     /// «Начать»: когда человек взялся за задачу. «Не сейчас» снимает.
     var startedAt: Date?
+    var timer: TaskTimer?
     /// Сколько задача заняла на самом деле: от «Начать» до «Завершить».
     /// `nil` — её не начинали или забыли завершить вовремя.
     var actualMinutes: Int?
@@ -160,6 +161,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         inboxReviewedAt: Date? = nil,
         userFields: Set<TaskField>? = nil,
         startedAt: Date? = nil,
+        timer: TaskTimer? = nil,
         actualMinutes: Int? = nil,
         suggestionID: UUID? = nil,
         deferredUntil: Date? = nil,
@@ -186,6 +188,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         self.inboxReviewedAt = inboxReviewedAt
         self.userFields = userFields
         self.startedAt = startedAt
+        self.timer = timer
         self.actualMinutes = actualMinutes
         self.suggestionID = suggestionID
         self.deferredUntil = deferredUntil
@@ -218,6 +221,7 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         inboxReviewedAt = try container.decodeIfPresent(Date.self, forKey: .inboxReviewedAt)
         userFields = try container.decodeIfPresent(Set<TaskField>.self, forKey: .userFields)
         startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
+        timer = try container.decodeIfPresent(TaskTimer.self, forKey: .timer)
         actualMinutes = try container.decodeIfPresent(Int.self, forKey: .actualMinutes)
         suggestionID = try container.decodeIfPresent(UUID.self, forKey: .suggestionID)
         deferredUntil = try container.decodeIfPresent(Date.self, forKey: .deferredUntil)

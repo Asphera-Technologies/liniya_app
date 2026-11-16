@@ -392,7 +392,7 @@ struct NextActionTests {
 
     // MARK: Начатое действие
 
-    @Test("«Начать» пишет отклик в день, а у задачи — только время начала")
+    @Test("«Начать» пишет отклик в день и запускает таймер задачи")
     func startActionRecordsFeedback() throws {
         let time = WowFixture.time(10)
         let action = try #require(run(at: time, tasks: errands))
@@ -412,6 +412,7 @@ struct NextActionTests {
         // День, срок, приоритет и длительность задачи — прежние.
         var expected = task
         expected.startedAt = time.now
+        expected.timer = TaskTimer(minutes: option.minutes, startedAt: time.now)
         #expect(output.task == expected)
     }
 

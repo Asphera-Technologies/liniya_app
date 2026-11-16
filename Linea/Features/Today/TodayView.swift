@@ -28,6 +28,9 @@ struct TodayView: View {
                 showsQuickAdd: true
             ) {
                 nowSection
+                if let focus = intelligence.activeFocus, intelligence.nextAction?.taskID != focus.taskID {
+                    compactFocus(focus)
+                }
                 timeline
                 assistantCard
             }
@@ -44,6 +47,27 @@ struct TodayView: View {
         .onDisappear { intelligence.clearTodayNotes() }
         .refreshable { await intelligence.refresh(reason: .manual) }
         .onChange(of: intelligence.plan?.day) { dismissedSuggestions = [] }
+    }
+
+    private func compactFocus(_ focus: TaskFocus) -> some View {
+        Button { intelligence.openFocus(focus.taskID) } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(focus.isPaused ? "На паузе" : "В работе")
+                        .font(LineaFont.caption)
+                        .foregroundStyle(LineaColor.textSecondary)
+                    Text(focus.title).font(LineaFont.rowTitle).lineLimit(1)
+                }
+                Spacer()
+                FocusCountdown(focus: focus).font(LineaFont.control)
+                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.caption)
+            }
+            .foregroundStyle(LineaColor.textPrimary)
+            .padding(12)
+            .background(LineaColor.fill, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Развернуть таймер")
     }
 
     private var headerActions: some View {
@@ -77,7 +101,8 @@ struct TodayView: View {
     private var nowSection: some View {
         if let action = intelligence.nextAction {
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Сейчас", trailing: action.isStarted ? "в работе" : nil)
+                SectionLabel(text: "Сейчас", trailing: !action.isStarted ? nil :
+                    (action.taskID.flatMap { intelligence.focus(for: $0) }?.isPaused == true ? "на паузе" : "в работе"))
                 nowNote
                 notNowQuestion
                 if let option = action.option {
@@ -86,9 +111,15 @@ struct TodayView: View {
                             .font(LineaFont.feature)
                             .foregroundStyle(LineaColor.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(QuickTaskText.duration(minutes: option.minutes))
-                            .font(LineaFont.caption)
-                            .foregroundStyle(LineaColor.textTertiary)
+                        if action.isStarted, let taskID = action.taskID, let focus = intelligence.focus(for: taskID) {
+                            FocusCountdown(focus: focus)
+                                .font(LineaFont.rowTitle)
+                                .foregroundStyle(LineaColor.textSecondary)
+                        } else {
+                            Text(QuickTaskText.duration(minutes: option.minutes))
+                                .font(LineaFont.caption)
+                                .foregroundStyle(LineaColor.textTertiary)
+                        }
                     }
                 } else {
                     WrappingText(

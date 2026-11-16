@@ -98,8 +98,9 @@ final class PlanStore {
 
     /// Several changes at once (the evening check-in closes and moves tasks):
     /// one reload and one replan instead of one per task.
-    func saveTasks(_ updated: [LineaTask]) async {
-        guard !updated.isEmpty else { return }
+    @discardableResult
+    func saveTasks(_ updated: [LineaTask], notifyPlanInputsChanged: Bool = true) async -> Bool {
+        guard !updated.isEmpty else { return false }
         let time = timeProvider()
         do {
             for task in updated {
@@ -110,9 +111,11 @@ final class PlanStore {
                 }
             }
             await load()
-            await onPlanInputsChanged?()
+            if notifyPlanInputsChanged { await onPlanInputsChanged?() }
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 

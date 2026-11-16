@@ -33,6 +33,7 @@ nonisolated struct TaskLifecycle: Sendable {
         guard task.isOpen else { return nil }
         var result = task
         result.startedAt = moment
+        result.timer = nil
         result.deferredUntil = nil
         result.suggestionID = suggestionID
         return result
@@ -45,7 +46,8 @@ nonisolated struct TaskLifecycle: Sendable {
         var result = task
         result.isDone = true
         result.completedAt = moment
-        result.actualMinutes = task.startedAt.flatMap { Self.actualMinutes(from: $0, to: moment) }
+        result.actualMinutes = task.startedAt.flatMap { Self.actualMinutes(from: $0, to: task.timer?.workedUntil(moment) ?? moment) }
+        result.timer = nil
         result.deferredUntil = nil
         if let suggestionID { result.suggestionID = suggestionID }
         return result
@@ -58,6 +60,7 @@ nonisolated struct TaskLifecycle: Sendable {
         guard task.isOpen, task.startedAt != nil else { return nil }
         var result = task
         result.startedAt = nil
+        result.timer = nil
         return result
     }
 
@@ -66,6 +69,7 @@ nonisolated struct TaskLifecycle: Sendable {
         guard task.isOpen else { return nil }
         var result = task
         result.startedAt = nil
+        result.timer = nil
         result.suggestionID = nil
         result.deferredUntil = moment.addingTimeInterval(TimeInterval(Self.notNowMinutes * 60))
         return result
@@ -76,6 +80,8 @@ nonisolated struct TaskLifecycle: Sendable {
         guard task.cancelledAt == nil else { return nil }
         var result = task
         result.cancelledAt = moment
+        result.timer = nil
+        result.startedAt = nil
         result.deferredUntil = nil
         return result
     }
@@ -97,6 +103,7 @@ nonisolated struct TaskLifecycle: Sendable {
         result.completedAt = nil
         result.actualMinutes = nil
         result.startedAt = nil
+        result.timer = nil
         result.suggestionID = nil
         return result
     }

@@ -810,7 +810,7 @@ final class LineaUITests: XCTestCase {
         let app = launch()
         addTask(app, "Подготовить презентацию сегодня 45 минут, важно")
 
-        // «Сейчас» → «Начать» — открывается фокус, а не помодоро.
+        // «Сейчас» → «Начать» — открывается фокус с обратным отсчетом.
         openTab(app, "Сегодня", index: 0)
         let now = nowCard(app)
         XCTAssertTrue(now.waitForExistence(timeout: 15))
@@ -824,21 +824,32 @@ final class LineaUITests: XCTestCase {
         XCTAssertTrue(app.buttons["focus.finish"].exists)
         XCTAssertTrue(app.buttons["Не получается продолжить"].exists)
         XCTAssertTrue(app.staticTexts["Можно выйти из приложения — выполнение продолжается."].exists)
+        let countdown = app.descendants(matching: .any).matching(identifier: "focus.countdown").firstMatch
+        XCTAssertTrue(countdown.exists)
+        app.buttons["focus.pauseResume"].tap()
+        XCTAssertTrue(app.staticTexts["На паузе"].waitForExistence(timeout: 5))
+        let pausedValue = countdown.value as? String
+        XCTAssertNotNil(pausedValue)
         snapshot(app, "60 Фокус после «Начать»")
 
         // Вышел из приложения и вернулся — дело всё ещё в работе.
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(focusTitle.waitForExistence(timeout: 10), "После возврата фокус на месте")
+        XCTAssertEqual(countdown.value as? String, pausedValue, "Пауза сохраняет время в фоне")
         snapshot(app, "61 Фокус после возврата в приложение")
 
         // «Свернуть» — на «Сегодня» дело «в работе», «Развернуть» возвращает фокус.
         minimizeFocus(app)
         XCTAssertTrue(now.buttons["Развернуть"].waitForExistence(timeout: 5), "Свёрнутый фокус можно развернуть")
         scrollTo(now, in: app)
+        XCTAssertEqual(countdown.value as? String, pausedValue, "В компактном виде тот же остаток")
         snapshot(app, "62 Фокус свёрнут")
         now.buttons["Развернуть"].tap()
         XCTAssertTrue(focusTitle.waitForExistence(timeout: 5), "Фокус снова открыт")
+        app.buttons["focus.pauseResume"].tap()
+        XCTAssertTrue(app.staticTexts["На паузе"].waitForNonExistence(timeout: 5))
+
 
         // «Завершить» — фокус закрылся, над «Сейчас» — сколько заняло.
         app.buttons["focus.finish"].tap()
