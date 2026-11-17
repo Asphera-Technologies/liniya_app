@@ -20,6 +20,7 @@ struct LineaApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     /// App-wide UI state (ambient AI surface, etc.).
+    @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
 
     /// The single read-only HealthKit boundary, shared across screens.
@@ -69,6 +70,11 @@ struct LineaApp: App {
                 // элементах — тоже, какой бы ни была настройка региона.
                 .environment(\.locale, Locale(identifier: "ru_RU"))
                 .tint(LineaColor.ink)
+                .task(id: scenePhase) {
+                    guard scenePhase == .active else { return }
+                    await container.planStore.load()
+                    await AppContainer.syncFocusActivity(container.intelligenceStore)
+                }
                 .onAppear {
                     appDelegate.intelligence = container.intelligenceStore
                     appDelegate.appState = appState

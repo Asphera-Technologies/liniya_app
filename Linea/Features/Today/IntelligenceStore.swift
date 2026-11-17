@@ -671,8 +671,28 @@ final class IntelligenceStore {
         return TaskFocus.of(task, record: record, calibration: calibration, time: time)
     }
 
+    var localMeetingCommitments: [Commitment] {
+        record?.snapshot?.commitments.filter { $0.kind == .meeting && $0.source == .tasks } ?? []
+    }
+
     var activeFocus: TaskFocus? {
         TaskFocus.resumable(in: planStore.tasks, time: time).flatMap { focus(for: $0.id) }
+    }
+
+    func actOnFocus(_ action: FocusActivityAction, taskID: UUID, startedAt: Date) async {
+        await planStore.load()
+        guard executionsInFlight == 0,
+              let task = planStore.tasks.first(where: { $0.id == taskID }),
+              task.isOpen, task.startedAt == startedAt else { return }
+        switch action {
+        case .pause, .resume:
+            await setFocusPaused(action == .pause, taskID: taskID, startedAt: startedAt)
+        case .finish:
+            if record == nil { await refresh(reason: .appeared) }
+            guard let current = planStore.tasks.first(where: { $0.id == taskID }), current.startedAt == startedAt else { return }
+            await perform(.finish, on: current, plannedMinutes: focus(for: taskID)?.minutes)
+            noteFinished(taskID)
+        }
     }
 
     func setFocusPaused(_ paused: Bool, taskID: UUID, startedAt: Date) async {
@@ -685,7 +705,7 @@ final class IntelligenceStore {
         task.timer = timer
         let saved = await planStore.saveTasks([task], notifyPlanInputsChanged: false)
         executionsInFlight -= 1
-        // Allow the next timer action once the current state is saved.
+        // Live Activity can expose its next action before the plan refresh finishes.
         if saved { await planStore.onPlanInputsChanged?() }
     }
 

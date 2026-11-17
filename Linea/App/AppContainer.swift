@@ -212,9 +212,27 @@ final class AppContainer {
 
         // Any change to tasks, goals, the profile or nutrition rebuilds the day.
         let store = intelligence
-        plan.onPlanInputsChanged = { [weak store] in await store?.refresh(reason: .inputsChanged) }
+        FocusActivityController.handle = { [weak store] in await store?.actOnFocus($0, taskID: $1, startedAt: $2) }
+        plan.onPlanInputsChanged = { [weak store] in
+            guard let store else { return }
+            await Self.syncFocusActivity(store)
+            await store.refresh(reason: .inputsChanged)
+        }
         nutritionStore.onPlanInputsChanged = { [weak store] in await store?.refresh(reason: .inputsChanged) }
-        profileStore.onPlanInputsChanged = { [weak store] in await store?.refresh(reason: .inputsChanged) }
+        profileStore.onPlanInputsChanged = { [weak store] in
+            guard let store else { return }
+            await store.refresh(reason: .inputsChanged)
+            await Self.syncFocusActivity(store)
+        }
+    }
+
+    static func syncFocusActivity(_ store: IntelligenceStore) async {
+        let now = store.time.now
+        let events = store.activeFocus == nil ? [] : await store.calendarCommitments(
+            in: DateInterval(start: now, duration: 86_400)
+        )
+        let next = (events + store.localMeetingCommitments).filter { $0.start > now }.min { $0.start < $1.start }
+        await FocusActivityController.sync(focus: store.activeFocus, nextEvent: next, now: now)
     }
 
     /// The user's real clock — nothing below the App layer creates one.

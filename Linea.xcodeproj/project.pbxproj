@@ -9,6 +9,10 @@
 /* Begin PBXBuildFile section */
 		DEAA30CD214599692591FE4C /* sherpa-onnx in Frameworks */ = {isa = PBXBuildFile; productRef = 8A73C6CF63A05E57C4EB702D /* sherpa-onnx */; };
 		9F4BBA4B3041A101009126E3 /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F4BBA4A3041A100009126E3 /* HealthKitManager.swift */; };
+		A015F0C00000000000000001 /* FocusWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A015F0C00000000000000002; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A015F0C00000000000000003 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A015F0C00000000000000004; };
+		A015F0C00000000000000005 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A015F0C00000000000000004; };
+		A015F0C00000000000000006 /* FocusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A015F0C00000000000000007; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -19,12 +23,21 @@
 			remoteGlobalIDString = 9F4BBA3A30418A24009126E3;
 			remoteInfo = Linea;
 		};
+		A015F0C00000000000000008 = {isa = PBXContainerItemProxy; containerPortal = 9F4BBA3330418A23009126E3; proxyType = 1; remoteGlobalIDString = A015F0C00000000000000009; remoteInfo = FocusWidget; };
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A015F0C0000000000000000A = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A015F0C00000000000000001, ); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		9F4BBA3B30418A24009126E3 /* Linea.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Linea.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C529BACCA00ADD8995CB004 /* LineaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LineaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9F4BBA4A3041A100009126E3 /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
+		A015F0C00000000000000002 = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = FocusWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A015F0C00000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusActivityAttributes.swift; sourceTree = "<group>"; };
+		A015F0C00000000000000007 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusWidget.swift; sourceTree = "<group>"; };
+		A015F0C0000000000000000B = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -66,6 +79,7 @@
 				506403CA4A8D0B127860EC9F /* LineaUITests */,
 				9F4BBA3C30418A24009126E3 /* Products */,
 				9F4BBA4A3041A100009126E3 /* HealthKitManager.swift */,
+				A015F0C0000000000000000C /* FocusWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -74,10 +88,12 @@
 			children = (
 				9F4BBA3B30418A24009126E3 /* Linea.app */,
 				4C529BACCA00ADD8995CB004 /* LineaUITests.xctest */,
+				A015F0C00000000000000002 /* FocusWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
+		A015F0C0000000000000000C = {isa = PBXGroup; children = (A015F0C00000000000000004, A015F0C00000000000000007, A015F0C0000000000000000B, ); path = FocusWidget; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -89,10 +105,12 @@
 				9F4BBA3830418A24009126E3 /* Frameworks */,
 				9F4BBA3930418A24009126E3 /* Resources */,
 				D448CD04BD50BB6D75FF3E64 /* Speech model */,
+				A015F0C0000000000000000A /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A015F0C0000000000000000D /* FocusWidget */,
 			);
 			fileSystemSynchronizedGroups = (
 				9F4BBA3D30418A24009126E3 /* Linea */,
@@ -127,6 +145,17 @@
 			productName = LineaUITests;
 			productReference = 4C529BACCA00ADD8995CB004 /* LineaUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		A015F0C00000000000000009 /* FocusWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A015F0C0000000000000000E;
+			buildPhases = (A015F0C0000000000000000F, );
+			buildRules = ();
+			dependencies = ();
+			name = FocusWidget;
+			productName = FocusWidget;
+			productReference = A015F0C00000000000000002;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -166,6 +195,7 @@
 			targets = (
 				9F4BBA3A30418A24009126E3 /* Linea */,
 				09C10832165A1FE17517C4AD /* LineaUITests */,
+				A015F0C00000000000000009 /* FocusWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -220,6 +250,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9F4BBA4B3041A101009126E3 /* HealthKitManager.swift in Sources */,
+				A015F0C00000000000000003 /* FocusActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -230,6 +261,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A015F0C0000000000000000F = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A015F0C00000000000000005, A015F0C00000000000000006, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -238,6 +270,7 @@
 			target = 9F4BBA3A30418A24009126E3 /* Linea */;
 			targetProxy = 8B5F4E2A8545FF6CC35F107F /* PBXContainerItemProxy */;
 		};
+		A015F0C0000000000000000D = {isa = PBXTargetDependency; target = A015F0C00000000000000009; targetProxy = A015F0C00000000000000008; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -376,6 +409,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Linea reads your calendar to see when you are busy and plan the day around it.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Linea uses your Apple Health data to provide personalized health insights.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Linea записывает голос — рассказ об итоге дня или новую задачу — и превращает его в текст прямо на телефоне.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Linea распознаёт рассказ об итоге дня прямо на телефоне.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -414,6 +448,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Linea reads your calendar to see when you are busy and plan the day around it.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Linea uses your Apple Health data to provide personalized health insights.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Linea записывает голос — рассказ об итоге дня или новую задачу — и превращает его в текст прямо на телефоне.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Linea распознаёт рассказ об итоге дня прямо на телефоне.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -478,6 +513,46 @@
 			};
 			name = Release;
 		};
+		A015F0C00000000000000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WYML7G6KQP;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FocusWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.asphera.Linea.FocusWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FOCUS_WIDGET";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A015F0C00000000000000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WYML7G6KQP;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FocusWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.asphera.Linea.FocusWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FOCUS_WIDGET";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -508,6 +583,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A015F0C0000000000000000E = {isa = XCConfigurationList; buildConfigurations = (A015F0C00000000000000010, A015F0C00000000000000011, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
