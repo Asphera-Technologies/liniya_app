@@ -37,6 +37,7 @@ final class PlanStore {
 
     /// Called after every mutation so the day plan can be recomputed.
     /// Set by the composition root; nil in previews and tests.
+    var onReminderChanged: (@MainActor (LineaTask) async -> TaskReminderScheduler.Result)?
     var onPlanInputsChanged: (@MainActor () async -> Void)?
 
     /// Plan screen scope + which week/month is being viewed.
@@ -82,7 +83,8 @@ final class PlanStore {
     /// lifts a task that keeps slipping (`TaskDeferral`). Everything saved here
     /// is the person's own doing: what they changed becomes theirs, and Linea
     /// never overwrites it by itself (`TaskOwnership`).
-    func saveTask(_ task: LineaTask) async {
+    @discardableResult
+    func saveTask(_ task: LineaTask) async -> (saved: Bool, reminder: TaskReminderScheduler.Result?) {
         do {
             if let previous = tasks.first(where: { $0.id == task.id }) {
                 try await taskRepository.update(edited(previous: previous, updated: task, time: timeProvider()))
@@ -90,9 +92,12 @@ final class PlanStore {
                 try await taskRepository.add(task)
             }
             await load()
+            let reminder = task.reminderLeadMinutes == nil ? nil : await onReminderChanged?(task)
             await onPlanInputsChanged?()
+            return (true, reminder)
         } catch {
             errorMessage = error.localizedDescription
+            return (false, nil)
         }
     }
 
@@ -111,6 +116,7 @@ final class PlanStore {
                 }
             }
             await load()
+            for task in updated where task.reminderLeadMinutes != nil { _ = await onReminderChanged?(task) }
             if notifyPlanInputsChanged { await onPlanInputsChanged?() }
             return true
         } catch {
@@ -162,6 +168,7 @@ final class PlanStore {
                 try await taskRepository.update(previous.map { TaskDeferral.counted(previous: $0, updated: task, time: time) } ?? task)
             }
             await load()
+            for task in updated where task.reminderLeadMinutes != nil { _ = await onReminderChanged?(task) }
             if replans { await onPlanInputsChanged?() }
         } catch {
             errorMessage = error.localizedDescription
@@ -175,6 +182,7 @@ final class PlanStore {
         do {
             try await taskRepository.update(task)
             await load()
+            if task.reminderLeadMinutes != nil { _ = await onReminderChanged?(task) }
             await onPlanInputsChanged?()
         } catch {
             errorMessage = error.localizedDescription

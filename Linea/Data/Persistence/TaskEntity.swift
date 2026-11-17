@@ -26,6 +26,8 @@ final class TaskEntity {
     // Intelligence inputs (all optional → lightweight migration)
     var deadline: Date?
     var scheduledStart: Date?
+    var isLocalEvent: Bool?
+    var reminderLeadMinutes: Int?
     var estimatedMinutes: Int?
     var cognitiveDemandRaw: String?
     var goalID: UUID?
@@ -68,6 +70,8 @@ final class TaskEntity {
         createdAt: Date,
         deadline: Date? = nil,
         scheduledStart: Date? = nil,
+        isLocalEvent: Bool? = nil,
+        reminderLeadMinutes: Int? = nil,
         estimatedMinutes: Int? = nil,
         cognitiveDemandRaw: String? = nil,
         goalID: UUID? = nil,
@@ -95,6 +99,8 @@ final class TaskEntity {
         self.createdAt = createdAt
         self.deadline = deadline
         self.scheduledStart = scheduledStart
+        self.isLocalEvent = isLocalEvent
+        self.reminderLeadMinutes = reminderLeadMinutes
         self.estimatedMinutes = estimatedMinutes
         self.cognitiveDemandRaw = cognitiveDemandRaw
         self.goalID = goalID
@@ -127,6 +133,8 @@ extension TaskEntity {
             createdAt: task.createdAt,
             deadline: task.deadline,
             scheduledStart: task.scheduledStart,
+            isLocalEvent: task.isLocalEvent,
+            reminderLeadMinutes: task.reminderLeadMinutes,
             estimatedMinutes: task.estimatedMinutes,
             cognitiveDemandRaw: task.cognitiveDemand.rawValue,
             goalID: task.goalID,
@@ -159,6 +167,8 @@ extension TaskEntity {
             createdAt: createdAt,
             deadline: deadline,
             scheduledStart: scheduledStart,
+            isLocalEvent: isLocalEvent,
+            reminderLeadMinutes: reminderLeadMinutes,
             estimatedMinutes: estimatedMinutes,
             cognitiveDemand: cognitiveDemandRaw.flatMap(CognitiveDemand.init(rawValue:)) ?? .normal,
             goalID: goalID,
@@ -188,6 +198,8 @@ extension TaskEntity {
         isDone = task.isDone
         deadline = task.deadline
         scheduledStart = task.scheduledStart
+        isLocalEvent = task.isLocalEvent
+        reminderLeadMinutes = task.reminderLeadMinutes
         estimatedMinutes = task.estimatedMinutes
         cognitiveDemandRaw = task.cognitiveDemand.rawValue
         goalID = task.goalID

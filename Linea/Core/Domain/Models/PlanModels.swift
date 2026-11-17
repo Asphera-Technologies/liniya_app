@@ -95,6 +95,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
     // Intelligence inputs (all optional / defaulted → additive persistence change)
     var deadline: Date?
     var scheduledStart: Date?
+    var isLocalEvent: Bool?
+    var reminderLeadMinutes: Int?
     var estimatedMinutes: Int?
     var cognitiveDemand: CognitiveDemand
     var goalID: UUID?
@@ -151,6 +153,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         createdAt: Date = Date(),
         deadline: Date? = nil,
         scheduledStart: Date? = nil,
+        isLocalEvent: Bool? = nil,
+        reminderLeadMinutes: Int? = nil,
         estimatedMinutes: Int? = nil,
         cognitiveDemand: CognitiveDemand = .normal,
         goalID: UUID? = nil,
@@ -178,6 +182,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         self.createdAt = createdAt
         self.deadline = deadline
         self.scheduledStart = scheduledStart
+        self.isLocalEvent = isLocalEvent
+        self.reminderLeadMinutes = reminderLeadMinutes
         self.estimatedMinutes = estimatedMinutes
         self.cognitiveDemand = cognitiveDemand
         self.goalID = goalID
@@ -211,6 +217,8 @@ nonisolated struct LineaTask: Identifiable, Hashable, Sendable, Codable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         deadline = try container.decodeIfPresent(Date.self, forKey: .deadline)
         scheduledStart = try container.decodeIfPresent(Date.self, forKey: .scheduledStart)
+        isLocalEvent = try container.decodeIfPresent(Bool.self, forKey: .isLocalEvent)
+        reminderLeadMinutes = try container.decodeIfPresent(Int.self, forKey: .reminderLeadMinutes)
         estimatedMinutes = try container.decodeIfPresent(Int.self, forKey: .estimatedMinutes)
         cognitiveDemand = try container.decodeIfPresent(CognitiveDemand.self, forKey: .cognitiveDemand) ?? .normal
         goalID = try container.decodeIfPresent(UUID.self, forKey: .goalID)

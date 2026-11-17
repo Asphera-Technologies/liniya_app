@@ -68,6 +68,6 @@ nonisolated struct CommitmentMapper: Sendable {
     }
 
     private static func kind(of task: LineaTask) -> CommitmentKind {
-        CommitmentKind.inferred(fromTitle: task.title, default: .task)
+        CommitmentKind.inferred(fromTitle: task.title, default: task.isLocalEvent == true ? .other : .task)
     }
 }

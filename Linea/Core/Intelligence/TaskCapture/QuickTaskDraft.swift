@@ -59,13 +59,14 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
         time: TimeContext,
         defaultDay: TaskDay? = .someday,
         history: [LineaTask] = [],
+        requiresExplicitStart: Bool = false,
         parser: QuickTaskParser = QuickTaskParser(),
         linker: GoalLinker = GoalLinker(),
         classifier: TaskClassifier = TaskClassifier(),
         estimator: DurationEstimator = DurationEstimator()
     ) -> QuickTaskResolution {
         let activeGoals = goals.filter { $0.isActive && !$0.isCompleted }
-        let parsed = parser.parse(text, goals: activeGoals, profile: profile, time: time).grounded(in: text)
+        let parsed = parser.parse(text, goals: activeGoals, profile: profile, time: time, requiresExplicitStart: requiresExplicitStart).grounded(in: text)
         var result = QuickTaskResolution(title: parsed.title.trimmingCharacters(in: .whitespacesAndNewlines))
 
         // Когда. Срок без дня («отчёт к пятнице») — задача без дня: в какой

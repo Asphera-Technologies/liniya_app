@@ -282,7 +282,7 @@ nonisolated struct PriorityEngine: Sendable {
         var picked: [LineaTask] = []
         var undated: [LineaTask] = []
 
-        for task in snapshot.tasks where task.isOpen {
+        for task in snapshot.tasks where task.isOpen && task.isLocalEvent != true {
             if let date = task.date, time.startOfDay(date) <= today {
                 picked.append(task)
                 continue

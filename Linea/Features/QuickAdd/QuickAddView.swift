@@ -27,6 +27,8 @@ struct QuickAddView: View {
     @State private var dayPopover: DayPopover?
     /// Колесо «Другое…» у чипа длительности.
     @State private var isPickingMinutes = false
+    @State private var isPickingStart = false
+    @State private var startPickerDate = Date()
     /// Высота листа — по содержимому: строка, чипы, пояснение.
     @State private var contentHeight: CGFloat = 200
 
@@ -45,11 +47,12 @@ struct QuickAddView: View {
         let resolution = store.resolution
 
         VStack(alignment: .leading, spacing: 16) {
-            header(canSave: resolution.canSave)
+            header(canSave: store.canSave)
             titleField(text: $store.draft.text)
             understood(resolution)
             chips(resolution)
             goalSuggestion(resolution)
+            if store.usedVoice { voiceConfirmation(resolution) }
             status
         }
         .padding(.horizontal, LineaMetrics.screenPadding)
@@ -63,7 +66,18 @@ struct QuickAddView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(LineaColor.background.ignoresSafeArea())
         // Невысокий лист над клавиатурой — ровно по содержимому.
-        .presentationDetents([.height(max(contentHeight, 160))])
+        .presentationDetents(store.usedVoice ? [.large] : [.height(max(contentHeight, 160))])
+        .onChange(of: store.usedVoice) { _, used in
+            if used { isTitleFocused = false }
+        }
+        .alert("Быстрое добавление", isPresented: Binding(
+            get: { store.saveMessage != nil },
+            set: { if !$0 { store.confirmSaveMessage() } }
+        )) {
+            Button("Понятно") { if store.didSave { dismiss() } }
+        } message: {
+            Text(store.saveMessage ?? "")
+        }
         .presentationDragIndicator(.hidden)
         .interactiveDismissDisabled(store.voice != .idle)
         .onAppear { isTitleFocused = true }
@@ -76,13 +90,13 @@ struct QuickAddView: View {
             circleButton(systemImage: "xmark", isProminent: false) { dismiss() }
                 .accessibilityLabel("Закрыть")
             Spacer()
-            Text("Новая задача")
+            Text(store.isEvent ? "Новое событие" : "Новая задача")
                 .font(LineaFont.control)
                 .foregroundStyle(LineaColor.textPrimary)
             Spacer()
             circleButton(systemImage: "checkmark", isProminent: canSave) { save() }
                 .disabled(!canSave || store.isSaving)
-                .accessibilityLabel("Добавить задачу")
+                .accessibilityLabel(store.isEvent ? "Добавить событие" : "Добавить задачу")
         }
     }
 
@@ -117,7 +131,7 @@ struct QuickAddView: View {
                         text.wrappedValue = value
                             .replacingOccurrences(of: "\n", with: " ")
                             .trimmingCharacters(in: .whitespaces)
-                        save()
+                        if !store.usedVoice { save() }
                     }
                 micButton
             }
@@ -183,6 +197,63 @@ struct QuickAddView: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("quickAdd.understood")
         }
+    }
+
+    @ViewBuilder
+    private func voiceConfirmation(_ resolution: QuickTaskResolution) -> some View {
+        @Bindable var store = store
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Тип записи", selection: $store.isEvent) {
+                Text("Задача").tag(false)
+                Text("Событие").tag(true)
+            }
+            .pickerStyle(.segmented)
+            HStack {
+                Button {
+                    isTitleFocused = false
+                    startPickerDate = resolution.scheduledStart ?? self.store.time.now.addingTimeInterval(3600)
+                    isPickingStart = true
+                } label: {
+                    Label(resolution.scheduledStart.map { RussianText.clock($0, time: self.store.time) } ?? "Указать время",
+                          systemImage: "clock")
+                }
+                .accessibilityIdentifier("quickAdd.start")
+                if resolution.scheduledStart != nil {
+                    Button("Без времени") { self.store.chooseStart(nil) }
+                }
+            }
+            .buttonStyle(.bordered)
+            .popover(isPresented: $isPickingStart) {
+                VStack(spacing: 12) {
+                    DatePicker("Время начала", selection: $startPickerDate, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                    Button("Подтвердить время") {
+                        self.store.chooseStart(startPickerDate)
+                        isPickingStart = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
+                .presentationCompactAdaptation(.popover)
+            }
+            if let start = resolution.scheduledStart {
+                if start <= self.store.time.now {
+                    caption("Это время уже прошло. Выбери другой день или время.")
+                }
+                Menu {
+                    ForEach(QuickAddStore.Reminder.allCases) { reminder in
+                        Button(reminder.title) { self.store.reminder = reminder }
+                    }
+                } label: {
+                    Label("Напоминание: " + self.store.selectedReminder.title.lowercased(), systemImage: "bell")
+                }
+                .accessibilityIdentifier("quickAdd.reminder")
+            } else if store.isEvent {
+                caption("Выбери день и время начала события.")
+            }
+        }
+        .foregroundStyle(LineaColor.textPrimary)
     }
 
     // MARK: Чипы

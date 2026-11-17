@@ -81,13 +81,16 @@ nonisolated struct QuickTaskParser: Sendable {
 
     init() {}
 
-    func parse(_ text: String, goals: [LineaGoal] = [], profile: UserProfile = .default, time: TimeContext) -> QuickTaskParse {
+    func parse(
+        _ text: String, goals: [LineaGoal] = [], profile: UserProfile = .default,
+        time: TimeContext, requiresExplicitStart: Bool = false
+    ) -> QuickTaskParse {
         var state = QuickTaskParseState(text: text, profile: profile, time: time)
         state.stripFillers()
         state.matchPriority()
         state.matchDeadlines()
         state.matchDays()
-        state.matchStartTimes()
+        state.matchStartTimes(requiresExplicit: requiresExplicitStart)
         state.matchDurations()
         state.matchGoal(in: goals.filter { $0.isActive && !$0.isCompleted })
         state.keepTimesOfUnknownDay()
@@ -211,7 +214,7 @@ nonisolated enum QuickTaskWords {
     /// «Добавь задачу …», «Запиши мне …» — только вместе с дополнением,
     /// иначе «Записать видео» потеряло бы глагол.
     static let commandVerbs: Set<String> = ["добавь", "добавить", "создай", "создать", "запиши", "записать", "поставь", "занеси", "внеси"]
-    static let commandObjects: Set<String> = ["задачу", "задача", "задачку", "дело", "напоминание"]
+    static let commandObjects: Set<String> = ["задачу", "задача", "задачку", "дело", "напоминание", "событие"]
 
     /// Перед длительностью: «на полчаса», «примерно 40 минут», «за час».
     static let durationLeads: Set<String> = ["на", "за", "примерно", "около", "где-то", "приблизительно", "минимум", "максимум"]
@@ -485,7 +488,7 @@ nonisolated struct QuickTaskParseState {
                 var end = index
                 if word(end + 1) == "мне" { end += 1 }
                 if let object = word(end + 1), QuickTaskWords.commandObjects.contains(object) { end += 1 }
-                if end > index { last = end }
+                if end > index || (["запиши", "записать", "занеси", "внеси"].contains(first) && tokens[index + 1].kind == .pause) { last = end }
             } else if first == "новая", word(index + 1) == "задача" {
                 last = index + 1
             } else if first == "задача" || first == "задачу" {
@@ -859,12 +862,12 @@ nonisolated struct QuickTaskParseState {
 
     // MARK: Время начала
 
-    mutating func matchStartTimes() {
+    mutating func matchStartTimes(requiresExplicit: Bool) {
         for index in tokens.indices where isFree(index) {
             guard parse.startTime == nil else { return }
             if let first = word(index), first == "в" || first == "во" || first == "на" {
                 // «на 2 часа» — длительность, поэтому после «на» только «15:00».
-                if let (value, last) = clock(at: index + 1, allowNumber: first != "на", bare: true), accept(index...last, as: .time) {
+                if let (value, last) = clock(at: index + 1, allowNumber: first != "на", bare: true, requiresExplicit: requiresExplicit), accept(index...last, as: .time) {
                     consume(index...last, as: .startTime)
                     parse.startTime = value
                 }
@@ -877,7 +880,7 @@ nonisolated struct QuickTaskParseState {
 
     /// Время на часах: «15:00», «полдень», «3 часа дня», «7 вечера», «15
     /// часов». Голое число («в 15») — только если `bare` и дальше конец фразы.
-    func clock(at index: Int, allowNumber: Bool, bare: Bool) -> (TimeOfDay, Int)? {
+    func clock(at index: Int, allowNumber: Bool, bare: Bool, requiresExplicit: Bool = false) -> (TimeOfDay, Int)? {
         guard isFree(index) else { return nil }
         if case .clock(let value) = tokens[index].kind { return (value, index) }
         if let first = word(index), first == "полдень" || first == "полудня" { return (TimeOfDay(hour: 12), index) }
@@ -897,6 +900,7 @@ nonisolated struct QuickTaskParseState {
         if part == nil, !hasUnit {
             guard bare, isBoundary(last + 1) else { return nil }
         }
+        if requiresExplicit, part == nil, (1...12).contains(hour) { return nil }
         switch part {
         case "утра", "ночи":
             if hour == 12 { hour = 0 }
@@ -940,8 +944,10 @@ nonisolated struct QuickTaskParseState {
             }
             guard QuickTaskParser.minutesRange.contains(minutes) else { continue }
             // «через 2 часа» — это когда начать, а не сколько займёт.
-            if word(start - 1) == "через" { continue }
-            if word(start - 1) == "течение", word(start - 2) == "в" {
+            if let lead = word(start - 1), ["через", "в", "во"].contains(lead) { continue }
+            if let lead = word(start - 1), ["займёт", "займет"].contains(lead) {
+                start -= 1
+            } else if word(start - 1) == "течение", word(start - 2) == "в" {
                 start -= 2
             } else {
                 while let lead = word(start - 1), QuickTaskWords.durationLeads.contains(lead) { start -= 1 }

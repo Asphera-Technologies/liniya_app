@@ -93,7 +93,9 @@ final class AppContainer {
         let scheduler = NudgeScheduler()
         nudgeScheduler = scheduler
 
+        let reminderScheduler = TaskReminderScheduler()
         let plan = PlanStore(taskRepository: tasks, goalRepository: goals)
+        plan.onReminderChanged = { await reminderScheduler.sync($0, time: .live) }
         planStore = plan
         nutritionStore = NutritionStore(repository: nutrition, catalog: VkusVillClient())
         profileStore = UserProfileStore(repository: profile)
@@ -179,7 +181,8 @@ final class AppContainer {
             planStore: plan,
             hasSpeechModel: speechModel != nil,
             makeTranscriber: makeTranscriber,
-            profile: { [weak intelligence] in intelligence?.userProfile ?? .default }
+            profile: { [weak intelligence] in intelligence?.userProfile ?? .default },
+            enableReminder: { await reminderScheduler.enable() }
         )
         // Новая цель: рассказ разбирают правила на телефоне (ADR-029), голос —
         // тот же распознаватель. Модель, если появится, встанет в `analyzer`.

@@ -54,7 +54,7 @@ nonisolated struct TaskExecutionUseCase: Sendable {
 
         switch action {
         case .start:
-            guard var updated = lifecycle.start(task, suggestionID: offered?.id, at: moment) else { return nil }
+            guard task.isLocalEvent != true, var updated = lifecycle.start(task, suggestionID: offered?.id, at: moment) else { return nil }
             updated.timer = TaskTimer(minutes: plannedMinutes, startedAt: moment)
             let record = record.map { day -> DayRecord in
                 var day = day

@@ -84,14 +84,18 @@ struct TaskEditorView: View {
                     LineaTextField(placeholder: "Что нужно сделать?", text: $title, axis: .vertical)
                         .focused($titleFocused)
 
-                    executionSection
-                    goalSection
-                    prioritySection
-                    demandSection
+                    if existing.isLocalEvent != true {
+                        executionSection
+                        goalSection
+                        prioritySection
+                        demandSection
+                    }
                     durationSection
                     scheduleSection
-                    dependencySection
-                    kindSection
+                    if existing.isLocalEvent != true {
+                        dependencySection
+                        kindSection
+                    }
 
                     deleteButton
                 }
@@ -99,7 +103,7 @@ struct TaskEditorView: View {
                 .padding(.vertical, 20)
             }
             .background(LineaColor.background.ignoresSafeArea())
-            .navigationTitle("Задача")
+            .navigationTitle(existing.isLocalEvent == true ? "Событие" : "Задача")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -108,7 +112,7 @@ struct TaskEditorView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Готово") { save() }
                         .tint(LineaColor.ink)
-                        .disabled(trimmedTitle.isEmpty || isSaving)
+                        .disabled(trimmedTitle.isEmpty || isSaving || (existing.isLocalEvent == true && (!hasStart || !hasDate)))
                 }
             }
         }
@@ -466,7 +470,7 @@ struct TaskEditorView: View {
                 dismiss()
             }
         } label: {
-            Text("Удалить задачу")
+            Text(existing.isLocalEvent == true ? "Удалить событие" : "Удалить задачу")
                 .font(LineaFont.control)
                 .foregroundStyle(.red)
                 .padding(.vertical, 12)

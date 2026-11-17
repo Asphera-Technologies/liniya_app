@@ -21,6 +21,30 @@ import OSLog
 @MainActor
 final class QuickAddStore {
 
+    enum Reminder: Int, CaseIterable, Identifiable {
+        case none = -1, atStart = 0, before = 15
+
+        var id: Int { rawValue }
+        var title: String {
+            switch self {
+            case .none: "Без напоминания"
+            case .atStart: "В момент начала"
+            case .before: "За 15 минут"
+            }
+        }
+    }
+
+    enum StartChoice: Equatable {
+        case recognized, none, manual(TimeOfDay)
+    }
+
+    private(set) var usedVoice = false
+    var isEvent = false
+    var reminder: Reminder?
+    private(set) var startChoice: StartChoice = .recognized
+    private(set) var saveMessage: String?
+    private(set) var didSave = false
+
     typealias VoicePhase = VoiceDictation.Phase
 
     /// Строка ввода и выбор в чипах.
@@ -36,6 +60,7 @@ final class QuickAddStore {
     private let planStore: PlanStore
     private let profileProvider: @MainActor () -> UserProfile
     private let timeProvider: @MainActor () -> TimeContext
+    private let enableReminder: @MainActor () async -> Bool
     /// Выбирается один раз на открытие: второе «Добавить» не создаст копию.
     private var taskID = UUID()
 
@@ -45,7 +70,8 @@ final class QuickAddStore {
         hasSpeechModel: Bool = false,
         makeTranscriber: @escaping @MainActor () -> any SpeechTranscribing,
         profile: @escaping @MainActor () -> UserProfile = { .default },
-        time: @escaping @MainActor () -> TimeContext = { .live }
+        time: @escaping @MainActor () -> TimeContext = { .live },
+        enableReminder: @escaping @MainActor () async -> Bool = { false }
     ) {
         self.dictation = VoiceDictation(
             recorder: recorder,
@@ -57,11 +83,20 @@ final class QuickAddStore {
         self.planStore = planStore
         self.profileProvider = profile
         self.timeProvider = time
+        self.enableReminder = enableReminder
         dictation.onText = { [weak self] spoken in
             guard let self else { return }
             let typed = self.draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
             // Сказанное дописывается к набранному: «Отчёт» + «завтра к шести».
-            self.draft.text = typed.isEmpty ? spoken : "\(typed) \(spoken)"
+            self.usedVoice = true
+            if typed.isEmpty {
+                self.isEvent = VoiceTaskWindow.isEventCommand(spoken)
+            }
+            let normalized = spoken.replacingOccurrences(
+                of: #"(?i)^\s*(запиши|записать|занеси|внеси)\s*,?\s*(?=сегодня|завтра|послезавтра|в\s+\d)"#,
+                with: "", options: .regularExpression
+            )
+            self.draft.text = typed.isEmpty ? normalized : "\(typed) \(normalized)"
         }
     }
 
@@ -74,11 +109,47 @@ final class QuickAddStore {
     var hasSpeechModel: Bool { dictation.hasSpeechModel }
 
     /// Что получится из ввода прямо сейчас — это и показывают чипы.
-    var resolution: QuickTaskResolution {
+    private var parsedResolution: QuickTaskResolution {
         // История задач — чтобы оценить длительность по тому, сколько похожие
         // заняли на самом деле.
         draft.resolve(goals: planStore.goals, profile: profileProvider(), time: time, defaultDay: defaultDay,
-                      history: planStore.tasks)
+                      history: planStore.tasks, requiresExplicitStart: usedVoice)
+    }
+
+    var resolution: QuickTaskResolution {
+        var result = parsedResolution
+        switch startChoice {
+        case .recognized: break
+        case .none: result.scheduledStart = nil
+        case .manual(let clock):
+            let day = result.date ?? time.today
+            if result.date == nil {
+                result.day = .today
+                result.dayOrigin = .chosen
+                result.date = day
+            }
+            result.scheduledStart = time.date(on: day, at: clock)
+        }
+        return result
+    }
+
+    var canSave: Bool {
+        let resolution = self.resolution
+        guard resolution.canSave, !didSave, voice == .idle else { return false }
+        if isEvent && resolution.scheduledStart == nil { return false }
+        if usedVoice, let start = resolution.scheduledStart, start <= time.now { return false }
+        return true
+    }
+
+    var selectedReminder: Reminder { reminder ?? (isEvent ? .before : .atStart) }
+
+    func chooseStart(_ date: Date?) {
+        startChoice = date.map { .manual(time.timeOfDay(of: $0)) } ?? .none
+        saveMessage = nil
+    }
+
+    func confirmSaveMessage() {
+        saveMessage = nil
     }
 
     /// Цели, к которым можно привязать задачу.
@@ -102,6 +173,12 @@ final class QuickAddStore {
         dictation.reset()
         draft = QuickTaskDraft()
         isSaving = false
+        usedVoice = false
+        isEvent = false
+        reminder = nil
+        startChoice = .recognized
+        saveMessage = nil
+        didSave = false
         taskID = UUID()
     }
 
@@ -142,14 +219,32 @@ final class QuickAddStore {
     /// «Добавить». `true` — задача сохранена, экран можно закрывать.
     func save() async -> Bool {
         let resolution = self.resolution
-        guard resolution.canSave, !isSaving else { return false }
+        guard canSave, !isSaving else { return false }
         isSaving = true
+        defer { isSaving = false }
+        saveMessage = nil
         dictation.cancel()
-        let task = resolution.task(id: taskID, createdAt: time.now)
-        await planStore.saveTask(task)
+        var task = resolution.task(id: taskID, createdAt: time.now)
+        if isEvent { task.isLocalEvent = true }
+        if usedVoice, task.scheduledStart != nil, selectedReminder != .none {
+            task.reminderLeadMinutes = selectedReminder.rawValue
+            _ = await enableReminder()
+        }
+        let result = await planStore.saveTask(task)
+        guard result.saved else {
+            saveMessage = "Не удалось сохранить. Попробуй еще раз."
+            return false
+        }
+        didSave = true
+        switch result.reminder {
+        case .denied: saveMessage = "Запись сохранена. Разреши уведомления в настройках iPhone для напоминаний."
+        case .tooLate: saveMessage = "Запись сохранена. Время напоминания уже прошло."
+        case .failed: saveMessage = "Запись сохранена. Не удалось поставить напоминание."
+        case .ready, nil: break
+        }
         let parts = resolution.recognized.map(\.part.rawValue).joined(separator: ",")
         LineaLog.plan.notice("Быстрая задача: распознано [\(parts, privacy: .public)], цель \(resolution.goalID == nil ? "нет" : "есть", privacy: .public)")
-        return true
+        return saveMessage == nil
     }
 
     // MARK: Голос
