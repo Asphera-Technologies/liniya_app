@@ -182,6 +182,9 @@ final class AppContainer {
             hasSpeechModel: speechModel != nil,
             makeTranscriber: makeTranscriber,
             profile: { [weak intelligence] in intelligence?.userProfile ?? .default },
+            findSlot: { [weak intelligence] minutes, day, deadline in
+                await intelligence?.voiceSlot(minutes: minutes, day: day, deadline: deadline) ?? .calendarUnavailable
+            },
             enableReminder: { await reminderScheduler.enable() }
         )
         // Новая цель: рассказ разбирают правила на телефоне (ADR-029), голос —

@@ -67,6 +67,16 @@ struct CalendarConnectorTests {
         #expect(mapper.blockingEvents([event("Созвон", (11, 0), (11, 30))], in: day).count == 1)
     }
 
+    @Test("Проверка фиксированного окна учитывает даже короткие занятые события")
+    func shortBusyEventsBlockFixedSlot() {
+        let events = [
+            event("Короткий созвон", (11, 0), (11, 5), id: "busy"),
+            event("Заметка", (12, 0), (12, 5), id: "free", busy: false),
+            event("Отмена", (13, 0), (13, 5), id: "cancelled", canceled: true)
+        ]
+        #expect(mapper.occupiedTime(from: events, in: day, source: .calendar).map(\.id) == ["calendar-busy"])
+    }
+
     @Test("Многодневная поездка не вычитается целиком")
     func veryLongEventsAreIgnored() {
         let trip = CalendarEvent(

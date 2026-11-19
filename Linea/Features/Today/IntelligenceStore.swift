@@ -474,6 +474,25 @@ final class IntelligenceStore {
         return events
     }
 
+    func voiceSlot(minutes: Int, day: Date, deadline: Date?) async -> QuickAddStore.SlotResult {
+        let time = self.time
+        guard userProfile.isCalendarEnabled, CalendarAccess.isAuthorized, let calendarProvider else {
+            return .calendarUnavailable
+        }
+        do {
+            let interval = time.dayInterval(containing: day)
+            let events = try await calendarProvider().occupiedTime(in: interval, time: time)
+            guard userProfile.isCalendarEnabled, CalendarAccess.isAuthorized else { return .calendarUnavailable }
+            let nutrition = try await nutritionRepository.profile()
+            let context = RescheduleContext(profile: userProfile, tasks: planStore.tasks,
+                commitments: events, nutrition: nutrition, calibration: calibration, config: config, time: time)
+            return VoiceTaskWindow.find(minutes: minutes, day: day, deadline: deadline, context: context, plan: plan)
+                .map { .found($0) } ?? .noFit
+        } catch {
+            return .calendarUnavailable
+        }
+    }
+
     // MARK: - Nudges
 
     private func evaluateNudges(time: TimeContext) async {

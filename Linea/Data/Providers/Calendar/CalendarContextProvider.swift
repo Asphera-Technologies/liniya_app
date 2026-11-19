@@ -45,6 +45,12 @@ nonisolated final class CalendarContextProvider: CalendarConnecting {
         return mapper.commitments(from: events, in: interval, source: id)
     }
 
+    func occupiedTime(in interval: DateInterval, time: TimeContext) async throws -> [Commitment] {
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return [] }
+        let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: nil)
+        return mapper.occupiedTime(from: store.events(matching: predicate).map(Self.event), in: interval, source: id)
+    }
+
     /// `EKEvent` → доменное событие. Ни одного решения здесь не принимается.
     private static func event(_ event: EKEvent) -> CalendarEvent {
         CalendarEvent(

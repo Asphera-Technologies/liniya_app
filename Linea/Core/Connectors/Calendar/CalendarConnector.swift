@@ -62,6 +62,13 @@ nonisolated struct CalendarEvent: Sendable, Hashable, Identifiable {
 /// объявлено отдельно, а не запихнуто в `ContextProvider`.
 nonisolated protocol CalendarConnecting: ContextProvider {
     func commitments(in interval: DateInterval, time: TimeContext) async throws -> [Commitment]
+    func occupiedTime(in interval: DateInterval, time: TimeContext) async throws -> [Commitment]
+}
+
+nonisolated extension CalendarConnecting {
+    func occupiedTime(in interval: DateInterval, time: TimeContext) async throws -> [Commitment] {
+        try await commitments(in: interval, time: time)
+    }
 }
 
 /// Превращает события в сигналы `.commitment`.
@@ -95,7 +102,20 @@ nonisolated struct CalendarSignalMapper: Sendable {
     /// Те же правила отбора, но сразу в виде обязательств — для экранов,
     /// которым не нужен весь контекст дня.
     func commitments(from events: [CalendarEvent], in window: DateInterval, source: ProviderID) -> [Commitment] {
-        blockingEvents(events, in: window).map { event in
+        commitments(from: blockingEvents(events, in: window), source: source)
+    }
+
+    /// Before offering a fixed slot, count every busy event, even if too
+    /// short or too long to matter for day-plan recommendations.
+    func occupiedTime(from events: [CalendarEvent], in window: DateInterval, source: ProviderID) -> [Commitment] {
+        let busy = events.filter {
+            $0.isBusy && !$0.isCanceled && $0.end > $0.start && $0.start < window.end && $0.end > window.start
+        }
+        return commitments(from: busy, source: source)
+    }
+
+    private func commitments(from events: [CalendarEvent], source: ProviderID) -> [Commitment] {
+        events.map { event in
             Commitment(
                 id: "calendar-\(event.id)",
                 title: event.title.isEmpty ? "Событие" : event.title,

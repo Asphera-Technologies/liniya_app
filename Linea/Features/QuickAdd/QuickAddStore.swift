@@ -21,6 +21,10 @@ import OSLog
 @MainActor
 final class QuickAddStore {
 
+    enum SlotResult: Equatable {
+        case found(DateInterval), noFit, calendarUnavailable
+    }
+
     enum Reminder: Int, CaseIterable, Identifiable {
         case none = -1, atStart = 0, before = 15
 
@@ -35,12 +39,19 @@ final class QuickAddStore {
     }
 
     enum StartChoice: Equatable {
-        case recognized, none, manual(TimeOfDay)
+        case recognized, none, manual(TimeOfDay), suggested(DateInterval)
+    }
+
+    struct SlotQuery: Hashable {
+        let minutes: Int
+        let day: Date
+        let deadline: Date?
     }
 
     private(set) var usedVoice = false
     var isEvent = false
     var reminder: Reminder?
+    private(set) var slotResult: SlotResult?
     private(set) var startChoice: StartChoice = .recognized
     private(set) var saveMessage: String?
     private(set) var didSave = false
@@ -60,6 +71,7 @@ final class QuickAddStore {
     private let planStore: PlanStore
     private let profileProvider: @MainActor () -> UserProfile
     private let timeProvider: @MainActor () -> TimeContext
+    private let findSlot: @MainActor (Int, Date, Date?) async -> SlotResult
     private let enableReminder: @MainActor () async -> Bool
     /// Выбирается один раз на открытие: второе «Добавить» не создаст копию.
     private var taskID = UUID()
@@ -71,6 +83,7 @@ final class QuickAddStore {
         makeTranscriber: @escaping @MainActor () -> any SpeechTranscribing,
         profile: @escaping @MainActor () -> UserProfile = { .default },
         time: @escaping @MainActor () -> TimeContext = { .live },
+        findSlot: @escaping @MainActor (Int, Date, Date?) async -> SlotResult = { _, _, _ in .calendarUnavailable },
         enableReminder: @escaping @MainActor () async -> Bool = { false }
     ) {
         self.dictation = VoiceDictation(
@@ -83,6 +96,7 @@ final class QuickAddStore {
         self.planStore = planStore
         self.profileProvider = profile
         self.timeProvider = time
+        self.findSlot = findSlot
         self.enableReminder = enableReminder
         dictation.onText = { [weak self] spoken in
             guard let self else { return }
@@ -129,8 +143,18 @@ final class QuickAddStore {
                 result.date = day
             }
             result.scheduledStart = time.date(on: day, at: clock)
+        case .suggested(let interval):
+            result.scheduledStart = interval.start
+            result.date = time.startOfDay(interval.start)
         }
         return result
+    }
+
+    var slotQuery: SlotQuery? {
+        let parsed = parsedResolution
+        guard usedVoice, !isEvent, startChoice == .recognized, parsed.canSave, parsed.scheduledStart == nil,
+              let day = parsed.date, let minutes = parsed.minutes else { return nil }
+        return SlotQuery(minutes: minutes, day: day, deadline: parsed.deadline)
     }
 
     var canSave: Bool {
@@ -142,6 +166,19 @@ final class QuickAddStore {
     }
 
     var selectedReminder: Reminder { reminder ?? (isEvent ? .before : .atStart) }
+
+    func searchSlot(_ query: SlotQuery?) async {
+        slotResult = nil
+        guard let query else { return }
+        let found = await findSlot(query.minutes, query.day, query.deadline)
+        guard !Task.isCancelled, slotQuery == query else { return }
+        slotResult = found
+    }
+
+    func chooseSlot(_ interval: DateInterval) {
+        startChoice = .suggested(interval)
+        saveMessage = nil
+    }
 
     func chooseStart(_ date: Date?) {
         startChoice = date.map { .manual(time.timeOfDay(of: $0)) } ?? .none
@@ -177,6 +214,7 @@ final class QuickAddStore {
         isEvent = false
         reminder = nil
         startChoice = .recognized
+        slotResult = nil
         saveMessage = nil
         didSave = false
         taskID = UUID()
@@ -185,11 +223,13 @@ final class QuickAddStore {
     // MARK: Чипы
 
     func chooseDay(_ day: TaskDay) {
+        if case .suggested = startChoice { startChoice = .recognized }
         draft.day = day
     }
 
     /// Срок с часами; `nil` — «Без срока».
     func chooseDeadline(_ moment: Date?) {
+        if case .suggested = startChoice { startChoice = .recognized }
         if let moment {
             draft.deadline = .at(moment)
         } else {
@@ -198,6 +238,7 @@ final class QuickAddStore {
     }
 
     func chooseMinutes(_ minutes: Int) {
+        if case .suggested = startChoice { startChoice = .recognized }
         draft.minutes = minutes
     }
 
@@ -224,6 +265,14 @@ final class QuickAddStore {
         defer { isSaving = false }
         saveMessage = nil
         dictation.cancel()
+        if case let .suggested(accepted) = startChoice, let day = resolution.date {
+            let result = await findSlot(resolution.estimatedMinutes, day, resolution.deadline)
+            guard case let .found(current) = result, current == accepted else {
+                startChoice = .recognized
+                saveMessage = "Расписание изменилось. Проверь новое время перед сохранением."
+                return false
+            }
+        }
         var task = resolution.task(id: taskID, createdAt: time.now)
         if isEvent { task.isLocalEvent = true }
         if usedVoice, task.scheduledStart != nil, selectedReminder != .none {

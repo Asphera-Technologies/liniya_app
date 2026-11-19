@@ -67,6 +67,7 @@ struct QuickAddView: View {
         .background(LineaColor.background.ignoresSafeArea())
         // Невысокий лист над клавиатурой — ровно по содержимому.
         .presentationDetents(store.usedVoice ? [.large] : [.height(max(contentHeight, 160))])
+        .task(id: store.slotQuery) { await store.searchSlot(store.slotQuery) }
         .onChange(of: store.usedVoice) { _, used in
             if used { isTitleFocused = false }
         }
@@ -240,6 +241,8 @@ struct QuickAddView: View {
             if let start = resolution.scheduledStart {
                 if start <= self.store.time.now {
                     caption("Это время уже прошло. Выбери другой день или время.")
+                } else if case let .suggested(interval) = self.store.startChoice {
+                    caption("Выбрано: " + slotLabel(interval))
                 }
                 Menu {
                     ForEach(QuickAddStore.Reminder.allCases) { reminder in
@@ -251,9 +254,34 @@ struct QuickAddView: View {
                 .accessibilityIdentifier("quickAdd.reminder")
             } else if store.isEvent {
                 caption("Выбери день и время начала события.")
+            } else if store.slotQuery != nil {
+                switch store.slotResult {
+                case .found(let interval):
+                    Button {
+                        self.store.chooseSlot(interval)
+                    } label: {
+                        Label("Выбрать " + slotLabel(interval), systemImage: "calendar.badge.clock")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("quickAdd.suggestedSlot")
+                case .noFit:
+                    caption("В этот день нет свободного окна на всю задачу. Можно выбрать другой день через чип даты.")
+                case .calendarUnavailable:
+                    caption("Календарь недоступен. Без него нельзя проверить свободное время; можно указать время вручную.")
+                case nil:
+                    caption("Проверяю свободное время…")
+                }
             }
         }
         .foregroundStyle(LineaColor.textPrimary)
+    }
+
+    private func slotLabel(_ interval: DateInterval) -> String {
+        let time = store.time
+        return AutoReschedule.dayPhrase(interval.start, time: time)
+            + ", " + RussianText.clock(interval.start, time: time)
+            + "–" + RussianText.clock(interval.end, time: time)
     }
 
     // MARK: Чипы
