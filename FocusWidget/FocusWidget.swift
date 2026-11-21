@@ -10,18 +10,10 @@ struct FocusWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: FocusActivityAttributes.self) { context in
             VStack(spacing: 12) {
-                HStack(spacing: 16) {
-                    progress(context.state, size: 52)
-                    countdown(context.state)
-                        .font(.system(.largeTitle, design: .rounded, weight: .medium))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    controls(context)
-                }
-                taskTitle(context.state)
-                    .font(.subheadline.weight(.medium))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 11)
+                timerRow(context)
+                titleRow(context.state)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                     .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
             }
             .padding(16)
@@ -29,30 +21,20 @@ struct FocusWidget: Widget {
             .activitySystemActionForegroundColor(accent)
         } dynamicIsland: { context in
             DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) {
-                    progress(context.state, size: 40)
-                        .padding(.leading, 4)
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    countdown(context.state)
-                        .font(.system(.title2, design: .rounded, weight: .medium))
-                        .frame(width: 100, alignment: .trailing)
-                        .padding(.trailing, 4)
-                }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack(spacing: 12) {
-                        taskTitle(context.state)
-                            .font(.subheadline.weight(.medium))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        controls(context)
+                    VStack(spacing: 10) {
+                        timerRow(context)
+                        titleRow(context.state)
                     }
-                    .padding(.top, 8)
                     .padding(.horizontal, 4)
+                    .padding(.bottom, 4)
                 }
             } compactLeading: {
                 focusMark(context.state, size: 20)
             } compactTrailing: {
-                countdown(context.state).font(.caption2).frame(width: 52)
+                compactCountdown(context.state)
+                    .font(.caption2)
+                    .frame(width: 88, alignment: .trailing)
                     .foregroundStyle(accent)
             } minimal: {
                 focusMark(context.state, size: 20)
@@ -61,11 +43,46 @@ struct FocusWidget: Widget {
         }
     }
 
+    private func timerRow(_ context: ActivityViewContext<FocusActivityAttributes>) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            controls(context)
+            FocusTimerReadout(content: countdown(context.state))
+                .foregroundStyle(accent)
+        }
+        .frame(minHeight: 52)
+    }
+
+    private func titleRow(_ state: FocusActivityAttributes.ContentState) -> some View {
+        HStack(spacing: 8) {
+            progress(state, size: 24)
+            taskTitle(state)
+                .font(.subheadline.weight(.medium))
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
     private func taskTitle(_ state: FocusActivityAttributes.ContentState) -> some View {
         Text(state.title)
             .lineLimit(1)
             .truncationMode(.tail)
             .accessibilityLabel(state.title)
+    }
+
+    private func compactCountdown(_ state: FocusActivityAttributes.ContentState) -> some View {
+        let format = Date.ComponentsFormatStyle(style: .abbreviated, fields: [.hour, .minute])
+        return Group {
+            if let seconds = state.pausedSeconds {
+                let start = state.endsAt.addingTimeInterval(-Double(max(0, seconds)))
+                Text(start..<state.endsAt, format: format)
+            } else {
+                Text(.dateRange(endingAt: state.endsAt), format: format)
+            }
+        }
+        .monospacedDigit()
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .multilineTextAlignment(.trailing)
+        .accessibilityLabel("Осталось")
     }
 
     private func countdown(_ state: FocusActivityAttributes.ContentState) -> some View {
@@ -78,7 +95,8 @@ struct FocusWidget: Widget {
         }
         .monospacedDigit()
         .lineLimit(1)
-        .minimumScaleFactor(0.7)
+        .minimumScaleFactor(0.5)
+        .multilineTextAlignment(.trailing)
         .accessibilityLabel("Осталось")
     }
 
@@ -134,6 +152,17 @@ struct FocusWidget: Widget {
         }
         .buttonStyle(.plain)
         .fixedSize()
+    }
+}
+
+private struct FocusTimerReadout<Content: View>: View {
+    @ScaledMetric(relativeTo: .largeTitle) private var fontSize: CGFloat = 42
+    let content: Content
+
+    var body: some View {
+        content
+            .font(.system(size: fontSize, weight: .light, design: .rounded))
+            .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
