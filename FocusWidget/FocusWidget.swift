@@ -34,7 +34,7 @@ struct FocusWidget: Widget {
             } compactTrailing: {
                 compactCountdown(context.state)
                     .font(.caption2)
-                    .frame(width: 88, alignment: .trailing)
+                    .frame(width: compactWidth(context.state), alignment: .trailing)
                     .foregroundStyle(accent)
             } minimal: {
                 focusMark(context.state, size: 20)
@@ -66,6 +66,11 @@ struct FocusWidget: Widget {
             .lineLimit(1)
             .truncationMode(.tail)
             .accessibilityLabel(state.title)
+    }
+
+    private func compactWidth(_ state: FocusActivityAttributes.ContentState) -> CGFloat {
+        let seconds = state.pausedSeconds.map(Double.init) ?? state.endsAt.timeIntervalSinceNow
+        return seconds >= 3600 ? 72 : 48
     }
 
     private func compactCountdown(_ state: FocusActivityAttributes.ContentState) -> some View {
