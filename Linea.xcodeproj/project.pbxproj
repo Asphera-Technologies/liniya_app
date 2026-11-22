@@ -407,6 +407,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Linea reads your calendar to see when you are busy and plan the day around it.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Linea uses your Apple Health data to provide personalized health insights.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -446,6 +447,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Linea reads your calendar to see when you are busy and plan the day around it.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Linea uses your Apple Health data to provide personalized health insights.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
