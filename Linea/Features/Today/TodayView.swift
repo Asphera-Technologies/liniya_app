@@ -12,6 +12,7 @@ struct TodayView: View {
     @Environment(IntelligenceStore.self) private var intelligence
     /// «Другое» у «Сейчас» раскрыто.
     @State private var showsAlternatives = false
+    @State private var showsTaskPicker = false
     /// Карточка задачи из «Дальше».
     @State private var editingTask: TaskEditTarget?
     /// Задача, для которой открыт выбор «Перенести».
@@ -39,6 +40,37 @@ struct TodayView: View {
             }
             .sheet(item: $movingBlock) { block in
                 QueueTimePicker(block: block)
+            }
+            .sheet(isPresented: $showsTaskPicker) {
+                NavigationStack {
+                    List {
+                        ForEach(plan.tasks.filter { $0.isOpen && $0.isLocalEvent != true }) { task in
+                            Button {
+                                showsTaskPicker = false
+                                if task.startedAt != nil {
+                                    intelligence.openFocus(task.id)
+                                } else {
+                                    Task { await intelligence.perform(.start, on: task) }
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Text(task.title)
+                                        .foregroundStyle(LineaColor.textPrimary)
+                                    Spacer(minLength: 8)
+                                    Image(systemName: "play.fill")
+                                        .foregroundStyle(LineaColor.textSecondary)
+                                }
+                            }
+                            .accessibilityLabel("\(task.startedAt != nil ? "Развернуть" : "Начать"): \(task.title)")
+                        }
+                    }
+                    .navigationTitle("Выбрать задачу")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Закрыть") { showsTaskPicker = false }
+                        }
+                    }
+                }
             }
             .taskRescheduleDialog($rescheduling)
         }
@@ -97,8 +129,20 @@ struct TodayView: View {
     /// Причина — одна короткая фраза, готовая в ядре (`NowReasoner`): у каждой
     /// рекомендации она есть. Над действием — короткий ответ Linea на
     /// «Завершить» и «Не сейчас»: «Сделано за 35 мин.», «Хорошо, подберу другое.»
-    @ViewBuilder
     private var nowSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            nowRecommendation
+            if plan.tasks.contains(where: { $0.isOpen && $0.isLocalEvent != true }) {
+                nowSecondaryButton("Выбрать задачу", icon: "list.bullet") {
+                    showsTaskPicker = true
+                }
+                .accessibilityIdentifier("now.chooseTask")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var nowRecommendation: some View {
         if let action = intelligence.nextAction {
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(text: "Сейчас", trailing: !action.isStarted ? nil :

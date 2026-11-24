@@ -108,7 +108,7 @@ struct ProfileView: View {
                 connectionHint("Не удалось сохранить настройки. Попробуй еще раз.")
             }
         }
-        .tint(LineaColor.ink)
+        .tint(LineaColor.controlTint)
         .disabled(isChangingConnection)
     }
 
@@ -183,7 +183,7 @@ struct ProfileView: View {
                         .foregroundStyle(LineaColor.textTertiary)
                 }
             }
-            .tint(LineaColor.ink)
+            .tint(LineaColor.controlTint)
             .disabled(!AISettings.isConfigured)
             .padding(.vertical, 10)
 

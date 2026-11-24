@@ -88,7 +88,7 @@ struct AboutMeEditor: View {
                 in: 5...10,
                 step: 0.25
             )
-            .tint(LineaColor.ink)
+            .tint(LineaColor.controlTint)
             Text("Используется, пока Linea не собрала твою личную норму.")
                 .font(LineaFont.caption)
                 .foregroundStyle(LineaColor.textTertiary)

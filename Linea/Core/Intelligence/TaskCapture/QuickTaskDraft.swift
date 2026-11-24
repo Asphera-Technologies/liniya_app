@@ -68,6 +68,7 @@ nonisolated struct QuickTaskDraft: Hashable, Sendable {
         let activeGoals = goals.filter { $0.isActive && !$0.isCompleted }
         let parsed = parser.parse(text, goals: activeGoals, profile: profile, time: time, requiresExplicitStart: requiresExplicitStart).grounded(in: text)
         var result = QuickTaskResolution(title: parsed.title.trimmingCharacters(in: .whitespacesAndNewlines))
+        result.reminderLeadMinutes = parsed.reminderLeadMinutes
 
         // Когда. Срок без дня («отчёт к пятнице») — задача без дня: в какой
         // день за неё взяться, решит план. Ни дня, ни срока не назвали —
@@ -202,6 +203,7 @@ nonisolated struct QuickTaskResolution: Hashable, Sendable {
     /// Срок — просто конец недели из «на неделе», а не названный отдельно.
     var isEndOfWeekDeadline = false
     var scheduledStart: Date?
+    var reminderLeadMinutes: Int?
     /// Nil — человек не сказал; тогда длительность оценивает Linea (`estimate`).
     var minutes: Int?
     var minutesOrigin: Origin = .assumed

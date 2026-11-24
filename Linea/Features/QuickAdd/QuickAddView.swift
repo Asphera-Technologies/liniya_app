@@ -52,7 +52,7 @@ struct QuickAddView: View {
             understood(resolution)
             chips(resolution)
             goalSuggestion(resolution)
-            if store.usedVoice { voiceConfirmation(resolution) }
+            if store.needsConfirmation { voiceConfirmation(resolution) }
             status
         }
         .padding(.horizontal, LineaMetrics.screenPadding)
@@ -66,7 +66,7 @@ struct QuickAddView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(LineaColor.background.ignoresSafeArea())
         // Невысокий лист над клавиатурой — ровно по содержимому.
-        .presentationDetents(store.usedVoice ? [.large] : [.height(max(contentHeight, 160))])
+        .presentationDetents(store.needsConfirmation ? [.large] : [.height(max(contentHeight, 160))])
         .task(id: store.slotQuery) { await store.searchSlot(store.slotQuery) }
         .onChange(of: store.usedVoice) { _, used in
             if used { isTitleFocused = false }
@@ -132,7 +132,7 @@ struct QuickAddView: View {
                         text.wrappedValue = value
                             .replacingOccurrences(of: "\n", with: " ")
                             .trimmingCharacters(in: .whitespaces)
-                        if !store.usedVoice { save() }
+                        if !store.needsConfirmation { save() }
                     }
                 micButton
             }
@@ -229,11 +229,10 @@ struct QuickAddView: View {
                     DatePicker("Время начала", selection: $startPickerDate, displayedComponents: .hourAndMinute)
                         .datePickerStyle(.wheel)
                         .labelsHidden()
-                    Button("Подтвердить время") {
+                    LineaPrimaryButton(title: "Подтвердить время") {
                         self.store.chooseStart(startPickerDate)
                         isPickingStart = false
                     }
-                    .buttonStyle(.borderedProminent)
                 }
                 .padding()
                 .presentationCompactAdaptation(.popover)
@@ -245,7 +244,7 @@ struct QuickAddView: View {
                     caption("Выбрано: " + slotLabel(interval))
                 }
                 Menu {
-                    ForEach(QuickAddStore.Reminder.allCases) { reminder in
+                    ForEach(self.store.reminderOptions) { reminder in
                         Button(reminder.title) { self.store.reminder = reminder }
                     }
                 } label: {

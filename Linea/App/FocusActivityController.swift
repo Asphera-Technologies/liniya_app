@@ -22,9 +22,11 @@ enum FocusActivityController {
             nextEvent: nextEvent?.title,
             nextEventStart: nextEvent?.start
         )
-        let content = ActivityContent(state: state, staleDate: nil)
+        let content = ActivityContent(state: state, staleDate: focus.isPaused ? nil : focus.timer.endsAt)
         if let activity = Activity<FocusActivityAttributes>.activities.first(where: matches) {
-            if activity.content.state != state { await activity.update(content) }
+            if activity.content.state != state || activity.content.staleDate != content.staleDate {
+                await activity.update(content)
+            }
         } else if ActivityAuthorizationInfo().areActivitiesEnabled, UIApplication.shared.applicationState == .active {
             let attributes = FocusActivityAttributes(taskID: focus.taskID.uuidString, startedAt: focus.startedAt)
             do {

@@ -58,6 +58,13 @@ enum LineaColor {
     /// Foreground color to place on top of `ink` (e.g. selected pill text).
     static let onInk = background
 
+    /// Native switches and sliders keep a white thumb in both themes.
+    /// A gray track in Dark Mode keeps the thumb distinct from its active track.
+    static let controlTint = dynamic(
+        light: UIColor(red: 0.067, green: 0.067, blue: 0.078, alpha: 1),
+        dark: UIColor(red: 0.42, green: 0.42, blue: 0.46, alpha: 1)
+    )
+
     // MARK: - Helpers
 
     private static func dynamic(light: UIColor, dark: UIColor) -> Color {

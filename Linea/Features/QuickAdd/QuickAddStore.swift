@@ -25,15 +25,19 @@ final class QuickAddStore {
         case found(DateInterval), noFit, calendarUnavailable
     }
 
-    enum Reminder: Int, CaseIterable, Identifiable {
-        case none = -1, atStart = 0, before = 15
+    struct Reminder: Hashable, Identifiable {
+        let rawValue: Int
+        static let none = Self(rawValue: -1)
+        static let atStart = Self(rawValue: 0)
+        static let before = Self(rawValue: 15)
+        static let allCases = [none, atStart, before, Self(rawValue: 30), Self(rawValue: 60)]
 
         var id: Int { rawValue }
         var title: String {
-            switch self {
-            case .none: "Без напоминания"
-            case .atStart: "В момент начала"
-            case .before: "За 15 минут"
+            switch rawValue {
+            case -1: "Без напоминания"
+            case 0: "В момент начала"
+            default: "За " + RussianText.duration(minutes: rawValue)
             }
         }
     }
@@ -49,7 +53,12 @@ final class QuickAddStore {
     }
 
     private(set) var usedVoice = false
-    var isEvent = false
+    private var eventChoice: Bool?
+    var isEvent: Bool {
+        get { eventChoice ?? VoiceTaskWindow.isEventCommand(draft.text) }
+        set { eventChoice = newValue }
+    }
+    var needsConfirmation: Bool { usedVoice || isEvent || parsedResolution.reminderLeadMinutes != nil }
     var reminder: Reminder?
     private(set) var slotResult: SlotResult?
     private(set) var startChoice: StartChoice = .recognized
@@ -103,8 +112,8 @@ final class QuickAddStore {
             let typed = self.draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
             // Сказанное дописывается к набранному: «Отчёт» + «завтра к шести».
             self.usedVoice = true
-            if typed.isEmpty {
-                self.isEvent = VoiceTaskWindow.isEventCommand(spoken)
+            if typed.isEmpty, self.eventChoice == nil, VoiceTaskWindow.isEventCommand(spoken) {
+                self.eventChoice = true
             }
             let normalized = spoken.replacingOccurrences(
                 of: #"(?i)^\s*(запиши|записать|занеси|внеси)\s*,?\s*(?=сегодня|завтра|послезавтра|в\s+\d)"#,
@@ -165,7 +174,15 @@ final class QuickAddStore {
         return true
     }
 
-    var selectedReminder: Reminder { reminder ?? (isEvent ? .before : .atStart) }
+    var selectedReminder: Reminder {
+        reminder ?? resolution.reminderLeadMinutes.map { Reminder(rawValue: $0) }
+            ?? (isEvent ? .before : .atStart)
+    }
+
+    var reminderOptions: [Reminder] {
+        let selected = selectedReminder
+        return Reminder.allCases.contains(selected) ? Reminder.allCases : Reminder.allCases + [selected]
+    }
 
     func searchSlot(_ query: SlotQuery?) async {
         slotResult = nil
@@ -211,7 +228,7 @@ final class QuickAddStore {
         draft = QuickTaskDraft()
         isSaving = false
         usedVoice = false
-        isEvent = false
+        eventChoice = nil
         reminder = nil
         startChoice = .recognized
         slotResult = nil
@@ -275,7 +292,7 @@ final class QuickAddStore {
         }
         var task = resolution.task(id: taskID, createdAt: time.now)
         if isEvent { task.isLocalEvent = true }
-        if usedVoice, task.scheduledStart != nil, selectedReminder != .none {
+        if needsConfirmation, task.scheduledStart != nil, selectedReminder != .none {
             task.reminderLeadMinutes = selectedReminder.rawValue
             _ = await enableReminder()
         }

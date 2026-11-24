@@ -32,7 +32,7 @@ struct FocusWidget: Widget {
             } compactLeading: {
                 focusMark(context.state, size: 20)
             } compactTrailing: {
-                compactCountdown(context.state)
+                compactCountdown(context.state, isStale: context.isStale)
                     .font(.caption2)
                     .frame(width: compactWidth(context.state), alignment: .trailing)
                     .foregroundStyle(accent)
@@ -70,22 +70,29 @@ struct FocusWidget: Widget {
 
     private func compactWidth(_ state: FocusActivityAttributes.ContentState) -> CGFloat {
         let seconds = state.pausedSeconds.map(Double.init) ?? state.endsAt.timeIntervalSinceNow
-        return seconds >= 3600 ? 72 : 48
+        return seconds >= 3600 ? 100 : 64
     }
 
-    private func compactCountdown(_ state: FocusActivityAttributes.ContentState) -> some View {
-        let format = Date.ComponentsFormatStyle(style: .abbreviated, fields: [.hour, .minute])
+    private func compactCountdown(_ state: FocusActivityAttributes.ContentState, isStale: Bool) -> some View {
+        // A native bounded timer refreshes while the app is suspended and
+        // stays at zero when time is up. Custom formatters cannot be decoded
+        // by the remote Live Activity renderer.
+        let format = SystemFormatStyle.Timer(
+            countingDownIn: state.countdownStart..<state.endsAt,
+            maxFieldCount: 2, maxPrecision: .seconds(60)
+        )
         return Group {
             if let seconds = state.pausedSeconds {
-                let start = state.endsAt.addingTimeInterval(-Double(max(0, seconds)))
-                Text(start..<state.endsAt, format: format)
+                Text(format.format(state.endsAt.addingTimeInterval(-Double(max(0, seconds)))))
+            } else if isStale {
+                Text(format.format(state.endsAt))
             } else {
-                Text(.dateRange(endingAt: state.endsAt), format: format)
+                Text(.currentDate, format: format)
             }
         }
         .monospacedDigit()
         .lineLimit(1)
-        .minimumScaleFactor(0.8)
+        .minimumScaleFactor(0.65)
         .multilineTextAlignment(.trailing)
         .accessibilityLabel("Осталось")
     }

@@ -29,6 +29,7 @@ nonisolated struct QuickTaskParse: Hashable, Sendable {
         case deadline
         case startTime
         case duration
+        case reminder
         case priority
         case goal
     }
@@ -46,6 +47,7 @@ nonisolated struct QuickTaskParse: Hashable, Sendable {
     /// «в 15:00» — задача с фиксированным временем начала.
     var startTime: TimeOfDay?
     var minutes: Int?
+    var reminderLeadMinutes: Int?
     var priority: TaskPriority?
     var demand: CognitiveDemand?
     /// «для цели …» — цель названа явно и нашлась среди активных.
@@ -86,6 +88,7 @@ nonisolated struct QuickTaskParser: Sendable {
         time: TimeContext, requiresExplicitStart: Bool = false
     ) -> QuickTaskParse {
         var state = QuickTaskParseState(text: text, profile: profile, time: time)
+        state.matchReminders()
         state.stripFillers()
         state.matchPriority()
         state.matchDeadlines()
@@ -280,6 +283,25 @@ nonisolated struct QuickTaskParseState {
     }
 
     // MARK: Доступ к кускам
+
+    /// Reminder lead time is not the duration of the work itself.
+    mutating func matchReminders() {
+        let durations = CheckInText.durations(in: words)
+        for index in tokens.indices where word(index) == "напомни" {
+            var lead = index + 1
+            if word(lead) == "мне" { lead += 1 }
+            guard word(lead) == "за",
+                  let duration = durations.first(where: { $0.range.lowerBound == lead + 1 }),
+                  duration.range.allSatisfy(isFree), (1...10080).contains(duration.minutes) else { continue }
+            let end = duration.range.upperBound
+            guard !isAlternative(index...end, of: .duration) else {
+                for position in index...end { blocked[position] = true }
+                continue
+            }
+            parse.reminderLeadMinutes = duration.minutes
+            consume(index...end, as: .reminder)
+        }
+    }
 
     /// Свободное слово (не число, не знак) или nil.
     func word(_ index: Int) -> String? {
@@ -1047,6 +1069,10 @@ nonisolated struct QuickTaskParseState {
     /// исходные знаки и пробелы, на месте вырезанного — пробел.
     private func assembledTitle() -> String {
         var kept = tokens.indices.filter { !consumed[$0] && tokens[$0].isText }[...]
+        if kept.count >= 2, tokens[kept[kept.startIndex]].word == "у",
+           tokens[kept[kept.index(after: kept.startIndex)]].word == "меня" {
+            kept = kept.dropFirst(2)
+        }
         while let first = kept.first, QuickTaskWords.dangling.contains(tokens[first].word) { kept = kept.dropFirst() }
         while let last = kept.last, QuickTaskWords.dangling.contains(tokens[last].word) { kept = kept.dropLast() }
 
@@ -1098,6 +1124,7 @@ nonisolated extension QuickTaskParse {
         if !said.contains(.deadline) { result.deadline = nil }
         if !said.contains(.startTime) { result.startTime = nil }
         if !said.contains(.duration) { result.minutes = nil }
+        if !said.contains(.reminder) { result.reminderLeadMinutes = nil }
         if !said.contains(.priority) { result.priority = nil }
         if !said.contains(.goal) { result.goalID = nil }
 

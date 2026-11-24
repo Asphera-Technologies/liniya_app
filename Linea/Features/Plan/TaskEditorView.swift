@@ -485,7 +485,7 @@ struct TaskEditorView: View {
                     .font(LineaFont.rowTitle)
                     .foregroundStyle(LineaColor.textPrimary)
             }
-            .tint(LineaColor.ink)
+            .tint(LineaColor.controlTint)
             .padding(.vertical, 14)
             LineaHairline()
         }

@@ -32,7 +32,13 @@ nonisolated enum VoiceTaskWindow {
         let words = text.lowercased().split { !$0.isLetter }
         let commands: Set<Substring> = ["запиши", "записать", "занеси", "внеси", "добавь", "создай"]
         guard let index = words.firstIndex(where: { commands.contains($0) }), index <= 2,
-              let object = words.dropFirst(index + 1).first(where: { $0 != "мне" }) else { return false }
+              let object = words.dropFirst(index + 1).first(where: { $0 != "мне" }) else {
+            // A statement of an appointment, without a command verb.
+            return text.lowercased().range(
+                of: #"\bу\s+меня\s+(совещание|встреча|прием|приём|урок)\b"#,
+                options: .regularExpression
+            ) != nil
+        }
         if object == "событие" { return true }
         if object == "задачу" || object == "задачку" { return false }
         return ["запиши", "записать", "занеси", "внеси"].contains(words[index])

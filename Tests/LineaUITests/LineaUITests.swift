@@ -23,6 +23,106 @@ final class LineaUITests: XCTestCase {
         continueAfterFailure = true
     }
 
+    @MainActor
+    func testManualTaskChoiceAndReminderCapture() throws {
+        let app = launch(hour: 22)
+        addTask(app, "Разобрать заметки на 15 минут")
+        openTab(app, "Сегодня", index: 0)
+        let choose = app.buttons["now.chooseTask"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Пока нет действия, которое стоит начать."].exists,
+                      "После рабочего дня рекомендации нет, но ручной выбор доступен")
+        choose.tap()
+        let start = app.buttons["Начать: Разобрать заметки"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        snapshot(app, "Регрессия — ручной выбор задачи")
+        start.tap()
+        XCTAssertTrue(app.staticTexts["focus.title"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["focus.title"].label, "Разобрать заметки")
+        app.buttons["focus.finish"].tap()
+
+        let field = openQuickAdd(app)
+        field.tap()
+        field.typeText("Завтра в 10:00 у меня совещание, напомни мне за 30 минут.")
+        XCTAssertTrue(app.buttons["quickAdd.reminder"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["quickAdd.understood.title"].label, "Совещание")
+        XCTAssertTrue(app.buttons["quickAdd.reminder"].label.contains("30 мин"))
+        snapshot(app, "Регрессия — встреча и напоминание")
+        app.buttons["quickAdd.start"].tap()
+        XCTAssertTrue(app.buttons["Подтвердить время"].waitForExistence(timeout: 5))
+        snapshot(app, "Регрессия — кнопка времени")
+        app.buttons["Подтвердить время"].tap()
+        XCTAssertTrue(app.buttons["Подтвердить время"].waitForNonExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testControlContrastAndInteraction() throws {
+        let app = launch()
+        app.buttons["Профиль"].tap()
+        XCTAssertTrue(app.switches["profile.calendar"].waitForExistence(timeout: 5))
+        snapshot(app, "Регрессия — переключатели профиля")
+        button(app, startingWith: "Рабочий день").tap()
+        let slider = app.sliders.firstMatch
+        scrollTo(slider, in: app)
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        slider.adjust(toNormalizedSliderPosition: 0.7)
+        snapshot(app, "Регрессия — ползунок сна")
+        app.buttons["Готово"].tap()
+        XCTAssertTrue(slider.waitForNonExistence(timeout: 5))
+        app.buttons["Закрыть"].tap()
+        addTask(app, "Проверить оформление сегодня на 15 минут")
+        openTab(app, "Задачи", index: 1)
+        let row = button(app, startingWith: "Проверить оформление")
+        bringAboveCommandBar(row, in: app)
+        row.press(forDuration: 1.2)
+        app.buttons["Изменить"].tap()
+        let dateToggle = app.switches["Дата"]
+        scrollTo(dateToggle, in: app)
+        XCTAssertTrue(dateToggle.waitForExistence(timeout: 5))
+        snapshot(app, "Регрессия — активный переключатель даты")
+        dateToggle.tap()
+        XCTAssertEqual(dateToggle.value as? String, "0")
+        snapshot(app, "Регрессия — выключенный переключатель даты")
+    }
+
+    /// Opt-in integration check on a disposable simulator, with real ActivityKit.
+    /// The ordinary UI suite deliberately disables Live Activities.
+    @MainActor
+    func testLiveActivityBackgroundCountdown() throws {
+        guard ProcessInfo.processInfo.environment["LINEA_TEST_LIVE_ACTIVITY"] == "1" else {
+            throw XCTSkip("Run explicitly on a disposable simulator with LINEA_TEST_LIVE_ACTIVITY=1")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU"]
+        app.launch()
+        let close = app.buttons["Закрыть"].firstMatch
+        if close.waitForExistence(timeout: 2) { close.tap() }
+        let minimize = app.buttons["focus.minimize"]
+        if minimize.waitForExistence(timeout: 2) { minimize.tap() }
+        let minutes = ProcessInfo.processInfo.environment["LINEA_TEST_TIMER_MINUTES"] == "73" ? 73 : 5
+        addTask(app, "Проверить живой отсчет на \(minutes) минут")
+        openTab(app, "Сегодня", index: 0)
+        app.buttons["now.chooseTask"].tap()
+        app.buttons["Начать: Проверить живой отсчет"].tap()
+        XCTAssertTrue(app.staticTexts["focus.title"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts[minutes == 73 ? "~1 ч 13 мин" : "~5 мин"].exists)
+        XCUIDevice.shared.press(.home)
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        Thread.sleep(forTimeInterval: 10) // Let the Home transition and Activity renderer settle.
+        snapshot(home, "Live Activity — начало в фоне")
+        if ProcessInfo.processInfo.environment["LINEA_TEST_SNAPSHOT_ONLY"] != "1" {
+            Thread.sleep(forTimeInterval: 45)
+            snapshot(home, "Live Activity — через 45 секунд")
+            Thread.sleep(forTimeInterval: 45)
+            snapshot(home, "Live Activity — через 90 секунд")
+            for _ in 0..<5 { Thread.sleep(forTimeInterval: 45) }
+            snapshot(home, "Live Activity — ноль после окончания")
+        }
+        app.activate()
+        let finish = app.buttons["focus.finish"]
+        if finish.waitForExistence(timeout: 5) { finish.tap() }
+    }
+
     // MARK: - 1. Быстрая задача
 
     @MainActor
@@ -1456,26 +1556,28 @@ final class LineaUITests: XCTestCase {
     // MARK: - Запуск
 
     @MainActor
-    private func launch() -> XCUIApplication {
+    private func launch(hour: Int = 11) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-uiTesting", "-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU"]
-        app.launchEnvironment["TZ"] = Self.zoneIdentifier
+        app.launchEnvironment["TZ"] = Self.zoneIdentifier(for: hour)
         app.launch()
         XCTAssertTrue(app.buttons["Новая задача"].waitForExistence(timeout: 20), "Приложение не открылось")
         return app
     }
 
     /// Пояс, где сейчас около 11 утра: рабочий день (9–21) при любом часе запуска.
-    static let zoneIdentifier: String = {
+    static let zoneIdentifier = zoneIdentifier(for: 11)
+
+    static func zoneIdentifier(for hour: Int) -> String {
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = TimeZone(identifier: "UTC")!
-        var offset = 11 - utc.component(.hour, from: Date())
+        var offset = hour - utc.component(.hour, from: Date())
         if offset < -12 { offset += 24 }
         if offset > 14 { offset -= 24 }
         if offset == 0 { return "Etc/GMT" }
         // В Etc/GMT знак наоборот: Etc/GMT-3 — это UTC+3.
         return offset > 0 ? "Etc/GMT-\(offset)" : "Etc/GMT+\(-offset)"
-    }()
+    }
 
     static var appTimeZone: TimeZone { TimeZone(identifier: zoneIdentifier)! }
 

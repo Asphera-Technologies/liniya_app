@@ -818,3 +818,25 @@ iPhone, влито в `main` 12.10.2026.
 - **2026-11-22, TestFlight export compliance.** Build 4 declares no non-exempt encryption in App Store Connect; the original archive has no encryption key. Added `ITSAppUsesNonExemptEncryption = NO` to app Debug/Release settings. Uploaded 1.0 (6) using the same compiled code as build 5 with version and encryption metadata updated, then signed app and widget again. Verified signatures, build 6 and Boolean false in both bundles. Apple completed processing: build 1.0 (6) is Testing and assigned to Liniya Internal (3 testers); no missing export compliance gate. Layer checks and all 534 core tests passed locally.
 
 - **2026-11-22, HealthKit regression in TestFlight 5/6.** The unsigned archive lost the HealthKit entitlement during distribution export: source entitlements and profile allowed HealthKit, but the final app signature did not contain it. Compared with signed build 4. Prepared 1.0 (7) from the same compiled code with required app entitlements signed before export. Added `Scripts/check-release-ipa.py`: rejects the actual build 6 IPA for missing HealthKit and passes build 7, including profile, signature, version, purpose-string and encryption checks. Documented the mandatory manual IPA check before future uploads. Apple completed processing: build 7 is Testing for Liniya Internal (3 testers). HealthKit was verified in the final exported IPA; Apple metadata inspection was not completed because the browser window became unavailable. Physical iPhone HealthKit reading still requires verification after updating.
+
+### 2026-11-24 – LIN-51 и регрессии из внутреннего тестирования
+
+- На «Сегодня» добавлен ручной выбор любой открытой задачи (кроме событий),
+  даже когда рекомендация недоступна из-за встречи или конца рабочего дня.
+  Уже начатая задача открывает существующий фокус без сброса таймера.
+- В быстром вводе «напомни [мне] за N минут» отделено от длительности работы;
+  «у меня совещание» определяется как событие. Выбранное вручную напоминание
+  и тип записи сильнее распознанных. Подтверждение доступно и для набранной фразы.
+- Кнопка подтверждения времени использует LineaPrimaryButton; треки нативных
+  переключателей и ползунка сна получили отдельный адаптивный controlTint,
+  чтобы белый бегунок не сливался с активным треком в темной теме.
+- Компактный отсчет Live Activity переведен на текущую дату с системным
+  ограниченным таймером и минутной точностью. iOS выводит полные названия единиц
+  («29 минут», «1 час 12 минут»); ширина области времени 64 pt для минут и 100 pt для часов. На истечении
+  Activity становится stale и остается на нуле, при паузе staleDate снимается.
+- Проверки: ядро (536 тестов) и границы слоев прошли. Docker-проверка не
+  стартовала: локальный Docker daemon недоступен; использован локальный Swift.
+  UI-проверки на iPhone 17 Pro и SE 3 (темная тема) прошли. Реальная Live Activity
+  на симуляторе обновляет отсчет при свернутом приложении и остается на нуле
+  после окончания пятиминутной задачи. Перед выпуском отдельно проверить
+  уведомление, реальную диктовку и фон на физическом iPhone.
